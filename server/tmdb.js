@@ -1,8 +1,15 @@
 const TMDB_BASE = 'https://api.themoviedb.org/3'
-const TOP_N_SERIES = 20
+const TOP_N_SERIES = 60
+const PAGE_SIZE = 20
 // "Yayında" kabul edilen erişim türleri: abonelik (flatrate), reklamlı (ads) ve ücretsiz (free).
 // rent/buy hariç tutulur çünkü tek seferlik satın alma, yaygın kültürel erişimi göstermez.
-const STREAMABLE_KEYS = ['flatrate', 'ads', 'free']
+export const STREAMABLE_KEYS = ['flatrate', 'ads', 'free']
+const RETRYABLE_STATUSES = [502, 503, 504]
+const RETRY_DELAYS_MS = [500, 1500]
+
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
 
 async function tmdbGet(path, params = {}) {
   const apiKey = process.env.TMDB_API_KEY
@@ -14,24 +21,40 @@ async function tmdbGet(path, params = {}) {
   for (const [k, v] of Object.entries(params)) {
     url.searchParams.set(k, v)
   }
-  const res = await fetch(url)
-  if (!res.ok) {
-    throw new Error(`TMDB isteği başarısız: ${path} (${res.status})`)
+
+  let lastError
+  for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+    const res = await fetch(url)
+    if (res.ok) return res.json()
+
+    lastError = new Error(`TMDB isteği başarısız: ${path} (${res.status})`)
+    const canRetry = RETRYABLE_STATUSES.includes(res.status) && attempt < RETRY_DELAYS_MS.length
+    if (!canRetry) throw lastError
+    await sleep(RETRY_DELAYS_MS[attempt])
   }
-  return res.json()
+  throw lastError
 }
 
 async function getTopTurkishSeries(n = TOP_N_SERIES) {
-  const data = await tmdbGet('/discover/tv', {
-    with_origin_country: 'TR',
-    sort_by: 'popularity.desc',
-    language: 'tr-TR',
-  })
-  return (data.results || []).slice(0, n).map((show) => ({
+  const pagesNeeded = Math.ceil(n / PAGE_SIZE)
+  const pages = await Promise.all(
+    Array.from({ length: pagesNeeded }, (_, i) =>
+      tmdbGet('/discover/tv', {
+        with_origin_country: 'TR',
+        sort_by: 'popularity.desc',
+        language: 'tr-TR',
+        page: i + 1,
+      })
+    )
+  )
+  const results = pages.flatMap((p) => p.results || [])
+  return results.slice(0, n).map((show) => ({
     id: show.id,
     name: show.name,
     popularity: show.popularity,
     posterPath: show.poster_path,
+    firstAirDate: show.first_air_date || null,
+    overview: show.overview || '',
   }))
 }
 
@@ -40,42 +63,16 @@ async function getWatchProviders(seriesId) {
   return data.results || {}
 }
 
-export async function buildVisibilityData() {
+export async function getRawSeriesData() {
   const series = await getTopTurkishSeries()
 
+  const providersById = {}
   const providerResults = await Promise.all(
     series.map((s) => getWatchProviders(s.id).catch(() => ({})))
   )
-
-  const byCountry = new Map()
-
-  series.forEach((show, idx) => {
-    const countries = providerResults[idx]
-    for (const [iso2, entry] of Object.entries(countries)) {
-      const isStreamable = STREAMABLE_KEYS.some((key) => Array.isArray(entry[key]) && entry[key].length > 0)
-      if (!isStreamable) continue
-
-      if (!byCountry.has(iso2)) {
-        byCountry.set(iso2, { iso2, score: 0, seriesCount: 0, topSeries: null, seriesList: [] })
-      }
-      const bucket = byCountry.get(iso2)
-      bucket.score += show.popularity
-      bucket.seriesCount += 1
-      bucket.seriesList.push({ name: show.name, popularity: show.popularity })
-      if (!bucket.topSeries || show.popularity > bucket.topSeries.popularity) {
-        bucket.topSeries = { name: show.name, popularity: show.popularity }
-      }
-    }
+  series.forEach((s, idx) => {
+    providersById[s.id] = providerResults[idx]
   })
 
-  const countries = Array.from(byCountry.values()).map((c) => ({
-    ...c,
-    seriesList: c.seriesList.sort((a, b) => b.popularity - a.popularity),
-  }))
-
-  return {
-    updatedAt: new Date().toISOString(),
-    seriesCount: series.length,
-    countries,
-  }
+  return { series, providersById }
 }

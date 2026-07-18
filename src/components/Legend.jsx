@@ -10,7 +10,7 @@ export default function Legend() {
         ))}
       </div>
       <span className="legend__label">Yüksek</span>
-      <p className="legend__caption">Kültürel Görünürlük Skoru (TMDB popülerlik × yayın erişimi)</p>
+      <p className="legend__caption">Kültürel Görünürlük Skoru (popülerlik × yayın erişimi)</p>
     </div>
   )
 }
