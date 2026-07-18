@@ -47,7 +47,14 @@ async function getTopTurkishSeries(n = TOP_N_SERIES) {
       })
     )
   )
-  const results = pages.flatMap((p) => p.results || [])
+  const seen = new Set()
+  const results = pages.flatMap((p) => p.results || []).filter((show) => {
+    // Sayfalar paralel çekildiği için popülerlik sıralaması sayfa sınırında kayabilir
+    // ve aynı dizi iki sayfada birden görünebilir — id bazlı dedup gerekiyor.
+    if (seen.has(show.id)) return false
+    seen.add(show.id)
+    return true
+  })
   return results.slice(0, n).map((show) => ({
     id: show.id,
     name: show.name,

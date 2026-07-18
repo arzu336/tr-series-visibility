@@ -33,6 +33,7 @@ export function buildVisibility(rawData, themeStore) {
       bucket.score += show.popularity
       bucket.seriesCount += 1
       bucket.seriesList.push({
+        id: show.id,
         name: show.name,
         popularity: show.popularity,
         posterPath: show.posterPath || null,

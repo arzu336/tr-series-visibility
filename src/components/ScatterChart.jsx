@@ -99,9 +99,20 @@ export default function ScatterChart({ data, xLabel, yLabel, accentColor = '#f03
               {d.x}%
             </title>
           </circle>
-          <text x={scaleX(d.x) + 8} y={scaleY(d.y) + 3} className="scatter-chart__label">
-            {d.label}
-          </text>
+          {(() => {
+            const px = scaleX(d.x)
+            const nearRightEdge = px > WIDTH - PAD_R - 60
+            return (
+              <text
+                x={nearRightEdge ? px - 8 : px + 8}
+                y={scaleY(d.y) + 3}
+                textAnchor={nearRightEdge ? 'end' : 'start'}
+                className="scatter-chart__label"
+              >
+                {d.label}
+              </text>
+            )
+          })()}
         </g>
       ))}
     </svg>

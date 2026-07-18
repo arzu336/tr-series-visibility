@@ -62,7 +62,7 @@ export default function CountryPanel({ country, onClose }) {
       <h3>Yayındaki diziler</h3>
       <ul className="panel__series-list">
         {country.seriesList.map((s) => (
-          <li key={s.name}>
+          <li key={s.id ?? s.name}>
             {s.posterPath ? (
               <img className="panel__series-poster" src={`${POSTER_BASE}${s.posterPath}`} alt="" />
             ) : (

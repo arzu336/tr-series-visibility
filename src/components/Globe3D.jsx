@@ -15,7 +15,7 @@ const MIN_ALTITUDE = 0.006
 const MAX_ALTITUDE = 0.22
 const NO_DATA_COLOR = 'rgba(60, 68, 88, 0.55)'
 const DEFAULT_VIEW = { lat: 15, lng: 20, altitude: 2.4 }
-const FOCUS_ALTITUDE = 0.5
+const FOCUS_ALTITUDE = 1.1
 
 export default function Globe3D({ countries, onSelect }) {
   const containerRef = useRef(null)
