@@ -59,6 +59,19 @@ export default function CountryPanel({ country, onClose }) {
       <h3>Görünürlük geçmişi</h3>
       <Sparkline history={country.history} />
 
+      {country.destinationSummary && country.destinationSummary.length > 0 && (
+        <>
+          <h3>Öne çıkan destinasyonlar</h3>
+          <div className="panel__destination-chips">
+            {country.destinationSummary.slice(0, 5).map((d) => (
+              <span key={d.id} className="panel__destination-chip" title={`${d.seriesCount} dizi`}>
+                {d.name}
+              </span>
+            ))}
+          </div>
+        </>
+      )}
+
       <h3>Yayındaki diziler</h3>
       <ul className="panel__series-list">
         {country.seriesList.map((s) => (

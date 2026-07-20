@@ -1,84 +1,10 @@
-// Turist girişi ve ihracat rakamları örnek/açıklayıcıdır (bkz. rapor §4.4 — TÜİK ve
-// Kültür ve Turizm Bakanlığı ham verisi kurumsal talep gerektirir, kamuya açık bir API yok).
-// Aşağıdaki hesaplama mantığı (DiD düzeltmesi, Pearson korelasyonu, güven aralığı) gerçek
-// istatistik yöntemidir — rapor §4.5 ve §8.1'de tanımlanan metodolojinin birebir uygulanmasıdır.
-const CASES = [
-  {
-    country: 'İspanya',
-    controlCountry: 'İtalya',
-    theme: 'Aile / Aşk',
-    visibilityChangePct: 32,
-    rawTourismChangePct: 14,
-    controlTourismChangePct: 6,
-    rawExportChangePct: 8,
-    controlExportChangePct: 3,
-    windowMonths: 6,
-  },
-  {
-    country: 'Meksika',
-    controlCountry: 'Kolombiya',
-    theme: 'Adalet / Aile',
-    visibilityChangePct: 18,
-    rawTourismChangePct: 9,
-    controlTourismChangePct: 4,
-    rawExportChangePct: 5,
-    controlExportChangePct: 2,
-    windowMonths: 6,
-  },
-  {
-    country: 'Suudi Arabistan',
-    controlCountry: 'Birleşik Arap Emirlikleri',
-    theme: 'Göç / Adalet',
-    visibilityChangePct: 40,
-    rawTourismChangePct: 21,
-    controlTourismChangePct: 9,
-    rawExportChangePct: 12,
-    controlExportChangePct: 5,
-    windowMonths: 6,
-  },
-  {
-    country: 'Sırbistan',
-    controlCountry: 'Hırvatistan',
-    theme: 'Aile',
-    visibilityChangePct: 22,
-    rawTourismChangePct: 11,
-    controlTourismChangePct: 5,
-    rawExportChangePct: 6,
-    controlExportChangePct: 2,
-    windowMonths: 6,
-  },
-  {
-    country: 'Şili',
-    controlCountry: 'Arjantin',
-    theme: 'Aşk / Aile',
-    visibilityChangePct: 15,
-    rawTourismChangePct: 7,
-    controlTourismChangePct: 3,
-    rawExportChangePct: 4,
-    controlExportChangePct: 2,
-    windowMonths: 6,
-  },
-]
-
-// Difference-in-Differences: hedef ülkenin ham değişiminden kontrol ülkesinin (ortak
-// makro/mevsimsel etkiyi temsil eden) değişimini çıkarır (rapor §4.5).
-function applyDiD(c) {
-  return {
-    ...c,
-    isIllustrative: true,
-    adjustedTourismChangePct: round1(c.rawTourismChangePct - c.controlTourismChangePct),
-    adjustedExportChangePct: round1(c.rawExportChangePct - c.controlExportChangePct),
-  }
-}
-
-function round1(n) {
-  return Math.round(n * 10) / 10
-}
-
 function mean(arr) {
   return arr.reduce((a, b) => a + b, 0) / arr.length
 }
 
+// Hazır ve doğruluğu doğrulanmış istatistik yöntemleri — gerçek TÜİK/Kültür ve Turizm
+// Bakanlığı turist-ihracat verisi kurumsal talep yoluyla temin edilene kadar hiçbir
+// sahte/örnek girdiyle çağrılmıyor (bkz. pendingAnalysis).
 export function pearsonCorrelation(xs, ys) {
   const n = xs.length
   const mx = mean(xs)
@@ -97,8 +23,6 @@ export function pearsonCorrelation(xs, ys) {
   return denom === 0 ? 0 : num / denom
 }
 
-// Fisher z dönüşümüyle %95 güven aralığı. n küçükken aralık geniş çıkar — bu, küçük
-// örneklemin dürüst bir yansımasıdır (rapor §8.1: "nedensellik değil ilişki gücü").
 export function confidenceInterval95(r, n) {
   if (n < 4) return null
   const clamped = Math.max(-0.9999, Math.min(0.9999, r))
@@ -110,24 +34,71 @@ export function confidenceInterval95(r, n) {
   return { low: round2(toR(zLo)), high: round2(toR(zHi)) }
 }
 
+function round1(n) {
+  return Math.round(n * 10) / 10
+}
+
 function round2(n) {
   return Math.round(n * 100) / 100
 }
 
-function buildCorrelation(cases, key) {
-  const xs = cases.map((c) => c.visibilityChangePct)
-  const ys = cases.map((c) => c[key])
-  const r = round2(pearsonCorrelation(xs, ys))
-  return { r, n: cases.length, ci95: confidenceInterval95(r, cases.length) }
+// Gerçek turizm/ihracat korelasyonu için gereken kurumsal veri kaynakları. Bu veri
+// gelene kadar hiçbir sayı üretilmiyor — yöntem (pearsonCorrelation, confidenceInterval95)
+// hazır ve doğrulanmış, sadece girdi bekliyor.
+const PENDING_ANALYSIS = {
+  title: 'Turizm ve İhracat Korelasyonu',
+  status: 'gerçek-veri-bekleniyor',
+  description:
+    'Bu analiz için ülke bazlı, gerçek turist girişi ve dizi ihracatı verisi gerekiyor. İkisi de kurumsal veri talebiyle temin edilebiliyor; kamuya açık bir API yok. Veri sağlandığında burada gerçek bir Difference-in-Differences (DiD) düzeltmesi ve Pearson korelasyonu gösterilecek — hesaplama yöntemi zaten hazır ve doğrulanmış durumda, sadece gerçek girdi bekliyor.',
+  requiredSources: [
+    'TÜİK turist giriş istatistikleri (ülke bazlı, aylık)',
+    'Kültür ve Turizm Bakanlığı / TGA dizi ihracat verisi (ülke bazlı)',
+  ],
 }
 
-export function buildImpactReport() {
-  const cases = CASES.map(applyDiD)
+// Toplam içindeki en öndeki n taneyi + geri kalan her şeyin "Diğer" toplamını döner —
+// pasta grafiğin bütünü dürüstçe temsil etmesi için (sadece ilk n'i %100 gibi göstermemek).
+function topByScoreWithRemainder(countries, n) {
+  const sorted = [...countries].sort((a, b) => b.score - a.score)
+  const top = sorted.slice(0, n).map((c) => ({
+    iso2: c.iso2,
+    score: round1(c.score),
+    seriesCount: c.seriesCount,
+    dominantTheme: c.dominantTheme,
+  }))
+  const totalScore = sorted.reduce((sum, c) => sum + c.score, 0)
+  const topScore = top.reduce((sum, c) => sum + c.score, 0)
+  return { top, otherScore: round1(Math.max(0, totalScore - topScore)) }
+}
+
+function topDestinationsWithRemainder(destinationRanking, n) {
+  const top = destinationRanking.slice(0, n)
+  const totalScore = destinationRanking.reduce((sum, d) => sum + d.totalScore, 0)
+  const topScore = top.reduce((sum, d) => sum + d.totalScore, 0)
+  return { top, otherScore: round1(Math.max(0, totalScore - topScore)) }
+}
+
+function rising(countries, n) {
+  return countries
+    .filter((c) => c.trend?.direction === 'yükseliyor')
+    .sort((a, b) => b.trend.changePct - a.trend.changePct)
+    .slice(0, n)
+    .map((c) => ({ iso2: c.iso2, changePct: c.trend.changePct, windowDays: c.trend.windowDays }))
+}
+
+export function buildImpactReport(countries, destinationRanking = []) {
+  const hasEnoughHistoryForTrends = countries.some((c) => c.trend?.direction !== 'yetersiz-veri')
+  const countryBreakdown = topByScoreWithRemainder(countries, 5)
+  const destinationBreakdown = topDestinationsWithRemainder(destinationRanking, 5)
+
   return {
-    cases,
-    correlations: {
-      tourism: buildCorrelation(cases, 'adjustedTourismChangePct'),
-      export: buildCorrelation(cases, 'adjustedExportChangePct'),
-    },
+    generatedAt: new Date().toISOString(),
+    topCountriesByVisibility: countryBreakdown.top,
+    otherCountriesScore: countryBreakdown.otherScore,
+    risingCountries: rising(countries, 5),
+    hasEnoughHistoryForTrends,
+    topDestinations: destinationBreakdown.top,
+    otherDestinationsScore: destinationBreakdown.otherScore,
+    pendingAnalysis: PENDING_ANALYSIS,
   }
 }

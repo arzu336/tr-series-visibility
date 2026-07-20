@@ -39,3 +39,69 @@ export async function fetchTrends(seriesName) {
 export async function fetchImpactReport() {
   return handle(await fetch('/api/impact'))
 }
+
+export async function fetchAuthStatus() {
+  return handle(await fetch('/api/auth/status'))
+}
+
+export async function login(email, password) {
+  return handle(
+    await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    })
+  )
+}
+
+export async function register({ name, email, role, password }) {
+  return handle(
+    await fetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, role, password }),
+    })
+  )
+}
+
+export async function logout() {
+  return handle(await fetch('/api/auth/logout', { method: 'POST' }))
+}
+
+export async function fetchAdminUsers() {
+  return handle(await fetch('/api/admin/users'))
+}
+
+export async function approveUser(id) {
+  return handle(await fetch(`/api/admin/users/${id}/approve`, { method: 'POST' }))
+}
+
+export async function rejectUser(id) {
+  return handle(await fetch(`/api/admin/users/${id}/reject`, { method: 'POST' }))
+}
+
+export async function toggleAdmin(id) {
+  return handle(await fetch(`/api/admin/users/${id}/toggle-admin`, { method: 'POST' }))
+}
+
+export async function fetchDestinationTaxonomy() {
+  return handle(await fetch('/api/destinations/taxonomy'))
+}
+
+export async function fetchDestinations() {
+  return handle(await fetch('/api/destinations'))
+}
+
+export async function submitDestinationOverride(seriesId, destinationIds, reviewer) {
+  return handle(
+    await fetch(`/api/destinations/${seriesId}/override`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ destinationIds, reviewer }),
+    })
+  )
+}
+
+export async function fetchDestinationRanking() {
+  return handle(await fetch('/api/destinations/ranking'))
+}

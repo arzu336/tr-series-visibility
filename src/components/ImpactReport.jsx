@@ -1,42 +1,38 @@
 import { useEffect, useState } from 'react'
 import { fetchImpactReport } from '../lib/api.js'
-import ScatterChart from './ScatterChart.jsx'
+import countryNames from '../data/country-centroids.json'
+import PieChart from './PieChart.jsx'
 
-function fmtPct(n) {
-  return `${n > 0 ? '+' : ''}${n}%`
+function nameOf(iso2) {
+  return countryNames[iso2]?.name || iso2
 }
 
-function strengthLabel(r) {
-  const abs = Math.abs(r)
-  if (abs >= 0.7) return 'çok güçlü'
-  if (abs >= 0.4) return 'güçlü'
-  if (abs >= 0.2) return 'orta düzeyde'
-  return 'zayıf'
-}
-
-function CorrelationBox({ title, stat }) {
-  if (!stat) return null
+function RankList({ items, accent = '#f03b20' }) {
+  if (items.length === 0) return null
+  const maxValue = Math.max(...items.map((i) => i.value))
   return (
-    <div className="impact__corr-box">
-      {title && <h4>{title}</h4>}
-      <p className="impact__corr-value">r = {stat.r}</p>
-      <p className="impact__corr-meta">
-        n = {stat.n}
-        {stat.ci95 && (
-          <>
-            {' · '}%95 GA: [{stat.ci95.low}, {stat.ci95.high}]
-          </>
-        )}
-      </p>
+    <div className="impact__rank-list">
+      {items.map((item) => (
+        <div key={item.label} className="impact__rank-item">
+          <span className="impact__rank-label">{item.label}</span>
+          <div className="impact__rank-bar">
+            <div
+              className="impact__rank-fill"
+              style={{ width: `${maxValue > 0 ? (item.value / maxValue) * 100 : 0}%`, background: accent }}
+            />
+          </div>
+          <span className="impact__rank-value">{item.valueLabel}</span>
+          {item.meta && <span className="impact__rank-meta">{item.meta}</span>}
+        </div>
+      ))}
     </div>
   )
 }
 
-export default function ImpactReport() {
+export default function ImpactReport({ onSelectCountry, onSelectDestination }) {
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
-  const [showTable, setShowTable] = useState(false)
 
   useEffect(() => {
     fetchImpactReport()
@@ -53,93 +49,89 @@ export default function ImpactReport() {
   if (status === 'loading') return <div className="dashboard status">Yükleniyor…</div>
   if (status === 'error') return <div className="dashboard status status--error">Hata: {error}</div>
 
-  const { tourism, export: exportCorr } = data.correlations
-  const n = data.cases.length
+  const countryPieItems = [
+    ...data.topCountriesByVisibility.map((c) => ({
+      label: nameOf(c.iso2),
+      value: c.score,
+      valueLabel: c.score.toFixed(1),
+      iso2: c.iso2,
+    })),
+    ...(data.otherCountriesScore > 0
+      ? [{ label: 'Diğer ülkeler', value: data.otherCountriesScore, valueLabel: data.otherCountriesScore.toFixed(1), isOther: true }]
+      : []),
+  ]
+
+  const destinationPieItems = [
+    ...data.topDestinations.map((d) => ({
+      label: d.name,
+      value: d.totalScore,
+      valueLabel: d.totalScore.toFixed(1),
+    })),
+    ...(data.otherDestinationsScore > 0
+      ? [{ label: 'Diğer destinasyonlar', value: data.otherDestinationsScore, valueLabel: data.otherDestinationsScore.toFixed(1), isOther: true }]
+      : []),
+  ]
+
+  const risingItems = data.risingCountries.map((c) => ({
+    label: nameOf(c.iso2),
+    value: c.changePct,
+    valueLabel: `+${c.changePct}%`,
+    meta: `son ${c.windowDays} gün`,
+  }))
 
   return (
     <div className="dashboard">
-      <h2>Etki Raporu — Turizm/İhracat Korelasyonu</h2>
+      <h2>Etki Raporu</h2>
 
-      <div className="impact__disclaimer">
-        Turist girişi ve ihracat rakamları <strong>örnek/açıklayıcıdır</strong> — gerçek TÜİK ve
-        Kültür Turizm Bakanlığı verisi kurumsal talep gerektiriyor. Aşağıdaki korelasyon
-        hesaplaması gerçek istatistik yöntemidir (DiD düzeltmesi + Pearson korelasyonu); sadece
-        girdi rakamları örnektir.
-      </div>
-
-      <p className="impact__summary">
-        İncelenen <strong>{n} ülkede</strong>: dizi görünürlüğü arttıkça turizmde{' '}
-        <strong>{strengthLabel(tourism.r)}</strong> (r={tourism.r}), ihracatta{' '}
-        <strong>{strengthLabel(exportCorr.r)}</strong> (r={exportCorr.r}) bir birliktelik
-        gözlemleniyor. Küçük örneklem nedeniyle güven aralıkları geniş — bu bir kanıt değil,
-        ilişki gücü göstergesidir.
+      <h3>Şu Anki Öne Çıkanlar</h3>
+      <p className="dashboard__hint">
+        Canlı TMDB verisinden hesaplanan gerçek görünürlük skorları — tahmin veya örnek veri değil.
+        "Diğer" dilimi, listelenmeyen kalan {data.topCountriesByVisibility.length < 6 ? 'ülkelerin' : 'kalemlerin'} toplamını temsil eder.
       </p>
-
-      <div className="impact__charts">
-        <div className="impact__chart-box">
-          <h4>Görünürlük ↔ Turizm</h4>
-          <ScatterChart
-            data={data.cases.map((c) => ({ x: c.adjustedTourismChangePct, y: c.visibilityChangePct, label: c.country }))}
-            xLabel="Düzeltilmiş turist değişimi"
-            yLabel="Görünürlük değişimi"
+      <div className="impact__pie-section">
+        <div>
+          <h4 className="impact__rank-title">Görünürlük skoruna göre en öndeki ülkeler</h4>
+          <PieChart
+            items={countryPieItems}
+            onSliceClick={onSelectCountry ? (s) => onSelectCountry(s.iso2) : undefined}
           />
-          <CorrelationBox title="" stat={tourism} />
+          {onSelectCountry && <p className="pie-chart__hint">Bir ülkeye tıklayarak haritadaki detayını açabilirsiniz.</p>}
         </div>
-        <div className="impact__chart-box">
-          <h4>Görünürlük ↔ İhracat</h4>
-          <ScatterChart
-            data={data.cases.map((c) => ({ x: c.adjustedExportChangePct, y: c.visibilityChangePct, label: c.country }))}
-            xLabel="Düzeltilmiş ihracat değişimi"
-            yLabel="Görünürlük değişimi"
-            accentColor="#5cb85c"
-          />
-          <CorrelationBox title="" stat={exportCorr} />
+        <div>
+          <h4 className="impact__rank-title">En çok görünürlük kazanan destinasyonlar</h4>
+          {destinationPieItems.length > 0 ? (
+            <>
+              <PieChart items={destinationPieItems} onSliceClick={onSelectDestination ? () => onSelectDestination() : undefined} />
+              {onSelectDestination && (
+                <p className="pie-chart__hint">Bir destinasyona tıklayarak Destinasyonlar sekmesine geçebilirsiniz.</p>
+              )}
+            </>
+          ) : (
+            <p className="dashboard__empty">Henüz hiçbir dizi bir destinasyonla etiketlenmedi.</p>
+          )}
         </div>
       </div>
 
-      <button className="dashboard__link-btn" onClick={() => setShowTable((v) => !v)}>
-        {showTable ? 'Ayrıntılı tabloyu gizle' : 'Ayrıntılı tabloyu göster'}
-      </button>
-
-      {showTable && (
-        <>
-          <p className="dashboard__hint" style={{ marginTop: '0.75rem' }}>
-            Yöntem: her ülkenin ham turist/ihracat değişiminden, benzer makroekonomik dinamiklere
-            sahip ama dizi trendi yaşamamış bir kontrol ülkesinin değişimi çıkarılır (DiD). Kalan
-            "düzeltilmiş" değişim, dizi görünürlüğü artışıyla karşılaştırılır.
-          </p>
-          <table className="dashboard__table">
-            <thead>
-              <tr>
-                <th>Ülke</th>
-                <th>Kontrol Ülkesi</th>
-                <th>Trend Tema</th>
-                <th>Görünürlük Δ</th>
-                <th>Turist Δ (ham → düzeltilmiş)</th>
-                <th>İhracat Δ (ham → düzeltilmiş)</th>
-                <th>Pencere</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.cases.map((c) => (
-                <tr key={c.country}>
-                  <td>{c.country}</td>
-                  <td>{c.controlCountry}</td>
-                  <td>{c.theme}</td>
-                  <td>{fmtPct(c.visibilityChangePct)}</td>
-                  <td>
-                    {fmtPct(c.rawTourismChangePct)} → {fmtPct(c.adjustedTourismChangePct)}
-                  </td>
-                  <td>
-                    {fmtPct(c.rawExportChangePct)} → {fmtPct(c.adjustedExportChangePct)}
-                  </td>
-                  <td>{c.windowMonths} ay</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </>
+      <h3>Yükselen Ülkeler</h3>
+      {data.hasEnoughHistoryForTrends && risingItems.length > 0 ? (
+        <RankList items={risingItems} accent="#5cb85c" />
+      ) : (
+        <p className="dashboard__empty">
+          Trend verisi birikiyor — gerçek bir yükseliş/düşüş tespiti için en az birkaç günlük takip
+          gerekiyor. Uydurma bir yön göstermek yerine bekliyoruz.
+        </p>
       )}
+
+      <h3>{data.pendingAnalysis.title} — Gerçek Veri Bekleniyor</h3>
+      <div className="impact__pending">
+        <p>{data.pendingAnalysis.description}</p>
+        <p className="impact__pending-label">Gereken kaynaklar:</p>
+        <ul>
+          {data.pendingAnalysis.requiredSources.map((src) => (
+            <li key={src}>{src}</li>
+          ))}
+        </ul>
+      </div>
     </div>
   )
 }

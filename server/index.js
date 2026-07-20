@@ -4,21 +4,141 @@ import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
 import { getRawSeriesData } from './tmdb.js'
-import { buildVisibility } from './aggregate.js'
+import { buildVisibility, buildDestinationRanking } from './aggregate.js'
 import { THEMES, ensureClassified, getThemeStore, setHumanOverride, effectiveTheme, effectiveConfidence } from './themes.js'
+import {
+  DESTINATIONS,
+  ensureDetected,
+  getDestinationStore,
+  setHumanTags,
+  effectiveDestinations,
+} from './destinations.js'
 import { queryTrends } from './serpapi.js'
 import { buildImpactReport } from './impact.js'
 import { getTrend, maybeRecordSnapshot, loadHistoryStore } from './history.js'
 import { getCached, setCached } from './cache.js'
+import { COOKIE_NAME, createSession, getSessionUserId, isValidSession, deleteSession, parseCookies, sessionCookieHeader } from './auth.js'
+import {
+  ensureBootstrapAdmin,
+  registerUser,
+  findUserByEmail,
+  getUser,
+  listUsers,
+  setUserStatus,
+  setUserAdmin,
+  verifyPassword,
+  publicUser,
+} from './users.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '.env') })
 const RAW_CACHE_KEY = 'raw-series-providers'
 const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 saat
+const SESSION_MAX_AGE_S = 7 * 24 * 60 * 60 // 7 gün
 
 const app = express()
-app.use(cors())
+app.use(cors({ origin: true, credentials: true }))
 app.use(express.json())
+
+ensureBootstrapAdmin()
+
+app.use((req, res, next) => {
+  req.cookies = parseCookies(req.headers.cookie)
+  next()
+})
+
+// Kimlik doğrulama uçları her zaman erişilebilir; geri kalan tüm /api rotaları
+// geçerli bir oturum ister. İsme bağlı hesaplar: kayıt olan biri admin onaylayana kadar
+// "pending" kalır, giriş yapamaz.
+app.post('/api/auth/register', (req, res) => {
+  try {
+    const { name, email, role, password } = req.body || {}
+    const entry = registerUser({ name, email, role, password })
+    res.status(201).json({ status: entry.status })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+app.post('/api/auth/login', (req, res) => {
+  const { email, password } = req.body || {}
+  const user = email ? findUserByEmail(email) : null
+  if (!user || !verifyPassword(password || '', user.passwordHash)) {
+    return res.status(401).json({ error: 'E-posta veya şifre yanlış' })
+  }
+  if (user.status === 'pending') {
+    return res.status(403).json({ error: 'Hesabınız onay bekliyor' })
+  }
+  if (user.status === 'rejected') {
+    return res.status(403).json({ error: 'Hesabınız onaylanmadı' })
+  }
+  const token = createSession(user.id)
+  res.setHeader('Set-Cookie', sessionCookieHeader(token, SESSION_MAX_AGE_S))
+  res.json({ ok: true })
+})
+
+app.get('/api/auth/status', (req, res) => {
+  const userId = getSessionUserId(req.cookies[COOKIE_NAME])
+  const user = userId ? getUser(userId) : null
+  res.json({ authenticated: Boolean(user), user: user ? publicUser(user) : null })
+})
+
+app.post('/api/auth/logout', (req, res) => {
+  deleteSession(req.cookies[COOKIE_NAME])
+  res.setHeader('Set-Cookie', sessionCookieHeader('', 0))
+  res.json({ ok: true })
+})
+
+app.use('/api', (req, res, next) => {
+  if (req.path.startsWith('/auth/')) return next()
+  if (isValidSession(req.cookies[COOKIE_NAME])) return next()
+  res.status(401).json({ error: 'Giriş gerekli' })
+})
+
+// Sadece yöneticiler /api/admin/* rotalarına erişebilir — nav sekmesini gizlemek yeterli
+// değil, sunucu tarafında da doğrulanır.
+app.use('/api/admin', (req, res, next) => {
+  const userId = getSessionUserId(req.cookies[COOKIE_NAME])
+  const user = userId ? getUser(userId) : null
+  if (!user?.isAdmin) {
+    return res.status(403).json({ error: 'Yönetici yetkisi gerekli' })
+  }
+  req.currentUser = user
+  next()
+})
+
+app.get('/api/admin/users', (req, res) => {
+  res.json({ items: listUsers().map(publicUser) })
+})
+
+app.post('/api/admin/users/:id/approve', (req, res) => {
+  try {
+    const entry = setUserStatus(req.params.id, 'approved', req.currentUser.id)
+    res.json(publicUser(entry))
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+app.post('/api/admin/users/:id/reject', (req, res) => {
+  try {
+    const entry = setUserStatus(req.params.id, 'rejected', req.currentUser.id)
+    res.json(publicUser(entry))
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+app.post('/api/admin/users/:id/toggle-admin', (req, res) => {
+  try {
+    const target = getUser(req.params.id)
+    if (!target) throw new Error('Kullanıcı bulunamadı')
+    const entry = setUserAdmin(req.params.id, !target.isAdmin)
+    res.json(publicUser(entry))
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
 
 async function getRawSeriesDataCached() {
   const cached = getCached(RAW_CACHE_KEY)
@@ -28,20 +148,28 @@ async function getRawSeriesDataCached() {
   return data
 }
 
+// /api/visibility ve /api/impact aynı gerçek, canlı veriyi paylaşır — tema/destinasyon
+// sınıflandırması ve trend/history zenginleştirmesi burada bir kez yapılır.
+async function getEnrichedVisibility() {
+  const raw = await getRawSeriesDataCached()
+  const themeStore = ensureClassified(raw.series)
+  const destinationStore = ensureDetected(raw.series)
+  const data = buildVisibility(raw, themeStore, destinationStore)
+
+  const history = loadHistoryStore()
+  data.countries = data.countries.map((c) => ({
+    ...c,
+    trend: getTrend(history, c.iso2, c.score),
+    history: (history[c.iso2] || []).slice(-20),
+  }))
+  maybeRecordSnapshot(history, data.countries)
+
+  return { data, raw, destinationStore }
+}
+
 app.get('/api/visibility', async (req, res) => {
   try {
-    const raw = await getRawSeriesDataCached()
-    const themeStore = ensureClassified(raw.series)
-    const data = buildVisibility(raw, themeStore)
-
-    const history = loadHistoryStore()
-    data.countries = data.countries.map((c) => ({
-      ...c,
-      trend: getTrend(history, c.iso2, c.score),
-      history: (history[c.iso2] || []).slice(-20),
-    }))
-    maybeRecordSnapshot(history, data.countries)
-
+    const { data } = await getEnrichedVisibility()
     res.json(data)
   } catch (err) {
     console.error('[visibility] hata:', err.message)
@@ -89,6 +217,66 @@ app.post('/api/themes/:seriesId/override', (req, res) => {
   }
 })
 
+app.get('/api/destinations/taxonomy', (req, res) => {
+  res.json({ destinations: DESTINATIONS.map((d) => ({ id: d.id, name: d.name })) })
+})
+
+app.get('/api/destinations', async (req, res) => {
+  try {
+    const raw = await getRawSeriesDataCached()
+    const store = ensureDetected(raw.series)
+    const list = Object.values(store)
+      .map((entry) => {
+        const destinations = effectiveDestinations(entry)
+        return {
+          id: entry.id,
+          name: entry.name,
+          overview: entry.overview,
+          autoDetected: entry.autoDetected,
+          humanTags: entry.humanTags,
+          effectiveDestinations: destinations,
+          isUntagged: destinations.length === 0,
+        }
+      })
+      .sort((a, b) => (b.isUntagged ? 1 : 0) - (a.isUntagged ? 1 : 0))
+    res.json({ items: list })
+  } catch (err) {
+    console.error('[destinations] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.post('/api/destinations/:seriesId/override', (req, res) => {
+  try {
+    const { destinationIds, reviewer } = req.body || {}
+    const entry = setHumanTags(req.params.seriesId, destinationIds, reviewer)
+    res.json({
+      id: entry.id,
+      name: entry.name,
+      overview: entry.overview,
+      autoDetected: entry.autoDetected,
+      humanTags: entry.humanTags,
+      effectiveDestinations: effectiveDestinations(entry),
+      isUntagged: effectiveDestinations(entry).length === 0,
+    })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+app.get('/api/destinations/ranking', async (req, res) => {
+  try {
+    const raw = await getRawSeriesDataCached()
+    const themeStore = ensureClassified(raw.series)
+    const destinationStore = ensureDetected(raw.series)
+    const data = buildVisibility(raw, themeStore, destinationStore)
+    res.json({ items: buildDestinationRanking(data.countries, raw.series, destinationStore) })
+  } catch (err) {
+    console.error('[destinations/ranking] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
 app.get('/api/trends/series', async (req, res) => {
   try {
     const raw = await getRawSeriesDataCached()
@@ -109,8 +297,15 @@ app.get('/api/trends/:seriesName', async (req, res) => {
   }
 })
 
-app.get('/api/impact', (req, res) => {
-  res.json(buildImpactReport())
+app.get('/api/impact', async (req, res) => {
+  try {
+    const { data, raw, destinationStore } = await getEnrichedVisibility()
+    const destinationRanking = buildDestinationRanking(data.countries, raw.series, destinationStore)
+    res.json(buildImpactReport(data.countries, destinationRanking))
+  } catch (err) {
+    console.error('[impact] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
 })
 
 // Prod: build edilmiş frontend'i de servis et
