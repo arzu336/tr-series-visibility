@@ -70,6 +70,7 @@ function DestinationSection() {
   const [drafts, setDrafts] = useState({})
   const [savingId, setSavingId] = useState(null)
   const [editingId, setEditingId] = useState(null)
+  const [search, setSearch] = useState('')
 
   const load = useCallback(() => {
     setStatus('loading')
@@ -116,19 +117,28 @@ function DestinationSection() {
   if (status === 'loading') return <div className="dashboard status">Yükleniyor…</div>
   if (status === 'error') return <div className="dashboard status status--error">Hata: {error}</div>
 
-  const untagged = items.filter((i) => i.isUntagged)
-  const tagged = items.filter((i) => !i.isUntagged)
+  const q = search.trim().toLocaleLowerCase('tr')
+  const matchesQuery = (item) => !q || item.name.toLocaleLowerCase('tr').includes(q)
+  const untagged = items.filter((i) => i.isUntagged && matchesQuery(i))
+  const tagged = items.filter((i) => !i.isUntagged && matchesQuery(i))
   const destName = (id) => taxonomy.find((d) => d.id === id)?.name || id
 
   return (
     <>
       <div className="dashboard__summary">
         <span className="dashboard__summary-item dashboard__summary-item--warn">
-          {untagged.length} dizi hiç destinasyon içermiyor
+          {items.filter((i) => i.isUntagged).length} dizi hiç destinasyon içermiyor
         </span>
         <span className="dashboard__summary-item dashboard__summary-item--ok">
-          {tagged.length} dizi en az bir destinasyon içeriyor
+          {items.filter((i) => !i.isUntagged).length} dizi en az bir destinasyon içeriyor
         </span>
+        <input
+          className="search-input"
+          type="text"
+          placeholder="Dizi ara..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       <section className="dashboard__section">
@@ -233,6 +243,7 @@ export default function AnalystDashboard() {
   const [drafts, setDrafts] = useState({})
   const [savingId, setSavingId] = useState(null)
   const [editingId, setEditingId] = useState(null)
+  const [search, setSearch] = useState('')
 
   const load = useCallback(() => {
     setStatus('loading')
@@ -269,8 +280,10 @@ export default function AnalystDashboard() {
   if (status === 'loading') return <div className="dashboard status">Yükleniyor…</div>
   if (status === 'error') return <div className="dashboard status status--error">Hata: {error}</div>
 
-  const needsReview = items.filter((i) => i.effectiveConfidence < CONFIDENCE_THRESHOLD)
-  const approved = items.filter((i) => i.effectiveConfidence >= CONFIDENCE_THRESHOLD)
+  const q = search.trim().toLocaleLowerCase('tr')
+  const matchesQuery = (item) => !q || item.name.toLocaleLowerCase('tr').includes(q)
+  const needsReview = items.filter((i) => i.effectiveConfidence < CONFIDENCE_THRESHOLD && matchesQuery(i))
+  const approved = items.filter((i) => i.effectiveConfidence >= CONFIDENCE_THRESHOLD && matchesQuery(i))
 
   return (
     <div className="dashboard">
@@ -278,17 +291,24 @@ export default function AnalystDashboard() {
 
       <div className="dashboard__summary">
         <span className="dashboard__summary-item dashboard__summary-item--warn">
-          {needsReview.length} dizi incelemeyi bekliyor
+          {items.filter((i) => i.effectiveConfidence < CONFIDENCE_THRESHOLD).length} dizi incelemeyi bekliyor
         </span>
         <span className="dashboard__summary-item dashboard__summary-item--ok">
-          {approved.length} dizi onaylı
+          {items.filter((i) => i.effectiveConfidence >= CONFIDENCE_THRESHOLD).length} dizi onaylı
         </span>
+        <input
+          className="search-input"
+          type="text"
+          placeholder="Dizi ara..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">İncelenmesi Gerekenler</h3>
         <p className="dashboard__hint">
-          Güven skoru {CONFIDENCE_THRESHOLD}'in altındaki kayıtlar — kural motoru net bir eşleşme
+          Güven skoru {CONFIDENCE_THRESHOLD}'in altındaki kayıtlar — LLM net bir eşleşme
           bulamadı. Doğru temayı seçip "Onayla" ile kaydedin.
         </p>
         {needsReview.length === 0 ? (
@@ -300,6 +320,7 @@ export default function AnalystDashboard() {
                 <th>Dizi</th>
                 <th>Özet</th>
                 <th>Tema</th>
+                <th>Sentiment</th>
                 <th>Güven</th>
                 <th>Düzelt</th>
               </tr>
@@ -310,6 +331,7 @@ export default function AnalystDashboard() {
                   <td>{item.name}</td>
                   <OverviewCell overview={item.overview} />
                   <td>{item.effectiveTheme}</td>
+                  <td>{item.sentiment || '—'}</td>
                   <td>
                     <span className="badge badge--uncertain">{item.effectiveConfidence}</span>
                   </td>
@@ -337,6 +359,7 @@ export default function AnalystDashboard() {
             <tr>
               <th>Dizi</th>
               <th>Tema</th>
+              <th>Sentiment</th>
               <th>Güven</th>
               <th>Kaynak</th>
               <th></th>
@@ -347,10 +370,11 @@ export default function AnalystDashboard() {
               <tr key={item.id}>
                 <td>{item.name}</td>
                 <td>{item.effectiveTheme}</td>
+                <td>{item.sentiment || '—'}</td>
                 <td>
                   <span className="badge badge--ok">{item.effectiveConfidence}</span>
                 </td>
-                <td>{item.humanOverride ? 'İnsan' : 'Kural motoru'}</td>
+                <td>{item.humanOverride ? 'İnsan' : 'LLM'}</td>
                 <td>
                   {editingId === item.id ? (
                     <EditControls

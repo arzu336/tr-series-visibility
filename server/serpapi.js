@@ -1,34 +1,20 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const STORE_PATH = path.join(__dirname, 'data', 'trends-store.json')
+import db from './db.js'
 
 function normalizeKey(seriesName) {
   return seriesName.trim().toLocaleLowerCase('tr')
 }
 
-function loadStore() {
-  if (!fs.existsSync(STORE_PATH)) return {}
-  try {
-    return JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'))
-  } catch {
-    return {}
-  }
-}
-
-function saveStore(store) {
-  fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true })
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), 'utf8')
-}
+const getStmt = db.prepare('SELECT series_name, queried_at, by_country FROM trends_cache WHERE key = ?')
+const insertStmt = db.prepare(`
+  INSERT INTO trends_cache (key, series_name, queried_at, by_country) VALUES (?, ?, ?, ?)
+`)
 
 export async function queryTrends(seriesName) {
   const key = normalizeKey(seriesName)
-  const store = loadStore()
+  const row = getStmt.get(key)
 
-  if (store[key]) {
-    return { ...store[key], fromCache: true }
+  if (row) {
+    return { seriesName: row.series_name, queriedAt: row.queried_at, byCountry: JSON.parse(row.by_country), fromCache: true }
   }
 
   const apiKey = process.env.SERPAPI_API_KEY
@@ -66,8 +52,7 @@ export async function queryTrends(seriesName) {
     byCountry,
   }
 
-  store[key] = entry
-  saveStore(store)
+  insertStmt.run(key, seriesName, entry.queriedAt, JSON.stringify(byCountry))
 
   return { ...entry, fromCache: false }
 }

@@ -1,9 +1,4 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const HISTORY_PATH = path.join(__dirname, 'data', 'visibility-history.json')
+import db from './db.js'
 
 const SNAPSHOT_INTERVAL_MS = 12 * 60 * 60 * 1000 // en az 12 saatte bir yeni anlık görüntü al
 const TARGET_WINDOW_MS = 7 * 24 * 60 * 60 * 1000 // 7 gün öncesiyle kıyaslamayı hedefle
@@ -12,18 +7,29 @@ const MAX_SNAPSHOTS_PER_COUNTRY = 60
 const RISING_THRESHOLD_PCT = 5
 const FALLING_THRESHOLD_PCT = -5
 
-export function loadHistoryStore() {
-  if (!fs.existsSync(HISTORY_PATH)) return {}
-  try {
-    return JSON.parse(fs.readFileSync(HISTORY_PATH, 'utf8'))
-  } catch {
-    return {}
-  }
-}
+const selectAllStmt = db.prepare('SELECT iso2, score, captured_at FROM visibility_history ORDER BY captured_at ASC')
+const selectMetaStmt = db.prepare('SELECT value FROM meta WHERE key = ?')
+const insertSnapshotStmt = db.prepare('INSERT INTO visibility_history (iso2, score, captured_at) VALUES (?, ?, ?)')
+const pruneStmt = db.prepare(`
+  DELETE FROM visibility_history
+  WHERE iso2 = ? AND rowid NOT IN (
+    SELECT rowid FROM visibility_history WHERE iso2 = ? ORDER BY captured_at DESC LIMIT ?
+  )
+`)
+const setMetaStmt = db.prepare(`
+  INSERT INTO meta (key, value) VALUES ('lastSnapshotAt', ?)
+  ON CONFLICT(key) DO UPDATE SET value = excluded.value
+`)
 
-function saveHistoryStore(history) {
-  fs.mkdirSync(path.dirname(HISTORY_PATH), { recursive: true })
-  fs.writeFileSync(HISTORY_PATH, JSON.stringify(history), 'utf8')
+export function loadHistoryStore() {
+  const history = {}
+  for (const row of selectAllStmt.all()) {
+    if (!history[row.iso2]) history[row.iso2] = []
+    history[row.iso2].push({ score: row.score, capturedAt: row.captured_at })
+  }
+  const metaRow = selectMetaStmt.get('lastSnapshotAt')
+  history.__lastSnapshotAt = metaRow ? Number(metaRow.value) : 0
+  return history
 }
 
 function pickReferenceSnapshot(snapshots, now) {
@@ -63,12 +69,15 @@ export function maybeRecordSnapshot(history, countries) {
   if (now - marker < SNAPSHOT_INTERVAL_MS) return
 
   countries.forEach((c) => {
+    insertSnapshotStmt.run(c.iso2, c.score, now)
+    pruneStmt.run(c.iso2, c.iso2, MAX_SNAPSHOTS_PER_COUNTRY)
+
     if (!history[c.iso2]) history[c.iso2] = []
     history[c.iso2].push({ score: c.score, capturedAt: now })
     if (history[c.iso2].length > MAX_SNAPSHOTS_PER_COUNTRY) {
       history[c.iso2] = history[c.iso2].slice(-MAX_SNAPSHOTS_PER_COUNTRY)
     }
   })
+  setMetaStmt.run(String(now))
   history.__lastSnapshotAt = now
-  saveHistoryStore(history)
 }

@@ -1,9 +1,11 @@
 const TMDB_BASE = 'https://api.themoviedb.org/3'
-const TOP_N_SERIES = 60
+const TOP_N_SERIES = 200
 const PAGE_SIZE = 20
-// "Yayında" kabul edilen erişim türleri: abonelik (flatrate), reklamlı (ads) ve ücretsiz (free).
+// "Yayında" kabul edilen erişim türleri: abonelik (flatrate) ve ücretsiz (free).
 // rent/buy hariç tutulur çünkü tek seferlik satın alma, yaygın kültürel erişimi göstermez.
-export const STREAMABLE_KEYS = ['flatrate', 'ads', 'free']
+// reklamlı (ads) da hariç tutulur — reklam destekli kataloglar ülkeden ülkeye çok
+// tutarsız ve genelde ana abonelik kataloğunun küçük bir alt kümesidir.
+export const STREAMABLE_KEYS = ['flatrate', 'free']
 const RETRYABLE_STATUSES = [502, 503, 504]
 const RETRY_DELAYS_MS = [500, 1500]
 
@@ -41,6 +43,7 @@ async function getTopTurkishSeries(n = TOP_N_SERIES) {
     Array.from({ length: pagesNeeded }, (_, i) =>
       tmdbGet('/discover/tv', {
         with_origin_country: 'TR',
+        with_original_language: 'tr',
         sort_by: 'popularity.desc',
         language: 'tr-TR',
         page: i + 1,

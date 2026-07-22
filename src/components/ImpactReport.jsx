@@ -29,7 +29,7 @@ function RankList({ items, accent = '#f03b20' }) {
   )
 }
 
-export default function ImpactReport({ onSelectCountry, onSelectDestination }) {
+export default function ImpactReport({ onSelectCountry }) {
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
@@ -85,7 +85,7 @@ export default function ImpactReport({ onSelectCountry, onSelectDestination }) {
 
       <h3>Şu Anki Öne Çıkanlar</h3>
       <p className="dashboard__hint">
-        Canlı TMDB verisinden hesaplanan gerçek görünürlük skorları — tahmin veya örnek veri değil.
+        Canlı veriden hesaplanan gerçek görünürlük skorları — tahmin veya örnek veri değil.
         "Diğer" dilimi, listelenmeyen kalan {data.topCountriesByVisibility.length < 6 ? 'ülkelerin' : 'kalemlerin'} toplamını temsil eder.
       </p>
       <div className="impact__pie-section">
@@ -100,12 +100,7 @@ export default function ImpactReport({ onSelectCountry, onSelectDestination }) {
         <div>
           <h4 className="impact__rank-title">En çok görünürlük kazanan destinasyonlar</h4>
           {destinationPieItems.length > 0 ? (
-            <>
-              <PieChart items={destinationPieItems} onSliceClick={onSelectDestination ? () => onSelectDestination() : undefined} />
-              {onSelectDestination && (
-                <p className="pie-chart__hint">Bir destinasyona tıklayarak Destinasyonlar sekmesine geçebilirsiniz.</p>
-              )}
-            </>
+            <PieChart items={destinationPieItems} />
           ) : (
             <p className="dashboard__empty">Henüz hiçbir dizi bir destinasyonla etiketlenmedi.</p>
           )}

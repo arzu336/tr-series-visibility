@@ -1,9 +1,4 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const STORE_PATH = path.join(__dirname, 'data', 'destination-store.json')
+import db from './db.js'
 
 // Turizm açısından öne çıkan destinasyon/bölge listesi. Anahtar kelimeler,
 // TMDB dizi özetinde (sinopsis) geçen yer adlarını yakalamak için — bu bir
@@ -48,45 +43,53 @@ export function detectDestinations(overview, name) {
   return matches.sort((a, b) => b.matchCount - a.matchCount).map((m) => m.id)
 }
 
-function loadStore() {
-  if (!fs.existsSync(STORE_PATH)) return {}
-  try {
-    return JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'))
-  } catch {
-    return {}
-  }
-}
+const selectAllStmt = db.prepare('SELECT * FROM destination_classifications')
+const selectOneStmt = db.prepare('SELECT * FROM destination_classifications WHERE id = ?')
+const insertIgnoreStmt = db.prepare(`
+  INSERT OR IGNORE INTO destination_classifications (id, name, overview, auto_detected, detected_at)
+  VALUES (?, ?, ?, ?, ?)
+`)
+const updateHumanTagsStmt = db.prepare(`
+  UPDATE destination_classifications
+  SET human_tags_destinations = ?, human_tags_reviewer = ?, human_tags_at = ?
+  WHERE id = ?
+`)
 
-function saveStore(store) {
-  fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true })
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), 'utf8')
+function rowToEntry(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    overview: row.overview,
+    autoDetected: JSON.parse(row.auto_detected || '[]'),
+    detectedAt: row.detected_at,
+    humanTags: row.human_tags_destinations
+      ? {
+          destinations: JSON.parse(row.human_tags_destinations),
+          reviewer: row.human_tags_reviewer,
+          at: row.human_tags_at,
+        }
+      : null,
+  }
 }
 
 export function ensureDetected(series) {
-  const store = loadStore()
-  let changed = false
+  const existingIds = new Set(selectAllStmt.all().map((r) => r.id))
 
   for (const s of series) {
-    const key = String(s.id)
-    if (!store[key]) {
-      store[key] = {
-        id: s.id,
-        name: s.name,
-        overview: s.overview,
-        autoDetected: detectDestinations(s.overview, s.name),
-        detectedAt: new Date().toISOString(),
-        humanTags: null,
-      }
-      changed = true
-    }
+    if (existingIds.has(s.id)) continue
+    const autoDetected = detectDestinations(s.overview, s.name)
+    insertIgnoreStmt.run(s.id, s.name, s.overview, JSON.stringify(autoDetected), new Date().toISOString())
   }
 
-  if (changed) saveStore(store)
-  return store
+  return getDestinationStore()
 }
 
 export function getDestinationStore() {
-  return loadStore()
+  const store = {}
+  for (const row of selectAllStmt.all()) {
+    store[String(row.id)] = rowToEntry(row)
+  }
+  return store
 }
 
 export function setHumanTags(seriesId, destinationIds, reviewer) {
@@ -94,18 +97,18 @@ export function setHumanTags(seriesId, destinationIds, reviewer) {
   if (invalid.length > 0) {
     throw new Error(`Geçersiz destinasyon: ${invalid.join(', ')}`)
   }
-  const store = loadStore()
-  const key = String(seriesId)
-  if (!store[key]) {
+  const id = Number(seriesId)
+  const row = selectOneStmt.get(id)
+  if (!row) {
     throw new Error(`Dizi bulunamadı: ${seriesId}`)
   }
-  store[key].humanTags = {
-    destinations: destinationIds || [],
-    reviewer: reviewer || 'anonim',
-    at: new Date().toISOString(),
-  }
-  saveStore(store)
-  return store[key]
+  updateHumanTagsStmt.run(
+    JSON.stringify(destinationIds || []),
+    reviewer || 'anonim',
+    new Date().toISOString(),
+    id
+  )
+  return rowToEntry(selectOneStmt.get(id))
 }
 
 export function effectiveDestinations(entry) {

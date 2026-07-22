@@ -36,6 +36,10 @@ export async function fetchTrends(seriesName) {
   return handle(await fetch(`/api/trends/${encodeURIComponent(seriesName)}`))
 }
 
+export async function fetchSocialListening(seriesName) {
+  return handle(await fetch(`/api/social/${encodeURIComponent(seriesName)}`))
+}
+
 export async function fetchImpactReport() {
   return handle(await fetch('/api/impact'))
 }
@@ -100,8 +104,4 @@ export async function submitDestinationOverride(seriesId, destinationIds, review
       body: JSON.stringify({ destinationIds, reviewer }),
     })
   )
-}
-
-export async function fetchDestinationRanking() {
-  return handle(await fetch('/api/destinations/ranking'))
 }

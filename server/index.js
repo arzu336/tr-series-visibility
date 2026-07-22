@@ -14,6 +14,7 @@ import {
   effectiveDestinations,
 } from './destinations.js'
 import { queryTrends } from './serpapi.js'
+import { querySocialListening } from './social-listening.js'
 import { buildImpactReport } from './impact.js'
 import { getTrend, maybeRecordSnapshot, loadHistoryStore } from './history.js'
 import { getCached, setCached } from './cache.js'
@@ -152,7 +153,7 @@ async function getRawSeriesDataCached() {
 // sınıflandırması ve trend/history zenginleştirmesi burada bir kez yapılır.
 async function getEnrichedVisibility() {
   const raw = await getRawSeriesDataCached()
-  const themeStore = ensureClassified(raw.series)
+  const themeStore = await ensureClassified(raw.series)
   const destinationStore = ensureDetected(raw.series)
   const data = buildVisibility(raw, themeStore, destinationStore)
 
@@ -181,15 +182,19 @@ app.get('/api/taxonomy', (req, res) => {
   res.json({ themes: THEMES })
 })
 
-app.get('/api/themes', (req, res) => {
+app.get('/api/themes', async (req, res) => {
+  const raw = await getRawSeriesDataCached()
+  const liveIds = new Set(raw.series.map((s) => s.id))
   const store = getThemeStore()
   const list = Object.values(store)
+    .filter((entry) => liveIds.has(entry.id))
     .map((entry) => ({
       id: entry.id,
       name: entry.name,
       overview: entry.overview,
       theme: entry.theme,
       confidence: entry.confidence,
+      sentiment: entry.sentiment,
       effectiveTheme: effectiveTheme(entry),
       effectiveConfidence: effectiveConfidence(entry),
       humanOverride: entry.humanOverride,
@@ -208,6 +213,7 @@ app.post('/api/themes/:seriesId/override', (req, res) => {
       overview: entry.overview,
       theme: entry.theme,
       confidence: entry.confidence,
+      sentiment: entry.sentiment,
       effectiveTheme: effectiveTheme(entry),
       effectiveConfidence: effectiveConfidence(entry),
       humanOverride: entry.humanOverride,
@@ -224,8 +230,10 @@ app.get('/api/destinations/taxonomy', (req, res) => {
 app.get('/api/destinations', async (req, res) => {
   try {
     const raw = await getRawSeriesDataCached()
+    const liveIds = new Set(raw.series.map((s) => s.id))
     const store = ensureDetected(raw.series)
     const list = Object.values(store)
+      .filter((entry) => liveIds.has(entry.id))
       .map((entry) => {
         const destinations = effectiveDestinations(entry)
         return {
@@ -264,19 +272,6 @@ app.post('/api/destinations/:seriesId/override', (req, res) => {
   }
 })
 
-app.get('/api/destinations/ranking', async (req, res) => {
-  try {
-    const raw = await getRawSeriesDataCached()
-    const themeStore = ensureClassified(raw.series)
-    const destinationStore = ensureDetected(raw.series)
-    const data = buildVisibility(raw, themeStore, destinationStore)
-    res.json({ items: buildDestinationRanking(data.countries, raw.series, destinationStore) })
-  } catch (err) {
-    console.error('[destinations/ranking] hata:', err.message)
-    res.status(502).json({ error: err.message })
-  }
-})
-
 app.get('/api/trends/series', async (req, res) => {
   try {
     const raw = await getRawSeriesDataCached()
@@ -293,6 +288,16 @@ app.get('/api/trends/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/social/:seriesName', async (req, res) => {
+  try {
+    const data = await querySocialListening(req.params.seriesName)
+    res.json(data)
+  } catch (err) {
+    console.error('[social] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })

@@ -1,13 +1,13 @@
-import { useCallback, useEffect, useState } from 'react'
-import Globe3D from './components/Globe3D.jsx'
+import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
 import CountryPanel from './components/CountryPanel.jsx'
 import Legend from './components/Legend.jsx'
-import AnalystDashboard from './components/AnalystDashboard.jsx'
-import TrendsExplorer from './components/TrendsExplorer.jsx'
-import ImpactReport from './components/ImpactReport.jsx'
-import DestinationsView from './components/DestinationsView.jsx'
-import AdminUsersPanel from './components/AdminUsersPanel.jsx'
 import Login from './components/Login.jsx'
+
+const Globe3D = lazy(() => import('./components/Globe3D.jsx'))
+const AnalystDashboard = lazy(() => import('./components/AnalystDashboard.jsx'))
+const TrendsExplorer = lazy(() => import('./components/TrendsExplorer.jsx'))
+const ImpactReport = lazy(() => import('./components/ImpactReport.jsx'))
+const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
 import { fetchVisibility, fetchAuthStatus, logout } from './lib/api.js'
 import countryNames from './data/country-centroids.json'
 
@@ -59,8 +59,6 @@ export default function App() {
     },
     [countries]
   )
-
-  const handleSelectDestinationFromReport = useCallback(() => setView('destinations'), [])
 
   const handleLogout = async () => {
     try {
@@ -116,12 +114,6 @@ export default function App() {
             >
               Etki Raporu
             </button>
-            <button
-              className={view === 'destinations' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
-              onClick={() => setView('destinations')}
-            >
-              Destinasyonlar
-            </button>
             {user?.isAdmin && (
               <button
                 className={view === 'admin' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
@@ -138,26 +130,27 @@ export default function App() {
       </header>
 
       <main className="app__main">
-        {view === 'dashboard' && <AnalystDashboard />}
-        {view === 'trends' && <TrendsExplorer />}
-        {view === 'impact' && (
-          <ImpactReport onSelectCountry={handleSelectCountryFromReport} onSelectDestination={handleSelectDestinationFromReport} />
-        )}
-        {view === 'destinations' && <DestinationsView />}
-        {view === 'admin' && user?.isAdmin && <AdminUsersPanel />}
-        {view === 'map' && (
-          <>
-            {status === 'loading' && <div className="status">Veri yükleniyor…</div>}
-            {status === 'error' && <div className="status status--error">Veri alınamadı: {error}</div>}
-            {status === 'ready' && (
-              <>
-                <Globe3D countries={countries} onSelect={handleSelect} />
-                <Legend />
-                <CountryPanel country={selected} onClose={() => setSelected(null)} />
-              </>
-            )}
-          </>
-        )}
+        <Suspense fallback={<div className="status">Yükleniyor…</div>}>
+          {view === 'dashboard' && <AnalystDashboard />}
+          {view === 'trends' && <TrendsExplorer />}
+          {view === 'impact' && (
+            <ImpactReport onSelectCountry={handleSelectCountryFromReport} />
+          )}
+          {view === 'admin' && user?.isAdmin && <AdminUsersPanel />}
+          {view === 'map' && (
+            <>
+              {status === 'loading' && <div className="status">Veri yükleniyor…</div>}
+              {status === 'error' && <div className="status status--error">Veri alınamadı: {error}</div>}
+              {status === 'ready' && (
+                <>
+                  <Globe3D countries={countries} onSelect={handleSelect} />
+                  <Legend />
+                  <CountryPanel country={selected} onClose={() => setSelected(null)} />
+                </>
+              )}
+            </>
+          )}
+        </Suspense>
       </main>
     </div>
   )

@@ -10,6 +10,7 @@ export default function AdminUsersPanel() {
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const [actingId, setActingId] = useState(null)
+  const [search, setSearch] = useState('')
 
   const load = useCallback(() => {
     setStatus('loading')
@@ -43,16 +44,30 @@ export default function AdminUsersPanel() {
   if (status === 'loading') return <div className="dashboard status">Yükleniyor…</div>
   if (status === 'error') return <div className="dashboard status status--error">Hata: {error}</div>
 
-  const pending = items.filter((u) => u.status === 'pending')
-  const others = items.filter((u) => u.status !== 'pending')
+  const q = search.trim().toLocaleLowerCase('tr')
+  const matchesQuery = (u) =>
+    !q || u.name.toLocaleLowerCase('tr').includes(q) || u.email.toLocaleLowerCase('tr').includes(q)
+  const pending = items.filter((u) => u.status === 'pending' && matchesQuery(u))
+  const others = items.filter((u) => u.status !== 'pending' && matchesQuery(u))
 
   return (
     <div className="dashboard">
       <h2>Kullanıcı Yönetimi</h2>
 
       <div className="dashboard__summary">
-        <span className="dashboard__summary-item dashboard__summary-item--warn">{pending.length} onay bekliyor</span>
-        <span className="dashboard__summary-item dashboard__summary-item--ok">{others.length} karara bağlandı</span>
+        <span className="dashboard__summary-item dashboard__summary-item--warn">
+          {items.filter((u) => u.status === 'pending').length} onay bekliyor
+        </span>
+        <span className="dashboard__summary-item dashboard__summary-item--ok">
+          {items.filter((u) => u.status !== 'pending').length} karara bağlandı
+        </span>
+        <input
+          className="search-input"
+          type="text"
+          placeholder="İsim veya e-posta ara..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+        />
       </div>
 
       {error && <p className="login__error">{error}</p>}

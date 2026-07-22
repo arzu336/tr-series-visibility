@@ -13,6 +13,7 @@ export function buildVisibility(rawData, themeStore, destinationStore = {}) {
     const themeEntry = themeStore[String(show.id)]
     const theme = themeEntry ? effectiveTheme(themeEntry) : 'diğer'
     const themeConfidence = themeEntry ? effectiveConfidence(themeEntry) : 0
+    const sentiment = themeEntry?.sentiment || null
 
     const destinationEntry = destinationStore[String(show.id)]
     const destinations = destinationEntry ? effectiveDestinations(destinationEntry) : []
@@ -44,7 +45,9 @@ export function buildVisibility(rawData, themeStore, destinationStore = {}) {
         popularity: show.popularity,
         posterPath: show.posterPath || null,
         firstAirDate: show.firstAirDate || null,
+        overview: show.overview || '',
         theme,
+        sentiment,
         destinations,
       })
       if (!bucket.topSeries || show.popularity > bucket.topSeries.popularity) {

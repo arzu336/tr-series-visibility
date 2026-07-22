@@ -1,10 +1,6 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import crypto from 'node:crypto'
-import { fileURLToPath } from 'node:url'
+import db from './db.js'
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const USERS_PATH = path.join(__dirname, 'data', 'users.json')
 const SCRYPT_KEYLEN = 64
 
 export function hashPassword(password) {
@@ -22,42 +18,55 @@ export function verifyPassword(password, stored) {
   return crypto.timingSafeEqual(hash, storedBuf)
 }
 
-function loadUsers() {
-  if (!fs.existsSync(USERS_PATH)) return {}
-  try {
-    return JSON.parse(fs.readFileSync(USERS_PATH, 'utf8'))
-  } catch {
-    return {}
-  }
-}
-
-function saveUsers(users) {
-  fs.mkdirSync(path.dirname(USERS_PATH), { recursive: true })
-  fs.writeFileSync(USERS_PATH, JSON.stringify(users, null, 2), 'utf8')
-}
-
 function normalizeEmail(email) {
   return String(email || '').trim().toLowerCase()
 }
 
+const selectByEmailStmt = db.prepare('SELECT * FROM users WHERE email = ?')
+const selectByIdStmt = db.prepare('SELECT * FROM users WHERE id = ?')
+const selectAllStmt = db.prepare('SELECT * FROM users')
+const countAdminsStmt = db.prepare('SELECT COUNT(*) AS n FROM users WHERE is_admin = 1')
+const insertStmt = db.prepare(`
+  INSERT INTO users (id, name, email, role, password_hash, status, is_admin, created_at, decided_at, decided_by)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+`)
+const updateStatusStmt = db.prepare('UPDATE users SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?')
+const updateAdminStmt = db.prepare('UPDATE users SET is_admin = ? WHERE id = ?')
+
+function rowToEntry(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    email: row.email,
+    role: row.role,
+    passwordHash: row.password_hash,
+    status: row.status,
+    isAdmin: Boolean(row.is_admin),
+    createdAt: row.created_at,
+    decidedAt: row.decided_at,
+    decidedBy: row.decided_by,
+  }
+}
+
 export function findUserByEmail(email) {
-  const users = loadUsers()
-  const normalized = normalizeEmail(email)
-  return Object.values(users).find((u) => u.email === normalized) || null
+  const row = selectByEmailStmt.get(normalizeEmail(email))
+  return row ? rowToEntry(row) : null
 }
 
 export function getUser(id) {
-  const users = loadUsers()
-  return users[id] || null
+  const row = selectByIdStmt.get(id)
+  return row ? rowToEntry(row) : null
 }
 
 export function listUsers() {
-  const users = loadUsers()
-  return Object.values(users).sort((a, b) => {
-    const rank = (u) => (u.status === 'pending' ? 0 : 1)
-    if (rank(a) !== rank(b)) return rank(a) - rank(b)
-    return new Date(b.createdAt) - new Date(a.createdAt)
-  })
+  return selectAllStmt
+    .all()
+    .map(rowToEntry)
+    .sort((a, b) => {
+      const rank = (u) => (u.status === 'pending' ? 0 : 1)
+      if (rank(a) !== rank(b)) return rank(a) - rank(b)
+      return new Date(b.createdAt) - new Date(a.createdAt)
+    })
 }
 
 export function registerUser({ name, email, role, password }) {
@@ -67,7 +76,6 @@ export function registerUser({ name, email, role, password }) {
   if (findUserByEmail(email)) {
     throw new Error('Bu e-posta ile zaten bir hesap var')
   }
-  const users = loadUsers()
   const id = 'usr_' + crypto.randomBytes(12).toString('hex')
   const entry = {
     id,
@@ -81,8 +89,18 @@ export function registerUser({ name, email, role, password }) {
     decidedAt: null,
     decidedBy: null,
   }
-  users[id] = entry
-  saveUsers(users)
+  insertStmt.run(
+    entry.id,
+    entry.name,
+    entry.email,
+    entry.role,
+    entry.passwordHash,
+    entry.status,
+    0,
+    entry.createdAt,
+    entry.decidedAt,
+    entry.decidedBy
+  )
   return entry
 }
 
@@ -90,21 +108,16 @@ export function setUserStatus(id, status, decidedBy) {
   if (!['approved', 'rejected', 'pending'].includes(status)) {
     throw new Error(`Geçersiz durum: ${status}`)
   }
-  const users = loadUsers()
-  if (!users[id]) throw new Error('Kullanıcı bulunamadı')
-  users[id].status = status
-  users[id].decidedAt = new Date().toISOString()
-  users[id].decidedBy = decidedBy || null
-  saveUsers(users)
-  return users[id]
+  if (!getUser(id)) throw new Error('Kullanıcı bulunamadı')
+  const decidedAt = new Date().toISOString()
+  updateStatusStmt.run(status, decidedAt, decidedBy || null, id)
+  return getUser(id)
 }
 
 export function setUserAdmin(id, isAdmin) {
-  const users = loadUsers()
-  if (!users[id]) throw new Error('Kullanıcı bulunamadı')
-  users[id].isAdmin = Boolean(isAdmin)
-  saveUsers(users)
-  return users[id]
+  if (!getUser(id)) throw new Error('Kullanıcı bulunamadı')
+  updateAdminStmt.run(isAdmin ? 1 : 0, id)
+  return getUser(id)
 }
 
 export function publicUser(entry) {
@@ -117,8 +130,7 @@ export function publicUser(entry) {
 // admin hesabı oluşturur — böylece bilinen paylaşılan şifre, ilk yöneticinin şifresi olarak
 // devam eder ve manuel veri girişi gerekmez.
 export function ensureBootstrapAdmin() {
-  const users = loadUsers()
-  const hasAdmin = Object.values(users).some((u) => u.isAdmin)
+  const hasAdmin = countAdminsStmt.get().n > 0
   if (hasAdmin) return
 
   const password = process.env.APP_PASSWORD
@@ -129,18 +141,6 @@ export function ensureBootstrapAdmin() {
   const email = normalizeEmail(process.env.ADMIN_EMAIL || 'admin@kurum.gov.tr')
   const id = 'usr_' + crypto.randomBytes(12).toString('hex')
   const now = new Date().toISOString()
-  users[id] = {
-    id,
-    name: 'Yönetici',
-    email,
-    role: 'Sistem Yöneticisi',
-    passwordHash: hashPassword(password),
-    status: 'approved',
-    isAdmin: true,
-    createdAt: now,
-    decidedAt: now,
-    decidedBy: null,
-  }
-  saveUsers(users)
+  insertStmt.run(id, 'Yönetici', email, 'Sistem Yöneticisi', hashPassword(password), 'approved', 1, now, now, null)
   console.log(`[users] Bootstrap admin oluşturuldu: ${email}`)
 }

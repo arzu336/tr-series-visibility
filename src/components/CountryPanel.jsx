@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react'
 import Sparkline from './Sparkline.jsx'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
@@ -22,6 +23,12 @@ function yearOf(dateStr) {
 }
 
 export default function CountryPanel({ country, onClose }) {
+  const [expandedId, setExpandedId] = useState(null)
+
+  useEffect(() => {
+    setExpandedId(null)
+  }, [country?.iso2])
+
   if (!country) {
     return (
       <div className="panel panel--empty">
@@ -59,37 +66,39 @@ export default function CountryPanel({ country, onClose }) {
       <h3>Görünürlük geçmişi</h3>
       <Sparkline history={country.history} />
 
-      {country.destinationSummary && country.destinationSummary.length > 0 && (
-        <>
-          <h3>Öne çıkan destinasyonlar</h3>
-          <div className="panel__destination-chips">
-            {country.destinationSummary.slice(0, 5).map((d) => (
-              <span key={d.id} className="panel__destination-chip" title={`${d.seriesCount} dizi`}>
-                {d.name}
-              </span>
-            ))}
-          </div>
-        </>
-      )}
-
       <h3>Yayındaki diziler</h3>
       <ul className="panel__series-list">
-        {country.seriesList.map((s) => (
-          <li key={s.id ?? s.name}>
-            {s.posterPath ? (
-              <img className="panel__series-poster" src={`${POSTER_BASE}${s.posterPath}`} alt="" />
-            ) : (
-              <span className="panel__series-poster panel__series-poster--empty" aria-hidden="true" />
-            )}
-            <span className="panel__series-info">
-              <span className="panel__series-name">{s.name}</span>
-              <span className="panel__series-meta">
-                {yearOf(s.firstAirDate) || '—'} · {s.theme}
-              </span>
-            </span>
-            <span className="panel__series-score">{s.popularity.toFixed(1)}</span>
-          </li>
-        ))}
+        {country.seriesList.map((s) => {
+          const key = s.id ?? s.name
+          const isExpanded = expandedId === key
+          return (
+            <li
+              key={key}
+              className={isExpanded ? 'panel__series-item panel__series-item--expanded' : 'panel__series-item'}
+              onClick={() => setExpandedId(isExpanded ? null : key)}
+            >
+              <div className="panel__series-row">
+                {s.posterPath ? (
+                  <img className="panel__series-poster" src={`${POSTER_BASE}${s.posterPath}`} alt="" />
+                ) : (
+                  <span className="panel__series-poster panel__series-poster--empty" aria-hidden="true" />
+                )}
+                <span className="panel__series-info">
+                  <span className="panel__series-name">{s.name}</span>
+                  <span className="panel__series-meta">
+                    {yearOf(s.firstAirDate) || '—'} · {s.theme}
+                  </span>
+                </span>
+                <span className="panel__series-score">{s.popularity.toFixed(1)}</span>
+              </div>
+              {isExpanded && (
+                <div className="panel__series-detail">
+                  <p className="panel__series-overview">{s.overview || 'Bu dizi için özet bulunmuyor.'}</p>
+                </div>
+              )}
+            </li>
+          )
+        })}
       </ul>
     </div>
   )

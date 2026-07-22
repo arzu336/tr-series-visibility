@@ -34,6 +34,24 @@ export function confidenceInterval95(r, n) {
   return { low: round2(toR(zLo)), high: round2(toR(zHi)) }
 }
 
+// Kontrol ülkeli Difference-in-Differences (DiD) tahmincisi. Hedef ülkenin
+// (dizi trendi yaşayan, ör. İspanya) turizm/ihracat değişimini, benzer
+// makro-ekonomik dinamiklere sahip ama AYNI DÖNEMDE dizi trendi yaşamamış bir
+// kontrol ülkeyle (ör. İtalya) kıyaslar. İki ülkenin ortak etkilendiği kur
+// dalgalanması/mevsimsellik gibi dışsal etkiler matematiksel olarak
+// birbirinden çıkarılır; geriye sadece dizi trendine atfedilebilecek fark
+// (didEstimate) kalır. `before`/`after` aynı birimde (ör. turist sayısı veya
+// ihracat tutarı) ve aynı ölçüm penceresine (lag window) ait olmalıdır.
+export function differenceInDifferences({ treatmentBefore, treatmentAfter, controlBefore, controlAfter }) {
+  const treatmentChange = treatmentAfter - treatmentBefore
+  const controlChange = controlAfter - controlBefore
+  return {
+    didEstimate: round2(treatmentChange - controlChange),
+    treatmentChangePct: treatmentBefore === 0 ? null : round2((treatmentChange / treatmentBefore) * 100),
+    controlChangePct: controlBefore === 0 ? null : round2((controlChange / controlBefore) * 100),
+  }
+}
+
 function round1(n) {
   return Math.round(n * 10) / 10
 }
@@ -43,8 +61,8 @@ function round2(n) {
 }
 
 // Gerçek turizm/ihracat korelasyonu için gereken kurumsal veri kaynakları. Bu veri
-// gelene kadar hiçbir sayı üretilmiyor — yöntem (pearsonCorrelation, confidenceInterval95)
-// hazır ve doğrulanmış, sadece girdi bekliyor.
+// gelene kadar hiçbir sayı üretilmiyor — yöntem (pearsonCorrelation, confidenceInterval95,
+// differenceInDifferences) hazır ve doğrulanmış, sadece girdi bekliyor.
 const PENDING_ANALYSIS = {
   title: 'Turizm ve İhracat Korelasyonu',
   status: 'gerçek-veri-bekleniyor',
@@ -53,6 +71,7 @@ const PENDING_ANALYSIS = {
   requiredSources: [
     'TÜİK turist giriş istatistikleri (ülke bazlı, aylık)',
     'Kültür ve Turizm Bakanlığı / TGA dizi ihracat verisi (ülke bazlı)',
+    'DiD kontrol ülke eşleştirmesi için makroekonomik benzerlik verisi (GSYH, döviz kuru rejimi) — kontrol ülkenin dizi trendi yaşamamış olması tek başına yeterli değil, ekonomik olarak da hedef ülkeye benzemesi gerekir',
   ],
 }
 

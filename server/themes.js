@@ -1,9 +1,5 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const STORE_PATH = path.join(__dirname, 'data', 'theme-store.json')
+import db from './db.js'
+import { classifyWithLLM } from './llm.js'
 
 export const THEMES = [
   'aile',
@@ -16,99 +12,68 @@ export const THEMES = [
   'diğer',
 ]
 
-const KEYWORDS = {
-  aile: ['aile', 'kardeş', 'anne', 'baba', 'evlat', 'miras', 'yuva'],
-  'kadın hakları': ['kadın', 'şiddet', 'eşitlik', 'taciz', 'güçlü kadın'],
-  göç: ['göç', 'sürgün', 'yabancı', 'mülteci', 'gurbet', 'yurt dışı'],
-  adalet: ['adalet', 'suç', 'mahkeme', 'polis', 'intikam', 'ceza', 'dava'],
-  aşk: ['aşk', 'sevgi', 'evlilik', 'düğün', 'aşık', 'kalp'],
-  'suç örgütü': ['mafya', 'çete', 'suç örgütü', 'yeraltı', 'teşkilat', 'istihbarat', 'casus'],
-  tarih: ['tarih', 'dönem', 'imparatorluk', 'sultan', 'gazi', 'kuruluş', 'osmanlı', 'padişah'],
-}
+const selectAllStmt = db.prepare('SELECT * FROM theme_classifications')
+const selectOneStmt = db.prepare('SELECT * FROM theme_classifications WHERE id = ?')
+const insertStmt = db.prepare(`
+  INSERT OR IGNORE INTO theme_classifications (id, name, overview, theme, confidence, sentiment, classified_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?)
+`)
+const updateOverrideStmt = db.prepare(`
+  UPDATE theme_classifications SET override_theme = ?, override_reviewer = ?, override_at = ? WHERE id = ?
+`)
 
-export function classifyTheme(overview) {
-  const text = (overview || '').toLocaleLowerCase('tr')
-  const counts = {}
-  for (const theme of Object.keys(KEYWORDS)) {
-    counts[theme] = KEYWORDS[theme].reduce(
-      (sum, word) => sum + (text.includes(word) ? 1 : 0),
-      0
-    )
-  }
-
-  const ranked = Object.entries(counts).sort((a, b) => b[1] - a[1])
-  const [topTheme, topCount] = ranked[0]
-  const secondCount = ranked[1] ? ranked[1][1] : 0
-  const totalMatches = Object.values(counts).reduce((a, b) => a + b, 0)
-
-  if (totalMatches === 0) {
-    return { theme: 'diğer', confidence: 0 }
-  }
-  if (topCount === secondCount) {
-    return { theme: topTheme, confidence: 50 }
-  }
-  return { theme: topTheme, confidence: Math.round((topCount / totalMatches) * 100) }
-}
-
-function loadStore() {
-  if (!fs.existsSync(STORE_PATH)) return {}
-  try {
-    return JSON.parse(fs.readFileSync(STORE_PATH, 'utf8'))
-  } catch {
-    return {}
+function rowToEntry(row) {
+  return {
+    id: row.id,
+    name: row.name,
+    overview: row.overview,
+    theme: row.theme,
+    confidence: row.confidence,
+    sentiment: row.sentiment,
+    classifiedAt: row.classified_at,
+    humanOverride: row.override_theme
+      ? { theme: row.override_theme, reviewer: row.override_reviewer, at: row.override_at }
+      : null,
   }
 }
 
-function saveStore(store) {
-  fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true })
-  fs.writeFileSync(STORE_PATH, JSON.stringify(store, null, 2), 'utf8')
-}
+// Her dizi özetini dahili LLM sunucusuna gönderip tema/sentiment/güven skoru
+// çıkarır — sadece henüz sınıflandırılmamış (yeni) diziler için, sırayla.
+export async function ensureClassified(series) {
+  const existingIds = new Set(selectAllStmt.all().map((r) => r.id))
+  const pending = series.filter((s) => !existingIds.has(s.id))
 
-export function ensureClassified(series) {
-  const store = loadStore()
-  let changed = false
-
-  for (const s of series) {
-    const key = String(s.id)
-    if (!store[key]) {
-      const { theme, confidence } = classifyTheme(s.overview)
-      store[key] = {
-        id: s.id,
-        name: s.name,
-        overview: s.overview,
-        theme,
-        confidence,
-        classifiedAt: new Date().toISOString(),
-        humanOverride: null,
-      }
-      changed = true
+  for (const s of pending) {
+    try {
+      const { theme, sentiment, confidence } = await classifyWithLLM(s.overview, THEMES)
+      insertStmt.run(s.id, s.name, s.overview, theme, confidence, sentiment, new Date().toISOString())
+    } catch (err) {
+      console.error(`[themes] "${s.name}" (id:${s.id}) LLM ile sınıflandırılamadı:`, err.message)
     }
   }
 
-  if (changed) saveStore(store)
-  return store
+  return getThemeStore()
 }
 
 export function getThemeStore() {
-  return loadStore()
+  const store = {}
+  for (const row of selectAllStmt.all()) {
+    store[String(row.id)] = rowToEntry(row)
+  }
+  return store
 }
 
 export function setHumanOverride(seriesId, theme, reviewer) {
   if (!THEMES.includes(theme)) {
     throw new Error(`Geçersiz tema: ${theme}`)
   }
-  const store = loadStore()
-  const key = String(seriesId)
-  if (!store[key]) {
+  const id = Number(seriesId)
+  const row = selectOneStmt.get(id)
+  if (!row) {
     throw new Error(`Dizi bulunamadı: ${seriesId}`)
   }
-  store[key].humanOverride = {
-    theme,
-    reviewer: reviewer || 'anonim',
-    at: new Date().toISOString(),
-  }
-  saveStore(store)
-  return store[key]
+  updateOverrideStmt.run(theme, reviewer || 'anonim', new Date().toISOString(), id)
+  return rowToEntry(selectOneStmt.get(id))
 }
 
 export function effectiveTheme(entry) {
