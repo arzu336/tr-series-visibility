@@ -3,9 +3,12 @@ import { fileURLToPath } from 'node:url'
 import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
-import { getRawSeriesData } from './tmdb.js'
-import { buildVisibility, buildDestinationRanking } from './aggregate.js'
-import { THEMES, ensureClassified, getThemeStore, setHumanOverride, effectiveTheme, effectiveConfidence } from './themes.js'
+import compression from 'compression'
+import { buildDestinationRanking } from './aggregate.js'
+import { THEMES, getThemeStore, setHumanOverride, effectiveTheme, effectiveConfidence } from './themes.js'
+import { getSourceHealth } from './source-health.js'
+import { getRawSeriesDataCached, getEnrichedVisibility } from './data-pipeline.js'
+import { startScheduler } from './scheduler.js'
 import {
   DESTINATIONS,
   ensureDetected,
@@ -15,9 +18,8 @@ import {
 } from './destinations.js'
 import { queryTrends } from './serpapi.js'
 import { querySocialListening } from './social-listening.js'
+import { queryTraktStats } from './trakt.js'
 import { buildImpactReport } from './impact.js'
-import { getTrend, maybeRecordSnapshot, loadHistoryStore } from './history.js'
-import { getCached, setCached } from './cache.js'
 import { COOKIE_NAME, createSession, getSessionUserId, isValidSession, deleteSession, parseCookies, sessionCookieHeader } from './auth.js'
 import {
   ensureBootstrapAdmin,
@@ -33,15 +35,18 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '.env') })
-const RAW_CACHE_KEY = 'raw-series-providers'
-const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 saat
 const SESSION_MAX_AGE_S = 7 * 24 * 60 * 60 // 7 gün
 
 const app = express()
 app.use(cors({ origin: true, credentials: true }))
+// /api/visibility ~700KB ham JSON dönüyor (200 dizi × ülke başına tekrar eden
+// sinopsis metni) — gzip bunu ~6-7 kata kadar küçültüyor, gerçek darboğaz
+// sunucu hesaplaması değil (warm cache'te <150ms), aktarım boyutuydu.
+app.use(compression())
 app.use(express.json())
 
 ensureBootstrapAdmin()
+startScheduler()
 
 app.use((req, res, next) => {
   req.cookies = parseCookies(req.headers.cookie)
@@ -141,39 +146,22 @@ app.post('/api/admin/users/:id/toggle-admin', (req, res) => {
   }
 })
 
-async function getRawSeriesDataCached() {
-  const cached = getCached(RAW_CACHE_KEY)
-  if (cached) return cached
-  const data = await getRawSeriesData()
-  setCached(RAW_CACHE_KEY, data, RAW_CACHE_TTL_MS)
-  return data
-}
-
-// /api/visibility ve /api/impact aynı gerçek, canlı veriyi paylaşır — tema/destinasyon
-// sınıflandırması ve trend/history zenginleştirmesi burada bir kez yapılır.
-async function getEnrichedVisibility() {
-  const raw = await getRawSeriesDataCached()
-  const themeStore = await ensureClassified(raw.series)
-  const destinationStore = ensureDetected(raw.series)
-  const data = buildVisibility(raw, themeStore, destinationStore)
-
-  const history = loadHistoryStore()
-  data.countries = data.countries.map((c) => ({
-    ...c,
-    trend: getTrend(history, c.iso2, c.score),
-    history: (history[c.iso2] || []).slice(-20),
-  }))
-  maybeRecordSnapshot(history, data.countries)
-
-  return { data, raw, destinationStore }
-}
-
 app.get('/api/visibility', async (req, res) => {
   try {
     const { data } = await getEnrichedVisibility()
     res.json(data)
   } catch (err) {
     console.error('[visibility] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/source-health', async (req, res) => {
+  try {
+    const raw = await getRawSeriesDataCached()
+    res.json(getSourceHealth(raw.series))
+  } catch (err) {
+    console.error('[source-health] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })
@@ -194,7 +182,6 @@ app.get('/api/themes', async (req, res) => {
       overview: entry.overview,
       theme: entry.theme,
       confidence: entry.confidence,
-      sentiment: entry.sentiment,
       effectiveTheme: effectiveTheme(entry),
       effectiveConfidence: effectiveConfidence(entry),
       humanOverride: entry.humanOverride,
@@ -213,7 +200,6 @@ app.post('/api/themes/:seriesId/override', (req, res) => {
       overview: entry.overview,
       theme: entry.theme,
       confidence: entry.confidence,
-      sentiment: entry.sentiment,
       effectiveTheme: effectiveTheme(entry),
       effectiveConfidence: effectiveConfidence(entry),
       humanOverride: entry.humanOverride,
@@ -302,11 +288,21 @@ app.get('/api/social/:seriesName', async (req, res) => {
   }
 })
 
+app.get('/api/trakt/:seriesName', async (req, res) => {
+  try {
+    const data = await queryTraktStats(req.params.seriesName)
+    res.json(data)
+  } catch (err) {
+    console.error('[trakt] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
 app.get('/api/impact', async (req, res) => {
   try {
     const { data, raw, destinationStore } = await getEnrichedVisibility()
     const destinationRanking = buildDestinationRanking(data.countries, raw.series, destinationStore)
-    res.json(buildImpactReport(data.countries, destinationRanking))
+    res.json(await buildImpactReport(data.countries, destinationRanking))
   } catch (err) {
     console.error('[impact] hata:', err.message)
     res.status(502).json({ error: err.message })

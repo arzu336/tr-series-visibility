@@ -1,5 +1,3 @@
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700&display=swap');
-
 * {
   box-sizing: border-box;
 }
@@ -12,7 +10,7 @@ html, body, #root {
 body {
   background: #05070d;
   color: #f1f3f8;
-  font-family: 'Poppins', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }
 
 .app {
@@ -150,7 +148,7 @@ body {
 .panel h3 {
   margin: 1.25rem 0 0.5rem;
   font-size: 0.8rem;
-  color: #2d95e3;
+  color: #EE3135;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   font-weight: 600;
@@ -228,8 +226,8 @@ body {
 }
 
 .panel__series-item--expanded {
-  background: rgba(45, 149, 227, 0.1);
-  border: 1px solid rgba(45, 149, 227, 0.3);
+  background: rgba(238, 49, 53, 0.1);
+  border: 1px solid rgba(238, 49, 53, 0.3);
   padding: 0.4rem 0.5rem;
 }
 
@@ -328,6 +326,25 @@ body {
   gap: 1rem;
 }
 
+.app__brand {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+}
+
+.app__brand-logo {
+  height: 52px;
+  width: auto;
+  flex-shrink: 0;
+}
+
+.app__brand-divider {
+  width: 1px;
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.14);
+  flex-shrink: 0;
+}
+
 .app__nav {
   display: flex;
   gap: 0.4rem;
@@ -348,13 +365,13 @@ body {
 }
 
 .app__nav-btn:hover {
-  border-color: #2d95e3;
-  color: #5db3ec;
+  border-color: #EE3135;
+  color: #f4787b;
 }
 
 .app__nav-btn--active {
-  background: #2d95e3;
-  border-color: #2d95e3;
+  background: #EE3135;
+  border-color: #EE3135;
   color: #fff;
 }
 
@@ -397,6 +414,13 @@ body {
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.4);
 }
 
+.login__logo {
+  height: 68px;
+  width: auto;
+  align-self: center;
+  margin-bottom: 0.6rem;
+}
+
 .login__card h1 {
   font-size: 1.15rem;
   margin: 0;
@@ -425,11 +449,11 @@ body {
 
 .login__card input:focus {
   outline: none;
-  border-color: #2d95e3;
+  border-color: #EE3135;
 }
 
 .login__card button {
-  background: #2d95e3;
+  background: #EE3135;
   border: none;
   color: #fff;
   border-radius: 10px;
@@ -442,7 +466,7 @@ body {
 }
 
 .login__card button:hover:not(:disabled) {
-  background: #4da8ea;
+  background: #f2565a;
 }
 
 .login__card button:disabled {
@@ -472,7 +496,7 @@ body {
 }
 
 .login__toggle:hover {
-  color: #5db3ec;
+  color: #f4787b;
 }
 
 .admin-panel__admin-badge {
@@ -486,13 +510,66 @@ body {
   background: #05070d;
 }
 
+.dashboard__tabs {
+  margin: 0 0 1.5rem;
+}
+
 .dashboard h2 {
   margin: 0 0 1.1rem;
   font-size: 1.2rem;
   color: #f1f3f8;
   font-weight: 700;
   padding-left: 0.75rem;
-  border-left: 4px solid #2d95e3;
+  border-left: 4px solid #EE3135;
+}
+
+.dashboard__header-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.dashboard__header-row h2 {
+  margin-bottom: 0;
+}
+
+.dashboard__export-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.1rem;
+}
+
+.dashboard__export-btn {
+  background: #EE3135;
+  border: 1px solid #EE3135;
+  color: #fff;
+  border-radius: 999px;
+  padding: 0.45rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 150ms ease, border-color 150ms ease, color 150ms ease;
+}
+
+.dashboard__export-btn:hover {
+  background: #f2565a;
+  border-color: #f2565a;
+}
+
+.dashboard__export-btn--ghost {
+  background: transparent;
+  color: #b8c0d1;
+  border-color: rgba(255, 255, 255, 0.15);
+}
+
+.dashboard__export-btn--ghost:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.25);
+  color: #f1f3f8;
 }
 
 .dashboard__hint {
@@ -517,114 +594,178 @@ body {
 
 .search-input:focus {
   outline: none;
-  border-color: #2d95e3;
+  border-color: #EE3135;
 }
 
 .search-input::placeholder {
   color: #6b7488;
 }
 
-.impact__pie-section {
+.donut-panels {
   display: flex;
   gap: 2.5rem;
   flex-wrap: wrap;
   margin-bottom: 1.5rem;
 }
 
-.impact__pie-section > div {
+.donut-panel {
   flex: 1;
-  min-width: 260px;
+  min-width: 320px;
 }
 
-.pie-chart {
+.donut-panel__body {
   display: flex;
   align-items: center;
-  gap: 1.25rem;
+  gap: 1.75rem;
   flex-wrap: wrap;
 }
 
-.pie-chart__legend {
+.donut-panel__hint {
+  margin: 0.6rem 0 0;
+  font-size: 0.72rem;
+  color: #6b7280;
+  font-style: italic;
+}
+
+.donut {
+  flex-shrink: 0;
+  filter: drop-shadow(0 0 18px rgba(57, 135, 229, 0.1));
+}
+
+.donut__slice {
+  transition: transform 180ms ease;
+  cursor: default;
+  outline: none;
+}
+
+.donut__path {
+  transition: fill-opacity 150ms ease;
+}
+
+.donut__path--clickable {
+  cursor: pointer;
+}
+
+.donut__glow {
+  animation: donut-glow-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes donut-glow-pulse {
+  0%, 100% { opacity: 0.55; }
+  50% { opacity: 0.85; }
+}
+
+.donut__center-primary {
+  fill: #f1f3f8;
+  font-size: 34px;
+  font-weight: 700;
+  font-family: inherit;
+}
+
+.donut__center-secondary {
+  fill: #8792a8;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.donut__center-trend {
+  font-size: 10px;
+  font-weight: 600;
+  /* SVG <text> `color` özelliğini değil `fill`'i kullanır — .trend--up/down/flat/neutral
+     sınıflarının HTML'de yazdığı `color`'ı buradan currentColor ile devralıyoruz. */
+  fill: currentColor;
+}
+
+@media (max-width: 640px) {
+  .donut-panel__body {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .donut {
+    align-self: center;
+  }
+
+  .donut-list {
+    min-width: 0;
+  }
+}
+
+.donut-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 0.35rem;
-  font-size: 0.8rem;
+  gap: 0.4rem;
+  flex: 1;
+  min-width: 220px;
 }
 
-.pie-chart__legend li {
-  display: flex;
+.donut-list__row {
+  display: grid;
+  grid-template-columns: 20px 10px 1fr auto auto;
   align-items: center;
-  gap: 0.45rem;
+  gap: 0.6rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  transition: background 150ms ease, border-color 150ms ease, transform 150ms ease;
 }
 
-.pie-chart__swatch {
+.donut-list__row--clickable {
+  cursor: pointer;
+}
+
+.donut-list__row--hovered {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: rgba(255, 255, 255, 0.18);
+  transform: translateX(2px);
+}
+
+.donut-list__row--other {
+  opacity: 0.55;
+}
+
+.donut-list__rank {
+  font-size: 0.7rem;
+  color: #6b7488;
+  font-weight: 700;
+  text-align: center;
+}
+
+.donut-list__dot {
   width: 10px;
   height: 10px;
   border-radius: 3px;
   flex-shrink: 0;
 }
 
-.pie-chart__legend-label {
-  color: #c7cdd9;
+.donut-list__name {
+  font-size: 0.85rem;
+  color: #f1f3f8;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 160px;
 }
 
-.pie-chart__legend-value {
-  color: #8792a8;
-  margin-left: auto;
-  font-variant-numeric: normal;
-}
-
-.pie-chart__slice {
-  transition: transform 150ms ease;
-}
-
-.pie-chart__path {
-  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.45));
-  transition: filter 150ms ease;
-}
-
-.pie-chart__path--hover {
-  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.6)) brightness(1.12);
-}
-
-.pie-chart__path--clickable {
-  cursor: pointer;
-}
-
-.pie-chart__slice-label {
-  fill: #ffffff;
-  font-size: 10px;
+.donut-list__pct {
+  font-size: 0.85rem;
   font-weight: 700;
-  paint-order: stroke;
-  stroke: rgba(0, 0, 0, 0.55);
-  stroke-width: 3px;
-  stroke-linejoin: round;
-  pointer-events: none;
+  color: #f1f3f8;
+  font-variant-numeric: tabular-nums;
 }
 
-.pie-chart__legend-item--clickable {
-  cursor: pointer;
-  border-radius: 4px;
-  margin: -0.15rem -0.3rem;
-  padding: 0.15rem 0.3rem;
-  transition: background 150ms ease;
-}
-
-.pie-chart__legend-item--clickable:hover {
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.pie-chart__hint {
-  margin: 0.5rem 0 0;
+.donut-list__trend {
   font-size: 0.72rem;
+  font-weight: 600;
+  min-width: 56px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
   color: #6b7280;
-  font-style: italic;
 }
 
 .scatter-chart__grid {
@@ -709,6 +850,18 @@ body {
   margin-top: -0.3rem;
 }
 
+.impact__rank-control {
+  grid-column: 1 / -1;
+  font-size: 0.72rem;
+  color: #6da7ec;
+  margin-top: -0.1rem;
+}
+
+.impact__rank-control strong {
+  color: #9ec5f4;
+  font-weight: 600;
+}
+
 .impact__pending {
   background: rgba(240, 173, 78, 0.1);
   border: 1px solid rgba(240, 173, 78, 0.35);
@@ -745,7 +898,7 @@ body {
 }
 
 .trends__controls button {
-  background: #2d95e3;
+  background: #EE3135;
   border: none;
   color: #fff;
   border-radius: 8px;
@@ -757,7 +910,7 @@ body {
 }
 
 .trends__controls button:hover:not(:disabled) {
-  background: #4da8ea;
+  background: #f2565a;
 }
 
 .trends__controls button:disabled {
@@ -810,6 +963,95 @@ body {
   font-weight: 600;
 }
 
+.source-health__heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.source-health__generated {
+  color: #6b7488;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.source-health__grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.8rem;
+}
+
+.source-health__card {
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  background: rgba(5, 7, 13, 0.58);
+  border-radius: 12px;
+  padding: 0.9rem;
+}
+
+.source-health__card-top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.source-health__card h4,
+.source-health__card p {
+  margin: 0;
+}
+
+.source-health__card h4 {
+  color: #f1f3f8;
+  font-size: 0.85rem;
+}
+
+.source-health__card p {
+  color: #a6afc1;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  margin-top: 0.65rem;
+}
+
+.source-health__meta {
+  color: #6b7488 !important;
+}
+
+.source-health__status {
+  border-radius: 999px;
+  font-size: 0.66rem;
+  font-weight: 700;
+  padding: 0.18rem 0.45rem;
+  white-space: nowrap;
+}
+
+.source-health__status--güncel {
+  color: #75cf75;
+  background: rgba(92, 184, 92, 0.15);
+}
+
+.source-health__status--işleniyor,
+.source-health__status--yeniden-denenecek {
+  color: #f0bd5a;
+  background: rgba(240, 173, 78, 0.15);
+}
+
+.source-health__status--yenileme-gerekli,
+.source-health__status--veri-bekleniyor {
+  color: #aab4c8;
+  background: rgba(135, 146, 168, 0.15);
+}
+
+@media (max-width: 800px) {
+  .source-health__grid {
+    grid-template-columns: 1fr;
+  }
+
+  .source-health__heading {
+    flex-direction: column;
+  }
+}
+
 .dashboard__empty {
   color: #8792a8;
   font-size: 0.85rem;
@@ -819,7 +1061,7 @@ body {
 .dashboard__link-btn {
   background: none;
   border: none;
-  color: #2d95e3;
+  color: #EE3135;
   font-size: 0.8rem;
   cursor: pointer;
   padding: 0;
@@ -860,7 +1102,7 @@ body {
 }
 
 .dashboard__expand-hint {
-  color: #2d95e3;
+  color: #EE3135;
   font-size: 0.75rem;
   white-space: nowrap;
 }
@@ -881,7 +1123,7 @@ body {
 }
 
 .dashboard__table button {
-  background: #2d95e3;
+  background: #EE3135;
   border: none;
   color: #fff;
   border-radius: 6px;
@@ -892,7 +1134,7 @@ body {
 }
 
 .dashboard__table button:hover:not(:disabled) {
-  background: #4da8ea;
+  background: #f2565a;
 }
 
 .dashboard__table button:disabled {
@@ -900,18 +1142,133 @@ body {
   cursor: not-allowed;
 }
 
-.dashboard__checkbox-list {
+.tag-picker {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem 0.75rem;
-  max-width: 480px;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 260px;
+  max-width: 400px;
 }
 
-.dashboard__checkbox {
+.tag-picker__chips {
   display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.tag-picker__empty {
+  font-size: 0.75rem;
+  color: #6b7488;
+  font-style: italic;
+}
+
+.tag-picker__chip {
+  display: inline-flex;
   align-items: center;
-  gap: 0.3rem;
-  font-size: 0.78rem;
-  color: #c4cad9;
+  gap: 0.25rem;
+  background: rgba(238, 49, 53, 0.14);
+  border: 1px solid rgba(238, 49, 53, 0.35);
+  color: #f4787b;
+  border-radius: 999px;
+  padding: 0.2rem 0.35rem 0.2rem 0.65rem;
+  font-size: 0.75rem;
+  font-weight: 600;
   white-space: nowrap;
+}
+
+.tag-picker__chip-remove {
+  background: none;
+  border: none;
+  color: inherit;
+  font-size: 0.95rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.1rem 0.3rem;
+  border-radius: 999px;
+}
+
+.tag-picker__chip-remove:hover {
+  background: rgba(238, 49, 53, 0.28);
+}
+
+.tag-picker__search-wrap {
+  position: relative;
+}
+
+.tag-picker__search {
+  width: 100%;
+  background: #05070d;
+  color: #f1f3f8;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0.4rem 0.7rem;
+  font-size: 0.8rem;
+  font-family: inherit;
+}
+
+.tag-picker__search:focus {
+  outline: none;
+  border-color: #EE3135;
+}
+
+.tag-picker__suggestions {
+  position: absolute;
+  z-index: 5;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  background: #0e1420;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 10px;
+  padding: 0.3rem;
+  margin: 0;
+  list-style: none;
+  max-height: 220px;
+  overflow-y: auto;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+}
+
+.tag-picker__suggestions li button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: none;
+  border: none;
+  color: #f1f3f8;
+  padding: 0.4rem 0.6rem;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+
+.tag-picker__suggestions li button:hover {
+  background: rgba(238, 49, 53, 0.16);
+}
+
+.tag-picker__no-match {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.8rem;
+  color: #6b7488;
+  font-style: italic;
+}
+
+/* "PDF Olarak Yazdır" tarayıcının yazdır/PDF kaydet diyaloğunu açar (window.print()) —
+   burada sadece uygulama kromunu (header/nav, dışa aktarma butonları) gizleyip
+   dashboard'un kendi kaydırılabilir yüksekliğini yazdırma akışına açıyoruz; koyu
+   tema renkleri de aynen basılsın diye print-color-adjust zorlanıyor. */
+@media print {
+  .app__header,
+  .dashboard__export-actions {
+    display: none !important;
+  }
+
+  html, body, #root, .app, .app__main, .dashboard {
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
 }

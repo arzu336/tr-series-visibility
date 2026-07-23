@@ -40,8 +40,16 @@ export async function fetchSocialListening(seriesName) {
   return handle(await fetch(`/api/social/${encodeURIComponent(seriesName)}`))
 }
 
+export async function fetchTraktStats(seriesName) {
+  return handle(await fetch(`/api/trakt/${encodeURIComponent(seriesName)}`))
+}
+
 export async function fetchImpactReport() {
   return handle(await fetch('/api/impact'))
+}
+
+export async function fetchSourceHealth() {
+  return handle(await fetch('/api/source-health'))
 }
 
 export async function fetchAuthStatus() {

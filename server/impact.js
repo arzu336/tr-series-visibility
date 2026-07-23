@@ -1,3 +1,5 @@
+import { suggestControlCountry } from './control-matching.js'
+
 function mean(arr) {
   return arr.reduce((a, b) => a + b, 0) / arr.length
 }
@@ -71,7 +73,6 @@ const PENDING_ANALYSIS = {
   requiredSources: [
     'TÜİK turist giriş istatistikleri (ülke bazlı, aylık)',
     'Kültür ve Turizm Bakanlığı / TGA dizi ihracat verisi (ülke bazlı)',
-    'DiD kontrol ülke eşleştirmesi için makroekonomik benzerlik verisi (GSYH, döviz kuru rejimi) — kontrol ülkenin dizi trendi yaşamamış olması tek başına yeterli değil, ekonomik olarak da hedef ülkeye benzemesi gerekir',
   ],
 }
 
@@ -84,6 +85,7 @@ function topByScoreWithRemainder(countries, n) {
     score: round1(c.score),
     seriesCount: c.seriesCount,
     dominantTheme: c.dominantTheme,
+    trend: c.trend || null,
   }))
   const totalScore = sorted.reduce((sum, c) => sum + c.score, 0)
   const topScore = top.reduce((sum, c) => sum + c.score, 0)
@@ -105,16 +107,42 @@ function rising(countries, n) {
     .map((c) => ({ iso2: c.iso2, changePct: c.trend.changePct, windowDays: c.trend.windowDays }))
 }
 
-export function buildImpactReport(countries, destinationRanking = []) {
+// Yükselen her ülke için otomatik bir DiD kontrol ülkesi önerir (bkz.
+// control-matching.js) — kendi dizi trendi yaşayan ülkeler (risingIso2Set)
+// geçerli bir kontrol olamayacağı için eleniyor. World Bank isteği
+// başarısız olursa (ağ, kota vb.) o ülke için öneri null kalır, tüm rapor
+// çökmez.
+async function withSuggestedControls(risingList, risingIso2Set) {
+  return Promise.all(
+    risingList.map(async (c) => {
+      let suggestedControl = null
+      try {
+        suggestedControl = await suggestControlCountry(c.iso2, risingIso2Set)
+      } catch (err) {
+        console.error(`[impact] kontrol ülkesi önerisi alınamadı (${c.iso2}):`, err.message)
+      }
+      return { ...c, suggestedControl }
+    })
+  )
+}
+
+export async function buildImpactReport(countries, destinationRanking = []) {
   const hasEnoughHistoryForTrends = countries.some((c) => c.trend?.direction !== 'yetersiz-veri')
   const countryBreakdown = topByScoreWithRemainder(countries, 5)
   const destinationBreakdown = topDestinationsWithRemainder(destinationRanking, 5)
 
+  const risingList = rising(countries, 5)
+  const risingIso2Set = new Set(countries.filter((c) => c.trend?.direction === 'yükseliyor').map((c) => c.iso2))
+  const risingCountries = await withSuggestedControls(risingList, risingIso2Set)
+
   return {
     generatedAt: new Date().toISOString(),
+    totalCountries: countries.length,
+    risingCount: countries.filter((c) => c.trend?.direction === 'yükseliyor').length,
+    fallingCount: countries.filter((c) => c.trend?.direction === 'düşüyor').length,
     topCountriesByVisibility: countryBreakdown.top,
     otherCountriesScore: countryBreakdown.otherScore,
-    risingCountries: rising(countries, 5),
+    risingCountries,
     hasEnoughHistoryForTrends,
     topDestinations: destinationBreakdown.top,
     otherDestinationsScore: destinationBreakdown.otherScore,

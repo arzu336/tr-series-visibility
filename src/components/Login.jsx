@@ -54,6 +54,7 @@ export default function Login({ onSuccess }) {
   return (
     <div className="login">
       <form className="login__card" onSubmit={isLogin ? handleLogin : handleRegister}>
+        <img src="/ib-logo.png" alt="T.C. Cumhurbaşkanlığı İletişim Başkanlığı" className="login__logo" />
         <h1>Kültürel Görünürlük Platformu</h1>
         <p className="login__hint">
           {isLogin ? 'Devam etmek için giriş yapın.' : 'Kayıt olun — yönetici onayından sonra giriş yapabilirsiniz.'}

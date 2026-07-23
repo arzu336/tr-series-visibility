@@ -4,6 +4,14 @@ import tls from 'node:tls'
 import { fileURLToPath } from 'node:url'
 import { Agent, setGlobalDispatcher } from 'undici'
 
+const LLM_TIMEOUT_MS = 25_000
+const MAX_RETRIES = 2
+const RETRYABLE_STATUSES = new Set([429, 500, 502, 503, 504])
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CA_PATH = path.join(__dirname, 'internal-ca-chain.pem')
 
@@ -41,43 +49,58 @@ async function callLLMForJson(prompt, maxTokens = 300) {
     throw new Error('LLM_BASE_URL / LLM_MODEL tanımlı değil (.env dosyasını kontrol et)')
   }
 
-  const res = await fetch(`${baseUrl}/chat/completions`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${apiKey || 'not-needed'}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [{ role: 'user', content: prompt }],
-      max_tokens: maxTokens,
-      temperature: 0.2,
-      chat_template_kwargs: { enable_thinking: false },
-    }),
-  })
+  let lastError
+  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
+    try {
+      const res = await fetch(`${baseUrl}/chat/completions`, {
+        method: 'POST',
+        signal: controller.signal,
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${apiKey || 'not-needed'}`,
+        },
+        body: JSON.stringify({
+          model,
+          messages: [{ role: 'user', content: prompt }],
+          max_tokens: maxTokens,
+          temperature: 0.2,
+          chat_template_kwargs: { enable_thinking: false },
+        }),
+      })
 
-  if (!res.ok) {
-    const text = await res.text().catch(() => '')
-    throw new Error(`LLM isteği başarısız (${res.status}): ${text.slice(0, 300)}`)
+      if (!res.ok) {
+        const text = await res.text().catch(() => '')
+        lastError = new Error(`LLM isteği başarısız (${res.status}): ${text.slice(0, 300)}`)
+        if (!RETRYABLE_STATUSES.has(res.status) || attempt === MAX_RETRIES) throw lastError
+      } else {
+        const data = await res.json()
+        const content = data.choices?.[0]?.message?.content
+        if (!content) throw new Error('LLM boş cevap döndü')
+        return extractJson(content)
+      }
+    } catch (err) {
+      lastError = err.name === 'AbortError' ? new Error(`LLM isteği ${LLM_TIMEOUT_MS / 1000} saniyede zaman aşımına uğradı`) : err
+      if (attempt === MAX_RETRIES) throw lastError
+    } finally {
+      clearTimeout(timer)
+    }
+    await wait(750 * 2 ** attempt)
   }
-
-  const data = await res.json()
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('LLM boş cevap döndü')
-  return extractJson(content)
+  throw lastError
 }
 
-// Dizi özetinden tema/sentiment/güven skoru çıkarır.
+// Dizi özetinden tema/güven skoru çıkarır.
 export async function classifyWithLLM(overview, themes) {
   const prompt = `Aşağıda bir Türk dizisinin özeti var. Şunları belirle:
 1. theme: Bu listeden TAM OLARAK bir tanesini seç: ${themes.join(', ')}
-2. sentiment: Özetin genel tonu — "pozitif", "negatif" veya "nötr"
-3. confidence: 0-100 arası tam sayı — temanın özetten ne kadar net/güvenilir çıkarıldığına dair güven skoru (özet belirsiz veya çok kısaysa düşük ver)
+2. confidence: 0-100 arası tam sayı — temanın özetten ne kadar net/güvenilir çıkarıldığına dair güven skoru (özet belirsiz veya çok kısaysa düşük ver)
 
 Özet: """${overview || '(özet yok)'}"""
 
 Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce metni yazma:
-{"theme": "...", "sentiment": "...", "confidence": 0}`
+{"theme": "...", "confidence": 0}`
 
   const parsed = await callLLMForJson(prompt, 300)
   if (!themes.includes(parsed.theme)) {
@@ -85,7 +108,6 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
   }
   return {
     theme: parsed.theme,
-    sentiment: parsed.sentiment,
     confidence: Math.max(0, Math.min(100, Math.round(Number(parsed.confidence)))),
   }
 }

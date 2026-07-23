@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { fetchTrendSeriesList, fetchTrends, fetchSocialListening } from '../lib/api.js'
+import { fetchTrendSeriesList, fetchTrends, fetchSocialListening, fetchTraktStats } from '../lib/api.js'
 
 function formatViews(n) {
   if (n == null) return '—'
@@ -12,6 +12,8 @@ export default function TrendsExplorer() {
   const [result, setResult] = useState(null)
   const [social, setSocial] = useState(null)
   const [socialError, setSocialError] = useState(null)
+  const [trakt, setTrakt] = useState(null)
+  const [traktError, setTraktError] = useState(null)
   const [status, setStatus] = useState('loading') // loading | idle | querying | ready | error
   const [error, setError] = useState(null)
 
@@ -34,6 +36,8 @@ export default function TrendsExplorer() {
     setError(null)
     setSocialError(null)
     setSocial(null)
+    setTraktError(null)
+    setTrakt(null)
     try {
       const data = await fetchTrends(selected)
       setResult(data)
@@ -48,6 +52,12 @@ export default function TrendsExplorer() {
       setSocial(socialData)
     } catch (err) {
       setSocialError(err.message)
+    }
+    try {
+      const traktData = await fetchTraktStats(selected)
+      setTrakt(traktData)
+    } catch (err) {
+      setTraktError(err.message)
     }
   }
 
@@ -162,6 +172,67 @@ export default function TrendsExplorer() {
             </p>
           ) : (
             <p className="dashboard__empty">Bu dizi için fragman bulunamadı.</p>
+          )}
+        </section>
+      )}
+
+      {traktError && (
+        <section className="dashboard__section">
+          <h3 className="dashboard__section-title">Trakt.tv İzleyici Verisi</h3>
+          <p className="dashboard__empty">Trakt verisi alınamadı: {traktError}</p>
+        </section>
+      )}
+
+      {trakt && (
+        <section className="dashboard__section">
+          <h3 className="dashboard__section-title">Trakt.tv İzleyici Verisi</h3>
+          <p className="dashboard__hint">
+            {trakt.fromCache ? "cache'den okundu" : 'yeni çekildi'} · {new Date(trakt.queriedAt).toLocaleString('tr-TR')}
+          </p>
+          {trakt.matchedTitle ? (
+            <>
+              <p className="dashboard__hint" style={{ margin: 0 }}>
+                Eşleşen kayıt: {' '}
+                {trakt.traktUrl ? (
+                  <a href={trakt.traktUrl} target="_blank" rel="noreferrer" className="dashboard__link-btn">
+                    {trakt.matchedTitle}{trakt.matchedYear ? ` (${trakt.matchedYear})` : ''}
+                  </a>
+                ) : (
+                  <>{trakt.matchedTitle}{trakt.matchedYear ? ` (${trakt.matchedYear})` : ''}</>
+                )}
+              </p>
+              <ul className="panel__series-list" style={{ marginTop: '0.75rem' }}>
+                <li className="panel__series-item">
+                  <div className="panel__series-row">
+                    <span className="panel__series-info"><span className="panel__series-name">Puan</span></span>
+                    <span className="panel__series-score">
+                      {trakt.rating != null ? `${trakt.rating.toFixed(1)}/10` : '—'}
+                      {trakt.votes != null ? ` (${formatViews(trakt.votes)} oy)` : ''}
+                    </span>
+                  </div>
+                </li>
+                <li className="panel__series-item">
+                  <div className="panel__series-row">
+                    <span className="panel__series-info"><span className="panel__series-name">İzleyen</span></span>
+                    <span className="panel__series-score">{formatViews(trakt.watchers)}</span>
+                  </div>
+                </li>
+                <li className="panel__series-item">
+                  <div className="panel__series-row">
+                    <span className="panel__series-info"><span className="panel__series-name">Toplam oynatma</span></span>
+                    <span className="panel__series-score">{formatViews(trakt.plays)}</span>
+                  </div>
+                </li>
+                <li className="panel__series-item">
+                  <div className="panel__series-row">
+                    <span className="panel__series-info"><span className="panel__series-name">Koleksiyona ekleyen</span></span>
+                    <span className="panel__series-score">{formatViews(trakt.collectors)}</span>
+                  </div>
+                </li>
+              </ul>
+            </>
+          ) : (
+            <p className="dashboard__empty">Bu dizi Trakt.tv kataloğunda bulunamadı.</p>
           )}
         </section>
       )}

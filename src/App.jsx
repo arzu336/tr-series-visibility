@@ -81,13 +81,17 @@ export default function App() {
     <div className="app">
       <header className="app__header">
         <div className="app__header-row">
-          <div>
-            <h1>Türk Dizileri — Kültürel Görünürlük Haritası</h1>
-            {meta && (
-              <p className="app__meta">
-                {meta.seriesCount} dizi · {countries.length} ülke · güncelleme: {new Date(meta.updatedAt).toLocaleString('tr-TR')}
-              </p>
-            )}
+          <div className="app__brand">
+            <img src="/ib-logo.png" alt="T.C. Cumhurbaşkanlığı İletişim Başkanlığı" className="app__brand-logo" />
+            <div className="app__brand-divider" />
+            <div>
+              <h1>Türk Dizileri — Kültürel Görünürlük Haritası</h1>
+              {meta && (
+                <p className="app__meta">
+                  {meta.seriesCount} dizi · {countries.length} ülke · güncelleme: {new Date(meta.updatedAt).toLocaleString('tr-TR')}
+                </p>
+              )}
+            </div>
           </div>
           <nav className="app__nav">
             <button

@@ -13,7 +13,8 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS cache_entries (
     key TEXT PRIMARY KEY,
     value TEXT NOT NULL,
-    expires_at INTEGER NOT NULL
+    expires_at INTEGER NOT NULL,
+    updated_at INTEGER
   );
 
   CREATE TABLE IF NOT EXISTS theme_classifications (
@@ -85,11 +86,42 @@ db.exec(`
     youtube TEXT,
     news_sentiment TEXT
   );
+
+  CREATE TABLE IF NOT EXISTS trakt_cache (
+    key TEXT PRIMARY KEY,
+    series_name TEXT,
+    queried_at TEXT,
+    matched_title TEXT,
+    matched_year INTEGER,
+    rating REAL,
+    votes INTEGER,
+    watchers INTEGER,
+    plays INTEGER,
+    collectors INTEGER,
+    trakt_url TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS classification_failures (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    overview TEXT,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    last_failed_at INTEGER,
+    next_retry_at INTEGER
+  );
 `)
 
+const cacheColumns = db.prepare("PRAGMA table_info(cache_entries)").all()
+if (!cacheColumns.some((c) => c.name === 'updated_at')) {
+  db.exec('ALTER TABLE cache_entries ADD COLUMN updated_at INTEGER')
+}
+
+// Sentiment analizi kaldırıldı (Analist Paneli'nde gösterilmiyordu, hiçbir
+// hesaplamada kullanılmıyordu) — eski kurulumlarda kalan sütunu temizliyoruz.
 const themeColumns = db.prepare("PRAGMA table_info(theme_classifications)").all()
-if (!themeColumns.some((c) => c.name === 'sentiment')) {
-  db.exec('ALTER TABLE theme_classifications ADD COLUMN sentiment TEXT')
+if (themeColumns.some((c) => c.name === 'sentiment')) {
+  db.exec('ALTER TABLE theme_classifications DROP COLUMN sentiment')
 }
 
 export default db
