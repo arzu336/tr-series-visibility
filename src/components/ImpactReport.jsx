@@ -49,8 +49,11 @@ function RankList({ items, accent = '#f03b20' }) {
           <span className="impact__rank-value">{item.valueLabel}</span>
           {item.meta && <span className="impact__rank-meta">{item.meta}</span>}
           {item.control && (
-            <span className="impact__rank-control">
-              Önerilen DiD kontrol ülkesi: <strong>{item.control.label}</strong> ({item.control.reason})
+            <span
+              className="impact__rank-control"
+              title="Difference-in-Differences (DiD) yöntemiyle otomatik önerilen kıyaslama ülkesi — kur dalgalanması/mevsimsellik gibi ortak dışsal etkileri ayrıştırmak için kullanılır."
+            >
+              Küresel Etki ve Turizm Analizi Modülü — kıyaslama ülkesi: <strong>{item.control.label}</strong> ({item.control.reason})
             </span>
           )}
         </div>
@@ -224,7 +227,13 @@ export default function ImpactReport({ onSelectCountry }) {
       </section>
 
       <section className="dashboard__section">
-        <h3 className="dashboard__section-title">{data.pendingAnalysis.title} — Gerçek Veri Bekleniyor</h3>
+        <h3 className="dashboard__section-title">{data.pendingAnalysis.title}</h3>
+        <div className="impact__pending-badges">
+          <span className="badge badge--uncertain">Gerçek Veri Bekleniyor</span>
+          <span className="badge badge--info" title="Yöntem (Difference-in-Differences + Pearson korelasyonu + %95 güven aralığı) yazıldı ve test edildi — sadece gerçek turist/ihracat girdisi bekliyor.">
+            Model Hesaplamaya Hazır
+          </span>
+        </div>
         <div className="impact__pending">
           <p>{data.pendingAnalysis.description}</p>
           <p className="impact__pending-label">Gereken kaynaklar:</p>

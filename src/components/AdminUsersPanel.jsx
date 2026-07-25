@@ -1,8 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchAdminUsers, approveUser, rejectUser, toggleAdmin } from '../lib/api.js'
+import { fetchAdminUsers, approveUser, rejectUser, setAccessLevel } from '../lib/api.js'
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString('tr-TR')
+}
+
+const ACCESS_LEVEL_LABELS = {
+  viewer: 'Sadece Okuyucu',
+  analyst: 'Analist',
+  admin: 'Yönetici',
 }
 
 export default function AdminUsersPanel() {
@@ -121,7 +127,7 @@ export default function AdminUsersPanel() {
                 <th>E-posta</th>
                 <th>Görev</th>
                 <th>Durum</th>
-                <th>Yönetici</th>
+                <th>Erişim Düzeyi</th>
               </tr>
             </thead>
             <tbody>
@@ -136,12 +142,21 @@ export default function AdminUsersPanel() {
                     </span>
                   </td>
                   <td>
-                    {u.status === 'approved' && (
-                      <button disabled={actingId === u.id} className="dashboard__link-btn" onClick={() => act(toggleAdmin, u.id)}>
-                        {u.isAdmin ? 'Yöneticilikten çıkar' : 'Yönetici yap'}
-                      </button>
+                    {u.status === 'approved' ? (
+                      <select
+                        value={u.accessLevel}
+                        disabled={actingId === u.id}
+                        onChange={(e) => act(() => setAccessLevel(u.id, e.target.value), u.id)}
+                      >
+                        {Object.entries(ACCESS_LEVEL_LABELS).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      '—'
                     )}
-                    {u.isAdmin && <span className="badge badge--ok admin-panel__admin-badge">admin</span>}
                   </td>
                 </tr>
               ))}

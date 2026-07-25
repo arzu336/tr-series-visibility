@@ -28,7 +28,7 @@ import {
   getUser,
   listUsers,
   setUserStatus,
-  setUserAdmin,
+  setUserAccessLevel,
   verifyPassword,
   publicUser,
 } from './users.js'
@@ -101,6 +101,18 @@ app.use('/api', (req, res, next) => {
   res.status(401).json({ error: 'Giriş gerekli' })
 })
 
+// Sınıflandırma/destinasyon düzeltmelerini yalnızca Analist ve Yönetici
+// yapabilir — "Sadece Okuyucu" hesaplar görebilir ama kaydedemez.
+function requireAnalystOrAbove(req, res, next) {
+  const userId = getSessionUserId(req.cookies[COOKIE_NAME])
+  const user = userId ? getUser(userId) : null
+  if (!user || user.accessLevel === 'viewer') {
+    return res.status(403).json({ error: 'Bu işlem için Analist veya Yönetici yetkisi gerekir' })
+  }
+  req.currentUser = user
+  next()
+}
+
 // Sadece yöneticiler /api/admin/* rotalarına erişebilir — nav sekmesini gizlemek yeterli
 // değil, sunucu tarafında da doğrulanır.
 app.use('/api/admin', (req, res, next) => {
@@ -135,11 +147,10 @@ app.post('/api/admin/users/:id/reject', (req, res) => {
   }
 })
 
-app.post('/api/admin/users/:id/toggle-admin', (req, res) => {
+app.post('/api/admin/users/:id/access-level', (req, res) => {
   try {
-    const target = getUser(req.params.id)
-    if (!target) throw new Error('Kullanıcı bulunamadı')
-    const entry = setUserAdmin(req.params.id, !target.isAdmin)
+    const { accessLevel } = req.body || {}
+    const entry = setUserAccessLevel(req.params.id, accessLevel)
     res.json(publicUser(entry))
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -190,7 +201,7 @@ app.get('/api/themes', async (req, res) => {
   res.json({ items: list })
 })
 
-app.post('/api/themes/:seriesId/override', (req, res) => {
+app.post('/api/themes/:seriesId/override', requireAnalystOrAbove, (req, res) => {
   try {
     const { theme, reviewer } = req.body || {}
     const entry = setHumanOverride(req.params.seriesId, theme, reviewer)
@@ -240,7 +251,7 @@ app.get('/api/destinations', async (req, res) => {
   }
 })
 
-app.post('/api/destinations/:seriesId/override', (req, res) => {
+app.post('/api/destinations/:seriesId/override', requireAnalystOrAbove, (req, res) => {
   try {
     const { destinationIds, reviewer } = req.body || {}
     const entry = setHumanTags(req.params.seriesId, destinationIds, reviewer)

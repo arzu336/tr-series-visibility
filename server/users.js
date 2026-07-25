@@ -2,6 +2,7 @@ import crypto from 'node:crypto'
 import db from './db.js'
 
 const SCRYPT_KEYLEN = 64
+export const ACCESS_LEVELS = ['viewer', 'analyst', 'admin']
 
 export function hashPassword(password) {
   const salt = crypto.randomBytes(16).toString('hex')
@@ -27,11 +28,11 @@ const selectByIdStmt = db.prepare('SELECT * FROM users WHERE id = ?')
 const selectAllStmt = db.prepare('SELECT * FROM users')
 const countAdminsStmt = db.prepare('SELECT COUNT(*) AS n FROM users WHERE is_admin = 1')
 const insertStmt = db.prepare(`
-  INSERT INTO users (id, name, email, role, password_hash, status, is_admin, created_at, decided_at, decided_by)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  INSERT INTO users (id, name, email, role, password_hash, status, is_admin, access_level, created_at, decided_at, decided_by)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 `)
 const updateStatusStmt = db.prepare('UPDATE users SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?')
-const updateAdminStmt = db.prepare('UPDATE users SET is_admin = ? WHERE id = ?')
+const updateAccessLevelStmt = db.prepare('UPDATE users SET access_level = ?, is_admin = ? WHERE id = ?')
 
 function rowToEntry(row) {
   return {
@@ -42,6 +43,7 @@ function rowToEntry(row) {
     passwordHash: row.password_hash,
     status: row.status,
     isAdmin: Boolean(row.is_admin),
+    accessLevel: row.access_level || (row.is_admin ? 'admin' : 'analyst'),
     createdAt: row.created_at,
     decidedAt: row.decided_at,
     decidedBy: row.decided_by,
@@ -85,6 +87,9 @@ export function registerUser({ name, email, role, password }) {
     passwordHash: hashPassword(password),
     status: 'pending',
     isAdmin: false,
+    // En az yetkiyle başlar — Analist/Yönetici düzeyi sadece bir yönetici
+    // tarafından, onay sonrası elle verilir (kimse kendine yetki veremez).
+    accessLevel: 'viewer',
     createdAt: new Date().toISOString(),
     decidedAt: null,
     decidedBy: null,
@@ -97,6 +102,7 @@ export function registerUser({ name, email, role, password }) {
     entry.passwordHash,
     entry.status,
     0,
+    entry.accessLevel,
     entry.createdAt,
     entry.decidedAt,
     entry.decidedBy
@@ -114,9 +120,12 @@ export function setUserStatus(id, status, decidedBy) {
   return getUser(id)
 }
 
-export function setUserAdmin(id, isAdmin) {
+export function setUserAccessLevel(id, accessLevel) {
+  if (!ACCESS_LEVELS.includes(accessLevel)) {
+    throw new Error(`Geçersiz erişim düzeyi: ${accessLevel}`)
+  }
   if (!getUser(id)) throw new Error('Kullanıcı bulunamadı')
-  updateAdminStmt.run(isAdmin ? 1 : 0, id)
+  updateAccessLevelStmt.run(accessLevel, accessLevel === 'admin' ? 1 : 0, id)
   return getUser(id)
 }
 
@@ -141,6 +150,6 @@ export function ensureBootstrapAdmin() {
   const email = normalizeEmail(process.env.ADMIN_EMAIL || 'admin@kurum.gov.tr')
   const id = 'usr_' + crypto.randomBytes(12).toString('hex')
   const now = new Date().toISOString()
-  insertStmt.run(id, 'Yönetici', email, 'Sistem Yöneticisi', hashPassword(password), 'approved', 1, now, now, null)
+  insertStmt.run(id, 'Yönetici', email, 'Sistem Yöneticisi', hashPassword(password), 'approved', 1, 'admin', now, now, null)
   console.log(`[users] Bootstrap admin oluşturuldu: ${email}`)
 }

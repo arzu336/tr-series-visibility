@@ -63,10 +63,13 @@ export default function TrendsExplorer() {
 
   return (
     <div className="dashboard">
-      <h2>Arama İlgisi</h2>
+      <h2>Açık Kaynak İstihbaratı ve Küresel Veri Toplama Ağı</h2>
       <p className="dashboard__hint">
-        Aylık sorgu kotası sınırlıdır; her dizi yalnızca ilk sorguda kota harcar, sonrasında
-        süresiz cache'lenir. Bu yüzden otomatik değil, seçtiğiniz dizi için talep üzerine çalışır.
+        Arama ilgisi, sosyal medya etkileşimi ve küresel izleyici platformlarından toplanan
+        sinyalleri tek panelde birleştiren modüler, kaynak-bazlı veri toplama mimarisi — her
+        kaynak bağımsız bir modül olarak çalışır, gerektiğinde değiştirilebilir. Aylık sorgu
+        kotası sınırlıdır; her dizi yalnızca ilk sorguda kota harcar, sonrasında süresiz
+        cache'lenir. Bu yüzden otomatik değil, seçtiğiniz dizi için talep üzerine çalışır.
       </p>
 
       <div className="trends__controls">
@@ -178,14 +181,14 @@ export default function TrendsExplorer() {
 
       {traktError && (
         <section className="dashboard__section">
-          <h3 className="dashboard__section-title">Trakt.tv İzleyici Verisi</h3>
-          <p className="dashboard__empty">Trakt verisi alınamadı: {traktError}</p>
+          <h3 className="dashboard__section-title">Küresel İzleyici Platformu Verisi</h3>
+          <p className="dashboard__empty">İzleyici platformu verisi alınamadı: {traktError}</p>
         </section>
       )}
 
       {trakt && (
         <section className="dashboard__section">
-          <h3 className="dashboard__section-title">Trakt.tv İzleyici Verisi</h3>
+          <h3 className="dashboard__section-title">Küresel İzleyici Platformu Verisi</h3>
           <p className="dashboard__hint">
             {trakt.fromCache ? "cache'den okundu" : 'yeni çekildi'} · {new Date(trakt.queriedAt).toLocaleString('tr-TR')}
           </p>

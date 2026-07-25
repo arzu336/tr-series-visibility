@@ -48,6 +48,7 @@ db.exec(`
     password_hash TEXT,
     status TEXT,
     is_admin INTEGER,
+    access_level TEXT,
     created_at TEXT,
     decided_at TEXT,
     decided_by TEXT
@@ -115,6 +116,16 @@ db.exec(`
 const cacheColumns = db.prepare("PRAGMA table_info(cache_entries)").all()
 if (!cacheColumns.some((c) => c.name === 'updated_at')) {
   db.exec('ALTER TABLE cache_entries ADD COLUMN updated_at INTEGER')
+}
+
+// Erişim düzeyi (viewer/analyst/admin) eklendi. Var olan onaylı hesaplar önceki
+// davranışla eşleşsin diye (rol kısıtı hiç yoktu, herkes düzenleyebiliyordu):
+// is_admin=1 olanlar 'admin', geri kalanlar 'analyst' olarak taşınır. Yeni
+// kayıtlar artık en az yetkiyle ('viewer') başlar (bkz. users.js registerUser).
+const usersColumns = db.prepare("PRAGMA table_info(users)").all()
+if (!usersColumns.some((c) => c.name === 'access_level')) {
+  db.exec("ALTER TABLE users ADD COLUMN access_level TEXT")
+  db.exec("UPDATE users SET access_level = CASE WHEN is_admin = 1 THEN 'admin' ELSE 'analyst' END WHERE access_level IS NULL")
 }
 
 // Sentiment analizi kaldırıldı (Analist Paneli'nde gösterilmiyordu, hiçbir

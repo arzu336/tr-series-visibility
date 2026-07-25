@@ -135,7 +135,7 @@ export default function App() {
 
       <main className="app__main">
         <Suspense fallback={<div className="status">Yükleniyor…</div>}>
-          {view === 'dashboard' && <AnalystDashboard />}
+          {view === 'dashboard' && <AnalystDashboard canEdit={user?.accessLevel !== 'viewer'} />}
           {view === 'trends' && <TrendsExplorer />}
           {view === 'impact' && (
             <ImpactReport onSelectCountry={handleSelectCountryFromReport} />

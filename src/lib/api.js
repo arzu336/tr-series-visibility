@@ -92,8 +92,14 @@ export async function rejectUser(id) {
   return handle(await fetch(`/api/admin/users/${id}/reject`, { method: 'POST' }))
 }
 
-export async function toggleAdmin(id) {
-  return handle(await fetch(`/api/admin/users/${id}/toggle-admin`, { method: 'POST' }))
+export async function setAccessLevel(id, accessLevel) {
+  return handle(
+    await fetch(`/api/admin/users/${id}/access-level`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accessLevel }),
+    })
+  )
 }
 
 export async function fetchDestinationTaxonomy() {

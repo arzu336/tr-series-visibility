@@ -108,7 +108,7 @@ function DestinationTagPicker({ taxonomy, draft, onToggle }) {
   )
 }
 
-function DestinationSection() {
+function DestinationSection({ canEdit }) {
   const [items, setItems] = useState([])
   const [taxonomy, setTaxonomy] = useState([])
   const [status, setStatus] = useState('loading')
@@ -212,16 +212,24 @@ function DestinationSection() {
                   <td>{item.name}</td>
                   <OverviewCell overview={item.overview} />
                   <td>
-                    <DestinationTagPicker
-                      taxonomy={taxonomy}
-                      draft={drafts[item.id] ?? item.effectiveDestinations}
-                      onToggle={(destId) => toggleDraft(item, destId)}
-                    />
+                    {canEdit ? (
+                      <DestinationTagPicker
+                        taxonomy={taxonomy}
+                        draft={drafts[item.id] ?? item.effectiveDestinations}
+                        onToggle={(destId) => toggleDraft(item, destId)}
+                      />
+                    ) : (
+                      <span className="dashboard__empty">—</span>
+                    )}
                   </td>
                   <td>
-                    <button disabled={savingId === item.id} onClick={() => handleSave(item)}>
-                      Kaydet
-                    </button>
+                    {canEdit ? (
+                      <button disabled={savingId === item.id} onClick={() => handleSave(item)}>
+                        Kaydet
+                      </button>
+                    ) : (
+                      <span className="dashboard__empty">Salt okunur</span>
+                    )}
                   </td>
                 </tr>
               ))}
@@ -262,7 +270,7 @@ function DestinationSection() {
                 </td>
                 <td>{item.humanTags ? 'İnsan' : 'Sinopsis eşleşmesi'}</td>
                 <td>
-                  {editingId === item.id ? (
+                  {!canEdit ? null : editingId === item.id ? (
                     <button disabled={savingId === item.id} onClick={() => handleSave(item)}>
                       Kaydet
                     </button>
@@ -281,7 +289,7 @@ function DestinationSection() {
   )
 }
 
-export default function AnalystDashboard() {
+export default function AnalystDashboard({ canEdit = true }) {
   const [tab, setTab] = useState('themes') // themes | destinations
   const [items, setItems] = useState([])
   const [taxonomy, setTaxonomy] = useState([])
@@ -334,6 +342,12 @@ export default function AnalystDashboard() {
   return (
     <div className="dashboard">
       <h2>Analist Paneli</h2>
+      {!canEdit && (
+        <p className="dashboard__hint">
+          Sadece Okuyucu erişimindesiniz — kayıtları görebilirsiniz ama düzenleyemezsiniz. Düzenleme
+          yetkisi için bir Yönetici'den Analist erişimi isteyin.
+        </p>
+      )}
 
       <nav className="app__nav dashboard__tabs">
         <button
@@ -401,14 +415,18 @@ export default function AnalystDashboard() {
                             <span className="badge badge--uncertain">{item.effectiveConfidence}</span>
                           </td>
                           <td>
-                            <EditControls
-                              item={item}
-                              taxonomy={taxonomy}
-                              draft={drafts[item.id]}
-                              onDraftChange={(v) => setDrafts((d) => ({ ...d, [item.id]: v }))}
-                              onApprove={() => handleApprove(item)}
-                              saving={savingId === item.id}
-                            />
+                            {canEdit ? (
+                              <EditControls
+                                item={item}
+                                taxonomy={taxonomy}
+                                draft={drafts[item.id]}
+                                onDraftChange={(v) => setDrafts((d) => ({ ...d, [item.id]: v }))}
+                                onApprove={() => handleApprove(item)}
+                                saving={savingId === item.id}
+                              />
+                            ) : (
+                              <span className="dashboard__empty">Salt okunur</span>
+                            )}
                           </td>
                         </tr>
                       ))}
@@ -439,7 +457,7 @@ export default function AnalystDashboard() {
                         </td>
                         <td>{item.humanOverride ? 'İnsan' : 'LLM'}</td>
                         <td>
-                          {editingId === item.id ? (
+                          {!canEdit ? null : editingId === item.id ? (
                             <EditControls
                               item={item}
                               taxonomy={taxonomy}
@@ -464,7 +482,7 @@ export default function AnalystDashboard() {
         </>
       )}
 
-      {tab === 'destinations' && <DestinationSection />}
+      {tab === 'destinations' && <DestinationSection canEdit={canEdit} />}
     </div>
   )
 }

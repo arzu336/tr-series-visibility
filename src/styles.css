@@ -319,6 +319,12 @@ body {
   color: #5cb85c;
 }
 
+.badge--info {
+  background: rgba(57, 135, 229, 0.18);
+  color: #6da7ec;
+  cursor: help;
+}
+
 .app__header-row {
   display: flex;
   align-items: flex-start;
@@ -860,6 +866,12 @@ body {
 .impact__rank-control strong {
   color: #9ec5f4;
   font-weight: 600;
+}
+
+.impact__pending-badges {
+  display: flex;
+  gap: 0.5rem;
+  margin: 0 0 0.9rem;
 }
 
 .impact__pending {
