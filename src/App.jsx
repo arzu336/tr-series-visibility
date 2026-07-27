@@ -1,7 +1,8 @@
-import { lazy, Suspense, useCallback, useEffect, useState } from 'react'
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import CountryPanel from './components/CountryPanel.jsx'
 import Legend from './components/Legend.jsx'
 import Login from './components/Login.jsx'
+import ChangePasswordModal from './components/ChangePasswordModal.jsx'
 
 const Globe3D = lazy(() => import('./components/Globe3D.jsx'))
 const AnalystDashboard = lazy(() => import('./components/AnalystDashboard.jsx'))
@@ -20,6 +21,9 @@ export default function App() {
   const [meta, setMeta] = useState(null)
   const [selected, setSelected] = useState(null)
   const [view, setView] = useState('map')
+  const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [showProfileMenu, setShowProfileMenu] = useState(false)
+  const profileMenuRef = useRef(null)
 
   const loadAuthStatus = useCallback(() => {
     fetchAuthStatus()
@@ -33,6 +37,17 @@ export default function App() {
   useEffect(() => {
     loadAuthStatus()
   }, [loadAuthStatus])
+
+  useEffect(() => {
+    if (!showProfileMenu) return
+    const handleClickOutside = (e) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setShowProfileMenu(false)
+      }
+    }
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [showProfileMenu])
 
   useEffect(() => {
     if (authStatus !== 'in') return
@@ -129,9 +144,35 @@ export default function App() {
             <button className="app__nav-btn app__nav-btn--logout" onClick={handleLogout}>
               Çıkış Yap
             </button>
+            <div className="app__profile-menu" ref={profileMenuRef}>
+              <button
+                className="app__profile-btn"
+                onClick={() => setShowProfileMenu((v) => !v)}
+                title={user?.name || 'Profil'}
+              >
+                {user?.name?.trim()?.charAt(0).toUpperCase() || '?'}
+              </button>
+              {showProfileMenu && (
+                <div className="app__profile-dropdown">
+                  <p className="app__profile-dropdown-name">{user?.name}</p>
+                  <p className="app__profile-dropdown-email">{user?.email}</p>
+                  <button
+                    className="app__profile-dropdown-item"
+                    onClick={() => {
+                      setShowPasswordModal(true)
+                      setShowProfileMenu(false)
+                    }}
+                  >
+                    Şifremi Değiştir
+                  </button>
+                </div>
+              )}
+            </div>
           </nav>
         </div>
       </header>
+
+      {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />}
 
       <main className="app__main">
         <Suspense fallback={<div className="status">Yükleniyor…</div>}>

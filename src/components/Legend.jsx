@@ -10,7 +10,12 @@ export default function Legend() {
         ))}
       </div>
       <span className="legend__label">Yüksek</span>
-      <p className="legend__caption">Kültürel Görünürlük Skoru (popülerlik × yayın erişimi)</p>
+      <p
+        className="legend__caption"
+        title="TMDB'nin kendi popülerlik metriği (arama, oy ve trend sinyallerinin karışımı) × o ülkede yayında olma durumu. Gerçek izlenme/rating rakamı değildir — bir yakınsama (proxy) göstergesidir."
+      >
+        Kültürel Görünürlük Skoru (TMDB popülerliği × yayın erişimi) ⓘ
+      </p>
     </div>
   )
 }

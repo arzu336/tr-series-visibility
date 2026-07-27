@@ -32,7 +32,9 @@ export default function CountryPanel({ country, onClose }) {
       </button>
       <h2>{country.name}</h2>
       <dl className="panel__stats">
-        <dt>Görünürlük skoru</dt>
+        <dt title="TMDB'nin kendi popülerlik metriği (arama/oy/trend karışımı) × yayın erişimi — gerçek izlenme rakamı değil, bir yakınsama (proxy) göstergesidir.">
+          Görünürlük skoru ⓘ
+        </dt>
         <dd>{country.score.toFixed(1)}</dd>
         <dt>En popüler dizi</dt>
         <dd>{country.topSeries ? country.topSeries.name : '—'}</dd>

@@ -1,10 +1,9 @@
 import { useEffect, useState } from 'react'
-import { fetchImpactReport, fetchSourceHealth } from '../lib/api.js'
+import { fetchImpactReport } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import { trendLabel } from '../lib/trend.js'
 import DonutChart from './DonutChart.jsx'
 import DonutRankedList from './DonutRankedList.jsx'
-import SourceHealth from './SourceHealth.jsx'
 
 // Doğrulanmış kategorik palet (dataviz skill, --mode dark, gerçek arka planımız #05070d'ye
 // göre validate_palette.js ile kontrol edildi) — sabit sırayla atanır, asla döngüyle
@@ -32,22 +31,19 @@ function toDonutItems(rawItems) {
   })
 }
 
-function RankList({ items, accent = '#f03b20' }) {
+function RisingCountryList({ items, accent = '#5cb85c' }) {
   if (items.length === 0) return null
-  const maxValue = Math.max(...items.map((i) => i.value))
   return (
-    <div className="impact__rank-list">
+    <div className="impact__rising-list">
       {items.map((item) => (
-        <div key={item.label} className="impact__rank-item">
-          <span className="impact__rank-label">{item.label}</span>
-          <div className="impact__rank-bar">
-            <div
-              className="impact__rank-fill"
-              style={{ width: `${maxValue > 0 ? (item.value / maxValue) * 100 : 0}%`, background: accent }}
-            />
+        <div key={item.label} className="impact__rising-card">
+          <div className="impact__rising-card-top">
+            <span className="impact__rising-card-name">{item.label}</span>
+            <span className="impact__rising-card-change" style={{ color: accent }}>
+              {item.valueLabel}
+            </span>
           </div>
-          <span className="impact__rank-value">{item.valueLabel}</span>
-          {item.meta && <span className="impact__rank-meta">{item.meta}</span>}
+          {item.meta && <span className="impact__rising-card-meta">{item.meta}</span>}
           {item.control && (
             <span
               className="impact__rank-control"
@@ -68,8 +64,6 @@ export default function ImpactReport({ onSelectCountry }) {
   const [error, setError] = useState(null)
   const [hoveredCountryId, setHoveredCountryId] = useState(null)
   const [hoveredDestId, setHoveredDestId] = useState(null)
-  const [sourceHealth, setSourceHealth] = useState(null)
-  const [sourceHealthError, setSourceHealthError] = useState(null)
 
   useEffect(() => {
     fetchImpactReport()
@@ -81,9 +75,6 @@ export default function ImpactReport({ onSelectCountry }) {
         setError(err.message)
         setStatus('error')
       })
-    fetchSourceHealth()
-      .then(setSourceHealth)
-      .catch((err) => setSourceHealthError(err.message))
   }, [])
 
   if (status === 'loading') return <div className="dashboard status">Yükleniyor…</div>
@@ -165,10 +156,17 @@ export default function ImpactReport({ onSelectCountry }) {
         <p className="dashboard__hint">
           Canlı veriden hesaplanan gerçek görünürlük skorları — tahmin veya örnek veri değil.
           "Diğer" dilimi, listelenmeyen kalan {data.topCountriesByVisibility.length < 6 ? 'ülkelerin' : 'kalemlerin'} toplamını temsil eder.
+          Görünürlük skoru TMDB'nin popülerlik metriğine dayanır — gerçek izlenme rakamı değil,
+          bir yakınsama (proxy) göstergesidir.
         </p>
         <div className="donut-panels">
           <div className="donut-panel">
-            <h4 className="impact__rank-title">Görünürlük skoruna göre en öndeki ülkeler</h4>
+            <h4
+              className="impact__rank-title"
+              title="TMDB popülerlik puanı × yayın erişimi — gerçek izlenme rakamı değildir."
+            >
+              Görünürlük skoruna göre en öndeki ülkeler ⓘ
+            </h4>
             <div className="donut-panel__body">
               <DonutChart
                 items={countryDonutItems}
@@ -212,12 +210,10 @@ export default function ImpactReport({ onSelectCountry }) {
         </div>
       </section>
 
-      <SourceHealth data={sourceHealth} error={sourceHealthError} />
-
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Yükselen Ülkeler</h3>
         {data.hasEnoughHistoryForTrends && risingItems.length > 0 ? (
-          <RankList items={risingItems} accent="#5cb85c" />
+          <RisingCountryList items={risingItems} accent="#5cb85c" />
         ) : (
           <p className="dashboard__empty">
             Trend verisi birikiyor — gerçek bir yükseliş/düşüş tespiti için en az birkaç günlük takip

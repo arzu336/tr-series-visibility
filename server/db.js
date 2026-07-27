@@ -113,6 +113,10 @@ db.exec(`
   );
 `)
 
+// Rastgele Denetim özelliği kaldırıldı — sadece test verisi biriktirmişti,
+// gerçek kullanım yoktu.
+db.exec('DROP TABLE IF EXISTS spot_checks')
+
 const cacheColumns = db.prepare("PRAGMA table_info(cache_entries)").all()
 if (!cacheColumns.some((c) => c.name === 'updated_at')) {
   db.exec('ALTER TABLE cache_entries ADD COLUMN updated_at INTEGER')

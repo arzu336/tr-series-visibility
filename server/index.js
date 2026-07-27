@@ -4,9 +4,9 @@ import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
 import compression from 'compression'
+import rateLimit from 'express-rate-limit'
 import { buildDestinationRanking } from './aggregate.js'
 import { THEMES, getThemeStore, setHumanOverride, effectiveTheme, effectiveConfidence } from './themes.js'
-import { getSourceHealth } from './source-health.js'
 import { getRawSeriesDataCached, getEnrichedVisibility } from './data-pipeline.js'
 import { startScheduler } from './scheduler.js'
 import {
@@ -29,6 +29,8 @@ import {
   listUsers,
   setUserStatus,
   setUserAccessLevel,
+  resetUserPassword,
+  changeUserPassword,
   verifyPassword,
   publicUser,
 } from './users.js'
@@ -53,10 +55,28 @@ app.use((req, res, next) => {
   next()
 })
 
+// Şifre deneme/kayıt spam'ini sınırlar — brute-force saldırısı olmasa bile
+// (ör. sızmış bir e-posta/şifre listesiyle otomatik deneme), bu limit olmadan
+// hiçbir engel yoktu. IP bazlı; başarılı istekler de sayılır (basit ve yeterli).
+const loginLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 10,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla giriş denemesi yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.' },
+})
+const registerLimiter = rateLimit({
+  windowMs: 60 * 60 * 1000,
+  limit: 5,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar deneyin.' },
+})
+
 // Kimlik doğrulama uçları her zaman erişilebilir; geri kalan tüm /api rotaları
 // geçerli bir oturum ister. İsme bağlı hesaplar: kayıt olan biri admin onaylayana kadar
 // "pending" kalır, giriş yapamaz.
-app.post('/api/auth/register', (req, res) => {
+app.post('/api/auth/register', registerLimiter, (req, res) => {
   try {
     const { name, email, role, password } = req.body || {}
     const entry = registerUser({ name, email, role, password })
@@ -66,7 +86,7 @@ app.post('/api/auth/register', (req, res) => {
   }
 })
 
-app.post('/api/auth/login', (req, res) => {
+app.post('/api/auth/login', loginLimiter, (req, res) => {
   const { email, password } = req.body || {}
   const user = email ? findUserByEmail(email) : null
   if (!user || !verifyPassword(password || '', user.passwordHash)) {
@@ -93,6 +113,20 @@ app.post('/api/auth/logout', (req, res) => {
   deleteSession(req.cookies[COOKIE_NAME])
   res.setHeader('Set-Cookie', sessionCookieHeader('', 0))
   res.json({ ok: true })
+})
+
+// /auth/* öneki genel oturum-zorunlu middleware'i atladığı için (aşağıda),
+// oturumu burada elle doğruluyoruz.
+app.post('/api/auth/change-password', (req, res) => {
+  const userId = getSessionUserId(req.cookies[COOKIE_NAME])
+  if (!userId) return res.status(401).json({ error: 'Giriş gerekli' })
+  try {
+    const { currentPassword, newPassword } = req.body || {}
+    changeUserPassword(userId, currentPassword, newPassword)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
 })
 
 app.use('/api', (req, res, next) => {
@@ -157,22 +191,23 @@ app.post('/api/admin/users/:id/access-level', (req, res) => {
   }
 })
 
+// E-posta altyapısı yok — "şifremi unuttum" bu yüzden self-servis değil,
+// yönetici geçici bir şifre üretip güvenli bir kanaldan iletiyor.
+app.post('/api/admin/users/:id/reset-password', (req, res) => {
+  try {
+    const tempPassword = resetUserPassword(req.params.id)
+    res.json({ tempPassword })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
 app.get('/api/visibility', async (req, res) => {
   try {
     const { data } = await getEnrichedVisibility()
     res.json(data)
   } catch (err) {
     console.error('[visibility] hata:', err.message)
-    res.status(502).json({ error: err.message })
-  }
-})
-
-app.get('/api/source-health', async (req, res) => {
-  try {
-    const raw = await getRawSeriesDataCached()
-    res.json(getSourceHealth(raw.series))
-  } catch (err) {
-    console.error('[source-health] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })

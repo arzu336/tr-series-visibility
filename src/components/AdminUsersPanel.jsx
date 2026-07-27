@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchAdminUsers, approveUser, rejectUser, setAccessLevel } from '../lib/api.js'
+import { fetchAdminUsers, approveUser, rejectUser, setAccessLevel, resetUserPassword } from '../lib/api.js'
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString('tr-TR')
@@ -17,6 +17,7 @@ export default function AdminUsersPanel() {
   const [error, setError] = useState(null)
   const [actingId, setActingId] = useState(null)
   const [search, setSearch] = useState('')
+  const [resetResult, setResetResult] = useState(null) // { name, tempPassword }
 
   const load = useCallback(() => {
     setStatus('loading')
@@ -40,6 +41,19 @@ export default function AdminUsersPanel() {
     try {
       await fn(id)
       load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setActingId(null)
+    }
+  }
+
+  const handleResetPassword = async (u) => {
+    setActingId(u.id)
+    setResetResult(null)
+    try {
+      const { tempPassword } = await resetUserPassword(u.id)
+      setResetResult({ name: u.name, tempPassword })
     } catch (err) {
       setError(err.message)
     } finally {
@@ -77,6 +91,19 @@ export default function AdminUsersPanel() {
       </div>
 
       {error && <p className="login__error">{error}</p>}
+
+      {resetResult && (
+        <div className="reset-password-banner">
+          <strong>{resetResult.name}</strong> için geçici şifre oluşturuldu: <code>{resetResult.tempPassword}</code>
+          <br />
+          Bu şifreyi güvenli bir kanaldan (yüz yüze, kurum içi mesajlaşma vb.) iletin — bir daha
+          gösterilmeyecek. Kullanıcı giriş yaptıktan sonra "Şifremi Değiştir" ile kendi şifresini
+          belirleyebilir.{' '}
+          <button type="button" className="dashboard__link-btn" onClick={() => setResetResult(null)}>
+            Kapat
+          </button>
+        </div>
+      )}
 
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Onay Bekleyenler</h3>
@@ -128,6 +155,7 @@ export default function AdminUsersPanel() {
                 <th>Görev</th>
                 <th>Durum</th>
                 <th>Erişim Düzeyi</th>
+                <th>Şifre</th>
               </tr>
             </thead>
             <tbody>
@@ -156,6 +184,17 @@ export default function AdminUsersPanel() {
                       </select>
                     ) : (
                       '—'
+                    )}
+                  </td>
+                  <td>
+                    {u.status === 'approved' && (
+                      <button
+                        disabled={actingId === u.id}
+                        className="dashboard__link-btn"
+                        onClick={() => handleResetPassword(u)}
+                      >
+                        Sıfırla
+                      </button>
                     )}
                   </td>
                 </tr>

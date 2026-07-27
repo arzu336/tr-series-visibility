@@ -33,6 +33,7 @@ const insertStmt = db.prepare(`
 `)
 const updateStatusStmt = db.prepare('UPDATE users SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?')
 const updateAccessLevelStmt = db.prepare('UPDATE users SET access_level = ?, is_admin = ? WHERE id = ?')
+const updatePasswordStmt = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
 
 function rowToEntry(row) {
   return {
@@ -127,6 +128,34 @@ export function setUserAccessLevel(id, accessLevel) {
   if (!getUser(id)) throw new Error('Kullanıcı bulunamadı')
   updateAccessLevelStmt.run(accessLevel, accessLevel === 'admin' ? 1 : 0, id)
   return getUser(id)
+}
+
+const MIN_PASSWORD_LENGTH = 8
+
+// E-posta altyapımız yok — "şifremi unuttum" self-servis olamıyor. Bunun yerine
+// yönetici bir kullanıcı için geçici bir şifre üretir ve bunu güvenli bir
+// kanaldan (yüz yüze, kurum içi mesajlaşma vb.) iletir. Düz metin şifre sadece
+// bu fonksiyonun dönüş değerinde bir kez görünür, hiçbir yerde saklanmaz.
+export function resetUserPassword(id) {
+  if (!getUser(id)) throw new Error('Kullanıcı bulunamadı')
+  const tempPassword = crypto.randomBytes(9).toString('base64url')
+  updatePasswordStmt.run(hashPassword(tempPassword), id)
+  return tempPassword
+}
+
+// Giriş yapmış bir kullanıcının kendi şifresini değiştirmesi — mevcut şifre
+// doğrulanmadan işlem yapılmaz (oturumu ele geçiren biri şifreyi değiştirip
+// gerçek kullanıcıyı dışarıda bırakamasın diye).
+export function changeUserPassword(id, currentPassword, newPassword) {
+  const row = selectByIdStmt.get(id)
+  if (!row) throw new Error('Kullanıcı bulunamadı')
+  if (!verifyPassword(currentPassword || '', row.password_hash)) {
+    throw new Error('Mevcut şifre yanlış')
+  }
+  if (!newPassword || newPassword.length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`Yeni şifre en az ${MIN_PASSWORD_LENGTH} karakter olmalı`)
+  }
+  updatePasswordStmt.run(hashPassword(newPassword), id)
 }
 
 export function publicUser(entry) {

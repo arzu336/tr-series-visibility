@@ -48,10 +48,6 @@ export async function fetchImpactReport() {
   return handle(await fetch('/api/impact'))
 }
 
-export async function fetchSourceHealth() {
-  return handle(await fetch('/api/source-health'))
-}
-
 export async function fetchAuthStatus() {
   return handle(await fetch('/api/auth/status'))
 }
@@ -98,6 +94,20 @@ export async function setAccessLevel(id, accessLevel) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accessLevel }),
+    })
+  )
+}
+
+export async function resetUserPassword(id) {
+  return handle(await fetch(`/api/admin/users/${id}/reset-password`, { method: 'POST' }))
+}
+
+export async function changePassword(currentPassword, newPassword) {
+  return handle(
+    await fetch('/api/auth/change-password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
     })
   )
 }
