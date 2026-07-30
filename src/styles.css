@@ -43,6 +43,7 @@ body {
   position: relative;
   flex: 1;
   min-height: 0;
+  overflow: hidden;
   background: #05070d;
 }
 
@@ -113,36 +114,207 @@ body {
   line-height: 1.3;
 }
 
-.panel {
+/* Sağdaki ülke paneli de sol kıta çubuğu gibi açılıp kapanabilir — .panel-wrap eski
+   .panel'in konumunu (right/top/bottom) devralır, .panel kendisi width transition'ıyla
+   daralıp genişler (bkz. .sidebar/.sidebar-wrap ile aynı desen, sadece sağda). */
+.panel-wrap {
   position: absolute;
   right: 1.5rem;
   top: 1.5rem;
   bottom: 1.5rem;
+  display: flex;
+  align-items: flex-start;
+}
+
+.panel {
+  position: relative;
   width: 320px;
+  height: 100%;
   background: rgba(10, 14, 24, 0.9);
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 14px;
   padding: 1.25rem;
   backdrop-filter: blur(10px);
   overflow-y: auto;
+  overflow-x: hidden;
   color: #f1f3f8;
+  transition: width 250ms ease, padding 250ms ease;
+  overscroll-behavior: contain;
 }
 
-.panel--empty {
+.panel--collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border: none;
+}
+
+/* .panel-wrap sağ:1.5rem'e sabitlenmiş, genişliği içeriğine göre daralan bir flex kutu —
+   sıralama JSX'te [toggle, panel] olduğu için toggle her zaman panelin sol/harita tarafında
+   kalır; panel daralıp width:0 olduğunda toggle da onunla birlikte harita kenarına kayar
+   (sol kıta çubuğundaki .sidebar-toggle ile aynı davranış, ayna simetrik). */
+.panel-toggle {
+  position: relative;
+  top: 1rem;
+  z-index: 5;
+  width: 28px;
+  height: 28px;
+  flex-shrink: 0;
+  border-radius: 50%;
+  background: #EE3135;
+  color: #fff;
+  border: none;
+  cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.panel-toggle:hover {
+  background: #f4787b;
+}
+
+/* --- Sağ panel canlı dizi/oyuncu arama barı (bkz. CountryPanel.jsx PanelSearch) --- */
+
+.panel-search {
+  position: relative;
+  margin: 0 1.75rem 1rem 0;
+}
+
+.panel-search__input {
+  width: 100%;
+  box-sizing: border-box;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 0.5rem 0.7rem;
+  font-size: 0.82rem;
+  color: #f1f3f8;
+}
+
+.panel-search__input::placeholder {
+  color: #6b7488;
+}
+
+.panel-search__input:focus {
+  outline: none;
+  border-color: rgba(238, 49, 53, 0.6);
+}
+
+.panel-search__results {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 6;
+  max-height: 320px;
+  overflow-y: auto;
+  background: #0d1220;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  padding: 0.35rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.panel-search__result {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  width: 100%;
+  background: none;
+  border: none;
+  border-radius: 8px;
+  padding: 0.4rem;
+  text-align: left;
+  cursor: pointer;
+  color: #f1f3f8;
+}
+
+.panel-search__result:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.panel-search__result-photo {
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.panel-search__result-photo--empty {
+  display: inline-block;
+}
+
+.panel-search__result-poster {
+  width: 26px;
+  height: 34px;
+  border-radius: 4px;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.panel-search__result-poster--empty {
+  display: inline-block;
+}
+
+.panel-search__result-info {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.panel-search__result-name {
+  font-size: 0.82rem;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-search__result-meta {
+  font-size: 0.7rem;
   color: #8792a8;
-  text-align: center;
-  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.panel-search__empty {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 6;
+  margin: 0;
+  background: #0d1220;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 0.6rem 0.7rem;
+  font-size: 0.78rem;
+  color: #8792a8;
 }
 
 .panel h2 {
-  margin: 0 0 0.75rem;
+  margin: 0;
   font-size: 1.1rem;
   padding-right: 1.5rem;
   color: #f1f3f8;
   font-weight: 600;
+}
+
+.panel__subtitle {
+  margin: 0.2rem 0 0.75rem;
+  font-size: 0.78rem;
+  color: #8792a8;
 }
 
 .panel h3 {
@@ -170,22 +342,19 @@ body {
   color: #f1f3f8;
 }
 
-.panel__stats {
-  margin: 0;
-  display: grid;
-  grid-template-columns: auto auto;
-  row-gap: 0.4rem;
-}
-
-.panel__stats dt {
+.panel__back-btn {
+  display: block;
+  margin: 0 0 0.9rem;
+  padding: 0;
+  background: none;
+  border: none;
   color: #8792a8;
   font-size: 0.8rem;
+  cursor: pointer;
 }
 
-.panel__stats dd {
-  margin: 0;
-  text-align: right;
-  font-weight: 600;
+.panel__back-btn:hover {
+  color: #f1f3f8;
 }
 
 .trend--up {
@@ -198,18 +367,6 @@ body {
 
 .trend--flat {
   color: #8792a8;
-}
-
-.panel__share-note {
-  font-weight: 400;
-  font-size: 0.72rem;
-  color: #8792a8;
-}
-
-.panel__trend-line {
-  margin: 0 0 0.5rem;
-  font-size: 0.85rem;
-  font-weight: 600;
 }
 
 .trend--neutral {
@@ -231,6 +388,23 @@ body {
   padding: 0.4rem 0.5rem;
   cursor: pointer;
   transition: background 120ms ease;
+}
+
+/* SeriesPanel'in ülke listesi (bkz. SeriesPanel.jsx) tıklanabilir/genişleyebilir değil,
+   sadece bilgi amaçlı — imleç ve hover efekti göstermemeli. */
+.panel__series-item--static {
+  cursor: default;
+}
+
+.panel__series-item.panel__series-item--static:hover {
+  background: none;
+}
+
+.panel__series-imdb-line {
+  margin: 0.15rem 0 0;
+  font-size: 0.78rem;
+  color: #f0ad4e;
+  font-weight: 600;
 }
 
 .panel__series-item:hover {
@@ -274,6 +448,18 @@ body {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+.panel__series-onmap {
+  margin-left: 0.35rem;
+  font-size: 0.75rem;
+}
+
+.panel__series-imdb {
+  margin-left: 0.4rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #f0ad4e;
 }
 
 .panel__series-meta {
@@ -1406,6 +1592,9 @@ body {
   /* İnce/özel scrollbar — varsayılan kalın tarayıcı scrollbar'ı yerine. */
   scrollbar-width: thin;
   scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+  /* Çubuğun kendi iç listesi sonuna gelindiğinde scroll'un sayfaya/haritaya
+     "sıçramasını" (scroll chaining) engeller. */
+  overscroll-behavior: contain;
 }
 
 .sidebar::-webkit-scrollbar {
@@ -1696,16 +1885,6 @@ button.sidebar__big-card:hover {
   background: rgba(255, 255, 255, 0.2);
 }
 
-.series-filter-badge--loading {
-  border-color: rgba(255, 255, 255, 0.2);
-  background: rgba(255, 255, 255, 0.06);
-  color: #8792a8;
-}
-
-.series-filter-badge--error {
-  border-color: rgba(255, 107, 107, 0.5);
-  background: rgba(255, 107, 107, 0.12);
-}
 
 /* --- 2D Koroplet harita (Map2D) --- */
 
@@ -1771,6 +1950,14 @@ button.sidebar__big-card:hover {
   color: #f1f3f8;
   max-width: 220px;
   z-index: 10;
+}
+
+/* Pop-up artık SVG <foreignObject> içinde değil, normal bir DOM elemanı (bkz. Map2D.jsx
+   computeAnchor/getScreenCTM) — .map-popup-card'ın kendi sabit CSS genişliği (232px)
+   harita zoom/ölçeğinden tamamen bağımsız, her zaman aynı gerçek boyutta render olur. */
+.map2d__popup-overlay {
+  position: absolute;
+  z-index: 8;
 }
 
 /* Kıta odaklanması (flyTo eşdeğeri) — d3-geo'nun kendi zoom/pan'ı yok, bu yüzden
@@ -1845,6 +2032,7 @@ button.sidebar__big-card:hover {
    paylaşır. Yarı saydam koyu zemin + blur + neon camgöbeği kenarlık. --- */
 
 .map-popup-card {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 0.55rem;
@@ -1859,6 +2047,32 @@ button.sidebar__big-card:hover {
   color: #f1f3f8;
   width: 232px;
   transition: border-color 250ms ease, box-shadow 250ms ease;
+  /* Globe3D'de bu kart globe.gl'in htmlElement overlay katmanı (CSS3DRenderer) içinde
+     render edilir; o katmanın kök DOM elemanı globe.gl tarafından pointer-events:none
+     olarak ayarlanır (tıklamalar altındaki WebGL canvas'a/orbit-controls'a geçsin diye).
+     Kart burada auto ile bunu geri açmazsa "Ana Karakterler & Kadro" gibi butonlar hiç
+     tıklanamaz — canvas tıklamayı yutar. z-index, aynı overlay içinde kartın diğer
+     olası öğelerin üzerinde kalmasını garantiler. Map2D'de (foreignObject/React) bu
+     zaten normal DOM tıklaması olduğu için etkisizdir, zararı da yoktur. */
+  pointer-events: auto;
+  z-index: 20;
+}
+
+.map-popup-card__close {
+  position: absolute;
+  top: 0.55rem;
+  right: 0.6rem;
+  background: none;
+  border: none;
+  color: #8792a8;
+  font-size: 1rem;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0.15rem;
+}
+
+.map-popup-card__close:hover {
+  color: #f1f3f8;
 }
 
 .map-popup-card__top {
@@ -1920,6 +2134,8 @@ button.sidebar__big-card:hover {
   gap: 0.25rem;
   min-width: 0;
   padding-top: 0.1rem;
+  /* Sağ üstteki ✕ kapatma butonuyla uzun dizi adlarının çakışmaması için. */
+  padding-right: 1.1rem;
 }
 
 .map-popup-card__name {
@@ -1973,54 +2189,14 @@ button.sidebar__big-card:hover {
   color: #8792a8;
 }
 
-.map-popup-card__cast-toggle {
-  align-self: flex-start;
-  background: rgba(34, 211, 238, 0.1);
-  border: 1px solid rgba(34, 211, 238, 0.35);
-  color: #a5f3fc;
-  border-radius: 999px;
-  padding: 0.3rem 0.7rem;
-  font-size: 0.72rem;
-  font-weight: 600;
-  cursor: pointer;
-  transition: background 200ms ease, border-color 200ms ease;
+.map-popup-card__hint {
+  margin: 0.15rem 0 0;
+  font-size: 0.68rem;
+  color: #6b7488;
+  font-style: italic;
 }
 
-.map-popup-card__cast-toggle:hover {
-  background: rgba(34, 211, 238, 0.2);
-  border-color: rgba(34, 211, 238, 0.6);
-}
-
-.map-popup-card__cast-list {
-  display: none;
-  margin-top: 0.3rem;
-}
-
-.map-popup-card__cast-list--open {
-  display: block;
-}
-
-/* --- CountryPanel IMDb kartı --- */
-
-.panel__imdb {
-  margin-top: 0.4rem;
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-}
-
-.panel__imdb-rating {
-  font-size: 0.9rem;
-  color: #f0ad4e;
-  font-weight: 600;
-}
-
-.panel__imdb-cast {
-  font-size: 0.78rem;
-  color: #8792a8;
-}
-
-/* --- Dairesel yüzdelik pay göstergesi (CircularProgress.jsx) --- */
+/* --- Dairesel yüzdelik pay göstergesi (CircularProgress.jsx, ContinentSidebar'da kullanılıyor) --- */
 
 .circular-progress {
   position: relative;
@@ -2044,12 +2220,6 @@ button.sidebar__big-card:hover {
   color: #f1f3f8;
 }
 
-.panel__score-row {
-  display: flex;
-  align-items: center;
-  gap: 0.6rem;
-}
-
 /* --- Cast Bar (dizi detayındaki oyuncu kadrosu) --- */
 
 .cast-bar {
@@ -2058,6 +2228,13 @@ button.sidebar__big-card:hover {
   overflow-x: auto;
   margin-top: 0.6rem;
   padding-bottom: 0.2rem;
+  /* Yatay kaydırma korunur, sadece tarayıcının varsayılan kaydırma çubuğu gizlenir. */
+  scrollbar-width: none; /* Firefox */
+  -ms-overflow-style: none; /* Legacy Edge/IE */
+}
+
+.cast-bar::-webkit-scrollbar {
+  display: none; /* Chrome/Safari/Edge (Chromium) */
 }
 
 .cast-bar__item {
@@ -2111,20 +2288,7 @@ button.sidebar__big-card:hover {
   max-width: 100%;
 }
 
-/* --- Oyuncu Detay Modalı --- */
-
-.actor-modal {
-  position: relative;
-  width: 100%;
-  max-width: 420px;
-  max-height: 80vh;
-  overflow-y: auto;
-  background: rgba(10, 14, 24, 0.97);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 14px;
-  padding: 1.25rem;
-  color: #f1f3f8;
-}
+/* --- Oyuncu görünümü (CountryPanel'in aynı slotu içinde, bkz. ActorPanel.jsx) --- */
 
 .actor-modal__header {
   display: flex;
@@ -2145,19 +2309,20 @@ button.sidebar__big-card:hover {
   object-fit: cover;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.06);
+  /* TMDB CDN'den yüklenirken aniden belirmek yerine yumuşakça açılsın — opacity gerçek
+     <img> onLoad olayına bağlı (bkz. ActorPanel.jsx __photo-loaded), sabit bir süreye değil. */
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+
+.actor-modal__photo--loaded {
+  opacity: 1;
 }
 
 .actor-modal__photo--empty {
   display: inline-block;
-}
-
-.actor-modal__show-on-map {
-  margin-top: 0.35rem;
-}
-
-.panel__series-map-filter-btn {
-  display: block;
-  margin-top: 0.6rem;
+  /* Fotoğrafsız yer tutucu bir <span>, onLoad tetiklenmez — hemen görünür kalmalı. */
+  opacity: 1;
 }
 
 .actor-modal__network-btn {

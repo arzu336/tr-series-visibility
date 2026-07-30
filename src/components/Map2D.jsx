@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath } from 'd3-geo'
 import { scoreToColor } from '../lib/scale.js'
 import { fetchCountryGeoJSON } from '../lib/geo.js'
@@ -13,14 +13,13 @@ function displayName(feat) {
 // Lowy Institute paleti: koyu mat lacivert taban (veri yoksa) — koyu okyanus zemininden
 // (.map2d arka planı, bkz. styles.css) net ayrışsın diye hafifçe daha açık.
 const NO_DATA_COLOR = '#131c31'
+// Oyuncu filtresi (actorFilter) düz/tekli bir "bu ülkede yayında" işareti — palette'in
+// zaten validated en canlı durağı, kıta vurgusuyla (STROKE_CONTINENT) aynı camgöbeği.
+const ACTOR_FILTER_COLOR = '#22d3ee'
 const VIEWBOX_WIDTH = 960
 const VIEWBOX_HEIGHT = 500
-// Glassmorphism kartın kapanık (kadro listesi açılmamış) haldeki yaklaşık boyutu — kutu
-// buna göre konumlanır. Kadro açılınca içerik bunun ALTINA doğru taşar; foreignObject
-// overflow:visible olduğu için kırpılmaz, sadece kutunun altına doğru büyür.
-const POPUP_WIDTH = 250
-const POPUP_HEIGHT = 175
 const DEFAULT_ZOOM = { scale: 1, tx: 0, ty: 0 }
+const POPUP_MARGIN = 8
 
 // Lowy Institute tarzı düz/2D koroplet görünüm — Globe3D ile aynı GeoJSON'u ve
 // aynı renk skalasını (scoreToColor) kullanır; tek fark projeksiyon (küre yerine düzlem).
@@ -35,6 +34,7 @@ export default function Map2D({
   actorHighlight,
   selectedIso2,
   seriesFilter,
+  actorFilter,
   continentHighlight,
   onResetView,
 }) {
@@ -42,7 +42,16 @@ export default function Map2D({
   const [hovered, setHovered] = useState(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
+  // Pop-up'ın gerçek ekran-piksel konumu (bkz. computeAnchor) + o piksel boyutuna göre
+  // konteynerin dışına taşmayacak şekilde kelepçelenmiş son hali (bkz. aşağıdaki
+  // useLayoutEffect). İkisi ayrı tutuluyor çünkü kelepçeleme, kartın GERÇEK render
+  // boyutunu (popupElRef ile ölçülen) bilmeyi gerektiriyor.
+  const [popupAnchor, setPopupAnchor] = useState(null)
+  const [popupStyle, setPopupStyle] = useState(null)
   const containerRef = useRef(null)
+  const svgRef = useRef(null)
+  const zoomGroupRef = useRef(null)
+  const popupElRef = useRef(null)
 
   useEffect(() => {
     fetchCountryGeoJSON()
@@ -97,8 +106,75 @@ export default function Map2D({
     return map
   }, [seriesFilter])
 
-  const popupPos =
-    popup && projection && popup.lat != null && popup.lng != null ? projection([popup.lng, popup.lat]) : null
+  // Oyuncu bazlı harita filtresi (bkz. src/App.jsx actorFilter) — bir skor gradyanı değil,
+  // düz/tekli bir "bu ülkede yayında" işareti: kullanıcı sadece hangi ülkelerin oyuncunun
+  // takip edilen dizilerinden en az birini yayınladığını görmek istedi, ülkeden ülkeye
+  // popülerlik farkını değil.
+  const actorByIso2 = useMemo(() => {
+    if (!actorFilter) return null
+    const entries = Array.from(actorFilter.byIso2 instanceof Map ? actorFilter.byIso2.entries() : [])
+    const map = new Map()
+    entries.forEach(([iso2, score]) => map.set(iso2, { score }))
+    return map
+  }, [actorFilter])
+
+  // Pop-up artık SVG <foreignObject> içinde değil, normal bir DOM elemanı olarak
+  // .map2d üzerine bindiriliyor — foreignObject içindeki sabit-CSS-pikselli içerik,
+  // SVG'nin viewBox->konteyner ölçeğine (preserveAspectRatio) göre büyüyüp küçülüyordu;
+  // konteyner genişse kart olduğundan çok büyük render oluyor, konteyner kısaysa da
+  // ölçeklenmiş konumu hesaba katmayan bir kelepçe işe yaramıyordu. getScreenCTM ile
+  // ülkenin gerçek ekran-piksel konumunu (zoom-group'un CSS transform'u dahil, tam
+  // doğru) buluyoruz; kartın kendisi artık sabit CSS boyutuyla normal DOM akışında.
+  const computeAnchor = useCallback(() => {
+    const svg = svgRef.current
+    const g = zoomGroupRef.current
+    const container = containerRef.current
+    if (!svg || !g || !container || !popup || !projection || popup.lat == null || popup.lng == null) {
+      setPopupAnchor(null)
+      return
+    }
+    const [x, y] = projection([popup.lng, popup.lat])
+    const pt = svg.createSVGPoint()
+    pt.x = x
+    pt.y = y
+    const screenPt = pt.matrixTransform(g.getScreenCTM())
+    const containerRect = container.getBoundingClientRect()
+    setPopupAnchor({ x: screenPt.x - containerRect.left, y: screenPt.y - containerRect.top })
+  }, [popup, projection])
+
+  // zoom değiştiğinde (kıta odaklanması) CSS transition'ı 600ms sürüyor — anında bir
+  // hesaplama geçiş başlangıcındaki matrisi okur, 650ms sonraki ikinci hesaplama
+  // animasyon bittikten sonraki doğru konuma "yapıştırır".
+  useEffect(() => {
+    computeAnchor()
+    const t = setTimeout(computeAnchor, 650)
+    return () => clearTimeout(t)
+  }, [computeAnchor, zoom])
+
+  useEffect(() => {
+    const container = containerRef.current
+    if (!container) return
+    const ro = new ResizeObserver(() => computeAnchor())
+    ro.observe(container)
+    return () => ro.disconnect()
+  }, [computeAnchor])
+
+  // Kartın GERÇEK render boyutu bilindikten sonra (popupElRef), konteynerin dışına
+  // taşmayacak şekilde kelepçelenmiş son left/top değerini hesaplar.
+  useLayoutEffect(() => {
+    if (!popup || !popupAnchor || !popupElRef.current || !containerRef.current) {
+      setPopupStyle(null)
+      return
+    }
+    const { offsetWidth: w, offsetHeight: h } = popupElRef.current
+    const cw = containerRef.current.clientWidth
+    const ch = containerRef.current.clientHeight
+    let left = popupAnchor.x - w / 2
+    let top = popupAnchor.y - h - 14
+    left = Math.min(Math.max(left, POPUP_MARGIN), Math.max(cw - w - POPUP_MARGIN, POPUP_MARGIN))
+    top = Math.min(Math.max(top, POPUP_MARGIN), Math.max(ch - h - POPUP_MARGIN, POPUP_MARGIN))
+    setPopupStyle((prev) => (prev && prev.left === left && prev.top === top ? prev : { left, top }))
+  }, [popup, popupAnchor])
 
   const handleMouseMove = (e) => {
     const rect = containerRef.current?.getBoundingClientRect()
@@ -120,8 +196,14 @@ export default function Map2D({
       <button className="globe__reset-btn" onClick={handleResetView}>
         🌐 Genel Görünüm
       </button>
-      <svg viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`} className="map2d__svg">
+      <svg
+        ref={svgRef}
+        viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
+        className="map2d__svg"
+        onClick={() => popup?.onClose?.()}
+      >
         <g
+          ref={zoomGroupRef}
           className="map2d__zoom-group"
           style={{ transform: `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.scale})` }}
         >
@@ -143,14 +225,22 @@ export default function Map2D({
             else if (isInContinent) variantClass = 'map2d__country--continent'
             else if (isHovered) variantClass = 'map2d__country--hovered'
             const className = ['map2d__country', variantClass].filter(Boolean).join(' ')
+            // Dolgu önceliği: oyuncu filtresi > dizi filtresi > genel görünürlük skoru —
+            // App.jsx actorFilter/seriesFilter'ı karşılıklı dışlayıcı tuttuğu için normalde
+            // ikisi aynı anda dolu olmaz, ama öncelik sırası yine de tanımlı.
+            const actorEntry = actorByIso2?.get(iso2)
             const seriesValue = seriesByIso2?.get(iso2)
-            const fill = seriesByIso2
-              ? seriesValue != null
-                ? scoreToColor(seriesValue / 100)
+            const fill = actorByIso2
+              ? actorEntry
+                ? ACTOR_FILTER_COLOR
                 : NO_DATA_COLOR
-              : c
-                ? scoreToColor(c.t)
-                : NO_DATA_COLOR
+              : seriesByIso2
+                ? seriesValue != null
+                  ? scoreToColor(seriesValue / 100)
+                  : NO_DATA_COLOR
+                : c
+                  ? scoreToColor(c.t)
+                  : NO_DATA_COLOR
             return (
               <path
                 key={iso2 || f.properties.NAME}
@@ -159,27 +249,16 @@ export default function Map2D({
                 className={className}
                 onMouseEnter={() => setHovered(f)}
                 onMouseLeave={() => setHovered(null)}
-                onClick={() => {
+                onClick={(e) => {
+                  // Ülkeye tıklama seçer — svg'nin arka plan tıklamasında pop-up'ı kapatan
+                  // onClick'ine kadar kabarmasın (aksi halde seçildiği anda kapanırdı).
+                  e.stopPropagation()
                   if (!c) return
                   onSelect?.({ ...c, name: displayName(f) })
                 }}
               />
             )
           })}
-
-          {popupPos && (
-            <foreignObject
-              x={popupPos[0] - POPUP_WIDTH / 2}
-              y={popupPos[1] - POPUP_HEIGHT - 14}
-              width={POPUP_WIDTH}
-              height={POPUP_HEIGHT}
-              style={{ overflow: 'visible' }}
-            >
-              <div xmlns="http://www.w3.org/1999/xhtml">
-                <MapPopupCard popup={popup} />
-              </div>
-            </foreignObject>
-          )}
         </g>
       </svg>
       {hovered && (
@@ -187,6 +266,16 @@ export default function Map2D({
           {(() => {
             const name = displayName(hovered)
             const iso2 = hovered.properties.ISO_A2
+            if (actorByIso2) {
+              const entry = actorByIso2.get(iso2)
+              return (
+                <>
+                  <strong>{name}</strong>
+                  <br />
+                  {entry ? `Görünürlük skoru: ${entry.score.toFixed(1)}` : 'Veri yok'}
+                </>
+              )
+            }
             if (seriesByIso2) {
               const value = seriesByIso2.get(iso2)
               return (
@@ -215,6 +304,16 @@ export default function Map2D({
               </>
             )
           })()}
+        </div>
+      )}
+      {popup && popupAnchor && (
+        <div
+          ref={popupElRef}
+          className="map2d__popup-overlay"
+          style={popupStyle || { left: popupAnchor.x, top: popupAnchor.y, visibility: 'hidden' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <MapPopupCard popup={popup} />
         </div>
       )}
     </div>

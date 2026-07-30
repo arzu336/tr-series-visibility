@@ -5,7 +5,6 @@ import Login from './components/Login.jsx'
 import ChangePasswordModal from './components/ChangePasswordModal.jsx'
 import ContinentSidebar from './components/ContinentSidebar.jsx'
 import MapViewToggle from './components/MapViewToggle.jsx'
-import ActorModal from './components/ActorModal.jsx'
 
 const Globe3D = lazy(() => import('./components/Globe3D.jsx'))
 const Map2D = lazy(() => import('./components/Map2D.jsx'))
@@ -15,10 +14,11 @@ const ImpactReport = lazy(() => import('./components/ImpactReport.jsx'))
 const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
 const PENDING_APPROVALS_POLL_MS = 60000
 const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
-import { fetchVisibility, fetchAuthStatus, logout, fetchAdminUsers, fetchImdbData, fetchTrends } from './lib/api.js'
+import { fetchVisibility, fetchAuthStatus, logout, fetchAdminUsers, fetchImdbData } from './lib/api.js'
 import { continentCentroid } from './lib/continents.js'
 import countryNames from './data/country-centroids.json'
 const SIDEBAR_COLLAPSED_KEY = 'gp_sidebar_collapsed'
+const PANEL_COLLAPSED_KEY = 'gp_panel_collapsed'
 
 export default function App() {
   const [authStatus, setAuthStatus] = useState('checking') // checking | in | out
@@ -39,11 +39,28 @@ export default function App() {
   // Dizi bazlı harita filtresi (madde 1) — dolduğunda harita genel skor yerine SADECE bu
   // dizinin gerçek, ülke bazlı Google Trends arama ilgisine göre renklenir.
   const [seriesFilter, setSeriesFilter] = useState(null) // { seriesName, byCountry } | null
-  const [seriesFilterStatus, setSeriesFilterStatus] = useState('idle') // idle | loading | error
+  // Oyuncu bazlı harita filtresi — "Bu Oyuncunun Tüm Projelerini Haritada Göster" ile
+  // dolar; seriesFilter ile aynı FILL katmanını kullanır (ikisi karşılıklı dışlayıcı,
+  // aynı anda ikisi de aktif olmaz), sadece Google Trends yerine oyuncunun zaten takip
+  // edilen dizilerindeki gerçek ülke bazlı görünürlük skoru toplamını kullanır.
+  const [actorFilter, setActorFilter] = useState(null) // { actorName, byIso2: Map<iso2, score> } | null
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
   })
+  // Sağdaki CountryPanel de sol kıta çubuğu gibi açılıp kapanabilir olsun istendi.
+  const [panelCollapsed, setPanelCollapsed] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.localStorage.getItem(PANEL_COLLAPSED_KEY) === '1'
+  })
+  // Ülke panelindeki "Yayındaki diziler" listesinden hangi dizinin haritada/IMDb'de
+  // gösterileceği — null iken en popüler dizi (seriesList zaten popülerliğe göre sıralı,
+  // bkz. server/aggregate.js) varsayılan olarak gösterilir.
+  const [activeSeriesId, setActiveSeriesId] = useState(null)
+  // Sağ panel arama barından bir DİZİ sonucuna tıklandığında (bkz. handleSelectSeriesGlobal) —
+  // artık ilgisiz bir ülkeye zıplamak yerine, o dizinin kendi bilgisi (ActorPanel'in
+  // oyuncu için yaptığının aynısı) aynı panel slotunda gösterilir.
+  const [searchedSeriesId, setSearchedSeriesId] = useState(null)
   const [view, setView] = useState('map')
   // Lowy Institute tarzı 2D düz harita varsayılan görünüm — kullanıcı daha önce 3D'yi
   // seçtiyse (localStorage'da kayıtlıysa) o tercih korunur.
@@ -114,13 +131,50 @@ export default function App() {
     window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0')
   }, [sidebarCollapsed])
 
-  // 1. Aşama (varsayılan): harita pop-up'ı ve CountryPanel özeti SADECE dizi bilgisini
-  // gösterir (dizi adı, afişi, görünürlük skoru) — ana karakter burada gösterilmez, o
-  // sadece 3. aşamada (bkz. ActorModal + handleShowActorNetwork) devreye girer.
-  // IMDb bölümü aynı veriyi paylaşır — seçili ülke değiştikçe en popüler dizisi için tek
-  // seferlik çekilir.
   useEffect(() => {
-    const tmdbId = selected?.topSeries?.id
+    window.localStorage.setItem(PANEL_COLLAPSED_KEY, panelCollapsed ? '1' : '0')
+  }, [panelCollapsed])
+
+  // Ülke panelini/pop-up'ı kapatan tüm yollar (× butonu, Escape, harita boş alan tıklaması)
+  // aynı işlevi paylaşır — seçili ülkeyle birlikte, o ülkeye ait sağ paneldeki oyuncu
+  // görünümü de (varsa) temizlenir, aksi halde yeni bir ülke seçildiğinde eski oyuncu
+  // görünümü hayalet gibi kalabilirdi.
+  const handleCloseSelection = useCallback(() => {
+    setSelected(null)
+    setSelectedActorId(null)
+    setSearchedSeriesId(null)
+  }, [])
+
+  // Escape: en üstteki katmanı kapatır — sağ paneldeki oyuncu görünümü açıksa önce o, sonra
+  // aranan dizi görünümü, yoksa seçili ülke/pop-up. Harita bileşenlerinin kendi tıklama-dışı
+  // kapama mantığıyla (Map2D svg background, Globe3D onGlobeClick) aynı hedefi
+  // (handleCloseSelection) paylaşır.
+  useEffect(() => {
+    const handleKeyDown = (e) => {
+      if (e.key !== 'Escape') return
+      if (selectedActorId != null) {
+        setSelectedActorId(null)
+      } else if (searchedSeriesId != null) {
+        setSearchedSeriesId(null)
+      } else if (selected) {
+        handleCloseSelection()
+      }
+    }
+    document.addEventListener('keydown', handleKeyDown)
+    return () => document.removeEventListener('keydown', handleKeyDown)
+  }, [selected, selectedActorId, searchedSeriesId, handleCloseSelection])
+
+  // "Yayındaki diziler" listesinden hangi dizi seçiliyse (bkz. activeSeriesId) haritadaki
+  // pop-up ve IMDb kartı ona göre güncellenir — seçim yoksa seriesList'in en popüler ilk
+  // öğesi (topSeries ile aynı dizi, sadece theme/overview gibi ek alanları da taşıyor)
+  // varsayılan gösterilir.
+  const activeSeries =
+    selected?.seriesList?.find((s) => s.id === activeSeriesId) ?? selected?.seriesList?.[0] ?? null
+
+  // IMDb verisi artık ülkenin en popüler dizisi yerine ekranda o an gösterilen (activeSeries)
+  // diziye göre çekiliyor — seçili ülke veya seçili dizi değiştikçe tek seferlik yenilenir.
+  useEffect(() => {
+    const tmdbId = activeSeries?.id
     if (tmdbId == null) {
       setImdbData(null)
       setImdbStatus('idle')
@@ -143,13 +197,16 @@ export default function App() {
     return () => {
       cancelled = true
     }
-  }, [selected?.topSeries?.id])
+  }, [activeSeries?.id])
 
   const handleSelect = useCallback((country) => {
     setSelected(country)
     // Tek bir ülkeye odaklanmak, önceki oyuncu popülerlik ağı vurgusunu geçersiz kılar —
-    // ikisi aynı anda haritada karışık görünmesin diye temizleniyor.
+    // ikisi aynı anda haritada karışık görünmesin diye temizleniyor. Yeni ülkenin kendi
+    // en popüler dizisiyle başlaması için önceki dizi seçimi de sıfırlanır.
     setActorHighlight(null)
+    setActiveSeriesId(null)
+    setSearchedSeriesId(null)
   }, [])
 
   const handleSelectCountryFromReport = useCallback(
@@ -158,18 +215,26 @@ export default function App() {
       if (!country) return
       setSelected({ ...country, name: countryNames[iso2]?.name || iso2 })
       setActorHighlight(null)
+      setActiveSeriesId(null)
+      setSearchedSeriesId(null)
       setView('map')
     },
     [countries]
   )
 
-  const handleSelectCountryFromActor = useCallback(
-    (iso2) => {
-      handleSelectCountryFromReport(iso2)
-      setSelectedActorId(null)
-    },
-    [handleSelectCountryFromReport]
-  )
+  // CountryPanel'deki "Yayındaki diziler" listesinden bir dizi seçildiğinde harita
+  // pop-up'ı ve IMDb kartı o diziye geçer.
+  const handleSelectSeries = useCallback((seriesId) => {
+    setActiveSeriesId(seriesId)
+  }, [])
+
+  // Sağ paneldeki arama barından bir DİZİ sonucuna tıklandığında — ActorPanel'in oyuncu
+  // için yaptığının aynısı: ilgisiz bir ülkenin tüm panosuna zıplamak yerine, o dizinin
+  // kendi bilgisi (SeriesPanel) aynı panel slotunda gösterilir.
+  const handleSelectSeriesGlobal = useCallback((seriesId) => {
+    setSearchedSeriesId(seriesId)
+    setSelectedActorId(null)
+  }, [])
 
   // Kıta odaklanması (flyTo) — sidebar'da bir kıta seçildiğinde haritayı o kıtanın gerçek
   // ülke merkezlerinden hesaplanan ağırlık merkezine yumuşak geçişle götürür VE o kıtaya
@@ -188,10 +253,12 @@ export default function App() {
     setContinentHighlight(null)
   }, [])
 
-  // Bir oyuncunun ActorModal'daki "Popülerlik Ağını Haritada Göster" eylemi — o oyuncunun
-  // TÜM dizilerindeki TÜM ülkeleri (skorları toplanmış) tek bir vurgu katmanı olarak
-  // haritaya geçirir (Lowy Institute tarzı düğüm ağı).
-  const handleShowActorNetwork = useCallback((seriesList) => {
+  // Bir oyuncunun (sağ paneldeki oyuncu görünümünde) "Bu Oyuncunun Tüm Projelerini Haritada
+  // Göster" eylemi — o oyuncunun TÜM dizilerindeki TÜM ülkeleri (skorları toplanmış) hem
+  // kenar vurgusu (actorHighlight, Lowy tarzı düğüm ağı) hem de dolgu/koroplet filtresi
+  // (actorFilter) olarak haritaya geçirir — seriesFilter ile aynı FILL katmanını paylaştığı
+  // için ikisi karşılıklı dışlayıcıdır.
+  const handleShowActorNetwork = useCallback((actorName, seriesList) => {
     const byIso2 = new Map()
     for (const series of seriesList || []) {
       for (const c of series.countries || []) {
@@ -207,35 +274,26 @@ export default function App() {
       }))
       .filter((h) => h.lat != null && h.lng != null)
     setActorHighlight(highlight)
+    setActorFilter({ actorName, byIso2 })
+    setSeriesFilter(null)
     setSelectedActorId(null)
-  }, [])
-
-  // CountryPanel'deki bir dizi satırından "Bu Dizinin Küresel Dağılımını Haritada Göster" —
-  // henüz veri yok, gerçek ülke bazlı Google Trends arama ilgisini çekip haritayı ona göre
-  // filtreler (server/serpapi.js queryTrends — aynı veri TrendsExplorer'ın da kullandığı).
-  const handleFilterBySeries = useCallback(async (seriesName) => {
-    setSeriesFilterStatus('loading')
-    setActorHighlight(null)
-    try {
-      const result = await fetchTrends(seriesName)
-      setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
-      setSeriesFilterStatus('idle')
-    } catch (err) {
-      console.error('[seriesFilter]', err.message)
-      setSeriesFilterStatus('error')
-    }
   }, [])
 
   // TrendsExplorer'da zaten sorgulanmış sonucu tekrar fetch etmeden doğrudan kullanır.
   const handleShowSeriesOnMap = useCallback((result) => {
     setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
+    setActorFilter(null)
     setActorHighlight(null)
     setView('map')
   }, [])
 
   const clearSeriesFilter = useCallback(() => {
     setSeriesFilter(null)
-    setSeriesFilterStatus('idle')
+  }, [])
+
+  const clearActorFilter = useCallback(() => {
+    setActorFilter(null)
+    setActorHighlight(null)
   }, [])
 
   const handleLogout = async () => {
@@ -247,23 +305,22 @@ export default function App() {
     }
   }
 
-  // Globe3D/Map2D'deki harita içi pop-up kart için: seçili ülkenin koordinatı + en popüler
-  // dizisi + görünürlük skoru + baskın tema/trend (Lowy tarzı glassmorphism kartın pill
-  // etiketleri için) + (yüklendiyse) IMDb verisi + kadro butonundan ActorModal'a geçiş.
+  // Globe3D/Map2D'deki harita içi pop-up kart için: seçili ülkenin koordinatı + o an aktif
+  // dizi (activeSeries) + o dizinin popülerlik skoru/teması + ülkenin trendi + (yüklendiyse)
+  // IMDb verisi.
   const popup =
-    selected && selected.topSeries
+    selected && activeSeries
       ? {
           iso2: selected.iso2,
           lat: countryNames[selected.iso2]?.lat,
           lng: countryNames[selected.iso2]?.lng,
-          series: selected.topSeries,
-          score: selected.score,
-          dominantTheme: selected.dominantTheme,
-          isThemeUncertain: selected.isThemeUncertain,
+          series: activeSeries,
+          score: activeSeries.popularity,
+          dominantTheme: activeSeries.theme,
           trend: selected.trend,
           imdb: imdbData,
           imdbStatus,
-          onSelectActor: setSelectedActorId,
+          onClose: handleCloseSelection,
         }
       : null
 
@@ -396,13 +453,12 @@ export default function App() {
                         <button onClick={clearSeriesFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
                       </div>
                     )}
-                    {seriesFilterStatus === 'loading' && (
-                      <div className="series-filter-badge series-filter-badge--loading">Dizi dağılımı yükleniyor…</div>
-                    )}
-                    {seriesFilterStatus === 'error' && (
-                      <div className="series-filter-badge series-filter-badge--error">
-                        <span>Bu dizi için arama ilgisi verisi alınamadı.</span>
-                        <button onClick={clearSeriesFilter}>✕ Kapat</button>
+                    {actorFilter && (
+                      <div className="series-filter-badge">
+                        <span>
+                          Filtre: <strong>{actorFilter.actorName}</strong> Projeleri
+                        </span>
+                        <button onClick={clearActorFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
                       </div>
                     )}
                     {mapView === '3d' ? (
@@ -414,6 +470,7 @@ export default function App() {
                         actorHighlight={actorHighlight}
                         selectedIso2={selected?.iso2}
                         seriesFilter={seriesFilter}
+                        actorFilter={actorFilter}
                         continentHighlight={continentHighlight}
                         onResetView={handleResetMapView}
                       />
@@ -426,6 +483,7 @@ export default function App() {
                         actorHighlight={actorHighlight}
                         selectedIso2={selected?.iso2}
                         seriesFilter={seriesFilter}
+                        actorFilter={actorFilter}
                         continentHighlight={continentHighlight}
                         onResetView={handleResetMapView}
                       />
@@ -434,17 +492,27 @@ export default function App() {
                       caption={
                         seriesFilter
                           ? `"${seriesFilter.seriesName}" için ülke bazlı Google Trends arama ilgisi (0-100) — gerçek izlenme rakamı değil, arama ilgisine dayalı bir yakınsama (proxy) göstergesidir.`
-                          : undefined
+                          : actorFilter
+                            ? `"${actorFilter.actorName}" oyuncusunun takip edilen dizilerinden en az birinin gerçekten yayınlandığı ülkeler işaretlenir.`
+                            : undefined
                       }
                     />
                     <CountryPanel
                       country={selected}
-                      onClose={() => setSelected(null)}
-                      imdb={imdbData}
-                      imdbStatus={imdbStatus}
-                      onSelectActor={setSelectedActorId}
                       allCountries={countries}
-                      onFilterBySeries={handleFilterBySeries}
+                      onClose={handleCloseSelection}
+                      onSelectActor={setSelectedActorId}
+                      onSelectSeries={handleSelectSeries}
+                      onSelectSeriesGlobal={handleSelectSeriesGlobal}
+                      activeSeriesId={activeSeries?.id}
+                      collapsed={panelCollapsed}
+                      onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
+                      activeActorId={selectedActorId}
+                      onCloseActor={() => setSelectedActorId(null)}
+                      onShowActorNetwork={handleShowActorNetwork}
+                      activeSeriesGlobalId={searchedSeriesId}
+                      onCloseSeriesGlobal={() => setSearchedSeriesId(null)}
+                      onShowSeriesOnMap={handleShowSeriesOnMap}
                     />
                   </div>
                 </div>
@@ -453,15 +521,6 @@ export default function App() {
           )}
         </Suspense>
       </main>
-
-      {selectedActorId != null && (
-        <ActorModal
-          personId={selectedActorId}
-          onClose={() => setSelectedActorId(null)}
-          onSelectCountry={handleSelectCountryFromActor}
-          onShowNetwork={handleShowActorNetwork}
-        />
-      )}
     </div>
   )
 }

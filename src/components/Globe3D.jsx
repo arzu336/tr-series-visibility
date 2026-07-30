@@ -15,12 +15,14 @@ const MIN_ALTITUDE = 0.006
 const MAX_ALTITUDE = 0.22
 // Lowy Institute paleti: koyu mat lacivert taban (veri yoksa).
 const NO_DATA_COLOR = '#131c31'
+// Oyuncu filtresi (actorFilter) düz/tekli bir "bu ülkede yayında" işareti — Map2D.jsx'teki
+// aynı sabitle eşleşir (kıta vurgusuyla aynı camgöbeği).
+const ACTOR_FILTER_COLOR = '#22d3ee'
 const DEFAULT_VIEW = { lat: 15, lng: 20, altitude: 2.4 }
 // Tekil ülke odaklanması — önceki 1.1 aşırı yakınlaşıyordu, ülke ve komşularının rahatça
 // görülebildiği daha gevşek bir mesafeye çekildi.
 const FOCUS_ALTITUDE = 1.8
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w154'
-const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185'
 
 function formatVotes(n) {
   if (n == null) return null
@@ -36,15 +38,20 @@ const STROKE_HIGHLIGHT = '#f0ad4e'
 const STROKE_CONTINENT = '#22d3ee'
 
 // Lowy Institute tarzı Dark Glassmorphism harita içi detay kartı — globe.gl'in htmlElement
-// API'si React'ten bağımsız çalıştığı için DOM'u burada elle inşa ediyoruz (event delegation
-// ile — inline onclick yerine querySelector + addEventListener, kapanışla d.onSelectActor'a
-// bağlanıyor). Aynı görünüm Map2D.jsx'te MapPopupCard.jsx (gerçek React bileşeni) olarak
-// tekrarlanır — ikisi de aynı .map-popup-card sınıflarını paylaşır. 1. aşama dizi + skor +
-// tema + trend + IMDb gösterir; "Ana Karakterler & Kadro" butonu kadroyu açar, bir oyuncuya
-// tıklamak mevcut ActorModal akışını (3. aşama) tetikler.
+// API'si React'ten bağımsız çalıştığı için DOM'u burada elle inşa ediyoruz. Aynı görünüm
+// Map2D.jsx'te MapPopupCard.jsx (gerçek React bileşeni) olarak tekrarlanır — ikisi de aynı
+// .map-popup-card sınıflarını paylaşır. Sadece hızlı bakış içindir (dizi + skor + tema +
+// trend + IMDb); kadro ve diğer ayrıntılar artık sadece sağ paneldedir (bkz.
+// CountryPanel.jsx) — burada sadece statik bir ipucu satırı var.
 function buildPopupElement(d) {
   const el = document.createElement('div')
   el.className = 'map-popup-card'
+  // globe.gl'in htmlElement katmanı (CSS3DRenderer overlay'i) varsayılan olarak
+  // pointer-events:none taşır (tıklamalar altındaki WebGL canvas'a/orbit-controls'a
+  // geçsin diye) — .map-popup-card'a styles.css'te pointer-events:auto verilmesiyle bu
+  // kart ve içindeki butonlar tekrar tıklanabilir olur. stopPropagation ekstra güvenlik:
+  // kart içi bir tıklamanın document'a kadar kabarıp başka bir dinleyiciyi tetiklememesi için.
+  el.addEventListener('click', (e) => e.stopPropagation())
 
   const posterHtml = d.series.posterPath
     ? `<img class="map-popup-card__poster" src="${POSTER_BASE}${d.series.posterPath}" alt="" />`
@@ -62,20 +69,9 @@ function buildPopupElement(d) {
         : ''
 
   const trendInfo = trendLabel(d.trend)
-  const cast = d.series.cast || []
-  const castRowHtml = cast
-    .map(
-      (actor) => `
-        <button class="cast-bar__item" data-actor-id="${actor.id}">
-          ${actor.profilePath ? `<img class="cast-bar__photo" src="${PROFILE_BASE}${actor.profilePath}" alt="" />` : `<span class="cast-bar__photo cast-bar__photo--empty" aria-hidden="true"></span>`}
-          <span class="cast-bar__name">${actor.name}</span>
-          ${actor.character ? `<span class="cast-bar__character">${actor.character}</span>` : ''}
-        </button>
-      `
-    )
-    .join('')
 
   el.innerHTML = `
+    <button class="map-popup-card__close" aria-label="Kapat">✕</button>
     <div class="map-popup-card__top">
       <div class="map-popup-card__poster-wrap">
         ${posterHtml}
@@ -87,34 +83,14 @@ function buildPopupElement(d) {
       </div>
     </div>
     <div class="map-popup-card__pills">
-      ${d.dominantTheme ? `<span class="map-popup-card__pill">${d.dominantTheme}${d.isThemeUncertain ? ' ?' : ''}</span>` : ''}
+      ${d.dominantTheme ? `<span class="map-popup-card__pill">${d.dominantTheme}</span>` : ''}
       <span class="map-popup-card__pill">Skor ${d.score != null ? d.score.toFixed(1) : '—'}</span>
       <span class="map-popup-card__pill map-popup-card__pill--${trendInfo.className}">${trendInfo.icon} ${trendInfo.pct != null ? `${trendInfo.pct}%` : 'Yeni'}</span>
     </div>
-    ${
-      cast.length > 0
-        ? `
-      <button class="map-popup-card__cast-toggle">🎭 Ana Karakterler & Kadro <span class="map-popup-card__cast-toggle-arrow">▸</span></button>
-      <div class="map-popup-card__cast-list">
-        <div class="cast-bar">${castRowHtml}</div>
-      </div>
-    `
-        : ''
-    }
+    <p class="map-popup-card__hint">Kadro ve ayrıntılar için sağ paneli inceleyin →</p>
   `
 
-  const toggleBtn = el.querySelector('.map-popup-card__cast-toggle')
-  const castListEl = el.querySelector('.map-popup-card__cast-list')
-  if (toggleBtn && castListEl) {
-    toggleBtn.addEventListener('click', () => {
-      const isOpen = castListEl.classList.toggle('map-popup-card__cast-list--open')
-      toggleBtn.querySelector('.map-popup-card__cast-toggle-arrow').textContent = isOpen ? '▾' : '▸'
-    })
-  }
-  el.querySelectorAll('.cast-bar__item').forEach((btn) => {
-    const actorId = Number(btn.dataset.actorId)
-    btn.addEventListener('click', () => d.onSelectActor?.(actorId))
-  })
+  el.querySelector('.map-popup-card__close')?.addEventListener('click', () => d.onClose?.())
 
   return el
 }
@@ -127,6 +103,7 @@ export default function Globe3D({
   actorHighlight,
   selectedIso2,
   seriesFilter,
+  actorFilter,
   continentHighlight,
   onResetView,
 }) {
@@ -136,6 +113,9 @@ export default function Globe3D({
   const selectedIso2Ref = useRef(null)
   const actorHighlightRef = useRef(new Set())
   const continentHighlightRef = useRef(null)
+  // onGlobeClick mount-only effect'te (aşağıda, [] dep) bir kez kuruluyor — güncel popup'ı
+  // (ve onClose'unu) closure'da taze tutmak için hover/selectedIso2 ile aynı ref deseni.
+  const popupRef = useRef(null)
   const [geoFeatures, setGeoFeatures] = useState(null)
 
   useEffect(() => {
@@ -165,6 +145,9 @@ export default function Globe3D({
       .onPolygonHover((f) => {
         hoveredRef.current = f
       })
+      // Ülke poligonu dışına (okyanus/boş küre yüzeyi) tıklama — açık pop-up'ı kapatır.
+      // onPolygonClick ülke isabetlerinde ayrıca ve öncelikli tetiklenir, bu ikisi çakışmaz.
+      .onGlobeClick(() => popupRef.current?.onClose?.())
 
     world.controls().autoRotate = true
     world.controls().autoRotateSpeed = 0.5
@@ -260,10 +243,25 @@ export default function Globe3D({
         )
       : null
 
+    // Oyuncu bazlı harita filtresi (bkz. src/App.jsx actorFilter) — bir skor gradyanı değil,
+    // düz/tekli bir "bu ülkede yayında" işareti (bkz. Map2D.jsx'teki aynı sadeleştirme).
+    const actorByIso2 = actorFilter
+      ? new Map(
+          Array.from(actorFilter.byIso2 instanceof Map ? actorFilter.byIso2.entries() : []).map(([iso2, score]) => [
+            iso2,
+            { score },
+          ])
+        )
+      : null
+
     world
       .polygonsData(geoFeatures)
       .polygonCapColor((f) => {
         const iso2 = f.properties.ISO_A2
+        if (actorByIso2) {
+          const entry = actorByIso2.get(iso2)
+          return entry ? ACTOR_FILTER_COLOR : NO_DATA_COLOR
+        }
         if (seriesByIso2) {
           const value = seriesByIso2.get(iso2)
           return value != null ? scoreToColor(value / 100) : NO_DATA_COLOR
@@ -293,6 +291,10 @@ export default function Globe3D({
       .polygonLabel((f) => {
         const name = displayName(f)
         const iso2 = f.properties.ISO_A2
+        if (actorByIso2) {
+          const entry = actorByIso2.get(iso2)
+          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${entry ? `Görünürlük skoru: ${entry.score.toFixed(1)}` : 'Veri yok'}</div>`
+        }
         if (seriesByIso2) {
           const value = seriesByIso2.get(iso2)
           return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${value != null ? `Arama ilgisi: ${value}` : 'Veri yok'}</div>`
@@ -317,9 +319,10 @@ export default function Globe3D({
         }
         onSelect?.({ ...c, name: displayName(f) })
       })
-  }, [countries, geoFeatures, onSelect, actorHighlight, selectedIso2, seriesFilter, continentHighlight])
+  }, [countries, geoFeatures, onSelect, actorHighlight, selectedIso2, seriesFilter, actorFilter, continentHighlight])
 
   useEffect(() => {
+    popupRef.current = popup
     const world = globeRef.current
     if (!world) return
     world.htmlElementsData(popup && popup.lat != null && popup.lng != null ? [popup] : [])

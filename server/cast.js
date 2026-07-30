@@ -40,13 +40,17 @@ export async function buildPersonImpact(personId) {
     })
     .sort((a, b) => b.totalScore - a.totalScore)
 
-  const { castEntry: firstCastEntry } = appearances[0]
+  // TMDB kadro girdilerinden bazılarında profilePath eksik olabiliyor — sadece ilk
+  // görünüme (appearances[0]) bakmak, o dizideki kaydı boşsa oyuncunun BAŞKA bir
+  // dizide gerçekten var olan fotoğrafını da göz ardı edip görseli hiç göstermiyordu.
+  // Fotoğrafı olan İLK kaydı kullanmak bu veri kaybını önlüyor.
+  const personSource = appearances.find((a) => a.castEntry.profilePath) || appearances[0]
   return {
     status: 'ready',
     person: {
       id,
-      name: firstCastEntry.name,
-      profilePath: firstCastEntry.profilePath,
+      name: personSource.castEntry.name,
+      profilePath: personSource.castEntry.profilePath,
     },
     series,
   }
