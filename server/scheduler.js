@@ -29,7 +29,7 @@ async function runScheduledRefresh() {
 // (visibility_history) kesintiye uğramaz ve veri her zaman en fazla ~24
 // saatlik.
 //
-// SerpAPI/Trakt bilerek bu döngüye DAHİL EDİLMEDİ: onlar talep-üzerine ve
+// SerpAPI/IMDb (OMDb) bilerek bu döngüye DAHİL EDİLMEDİ: onlar talep-üzerine ve
 // aylık kotalı (bkz. bütçe raporu, SerpAPI free tier 250 sorgu/ay) — 200
 // diziyi otomatik taramak kotayı anında tüketir. TMDB ve dahili LLM
 // sunucusunun böyle bir kısıtı yok.

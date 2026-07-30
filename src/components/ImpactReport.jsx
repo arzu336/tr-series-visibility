@@ -4,6 +4,8 @@ import countryNames from '../data/country-centroids.json'
 import { trendLabel } from '../lib/trend.js'
 import DonutChart from './DonutChart.jsx'
 import DonutRankedList from './DonutRankedList.jsx'
+import BenchmarkCard from './BenchmarkCard.jsx'
+import TurkishLearningIndex from './TurkishLearningIndex.jsx'
 
 // Doğrulanmış kategorik palet (dataviz skill, --mode dark, gerçek arka planımız #05070d'ye
 // göre validate_palette.js ile kontrol edildi) — sabit sırayla atanır, asla döngüyle
@@ -143,7 +145,7 @@ export default function ImpactReport({ onSelectCountry }) {
   return (
     <div className="dashboard">
       <div className="dashboard__header-row">
-        <h2>Etki Raporu</h2>
+        <h2>Ekonomik, Kültürel ve İhracat Etkisi</h2>
         <div className="dashboard__export-actions">
           <button className="dashboard__export-btn dashboard__export-btn--ghost" onClick={() => window.print()}>
             🖨 PDF Olarak Yazdır
@@ -208,6 +210,25 @@ export default function ImpactReport({ onSelectCountry }) {
             )}
           </div>
         </div>
+      </section>
+
+      <section className="dashboard__section">
+        <h3 className="dashboard__section-title">Küresel Kıyaslama — Türkiye vs ABD, Güney Kore, İspanya</h3>
+        <p className="dashboard__hint">
+          Türkiye'nin dizi görünürlüğünü, en büyük üç dizi ihracatçısı ülkeyle kıyaslar. Küresel
+          Pazar Payı ve İhracat Yapılan Ülke Sayısı TMDB popülerlik/yayın-erişimi verisine dayalı
+          bir proxy'dir — resmi ihracat istatistiği değildir (aşağıda metodoloji notuna bakın).
+        </p>
+        <BenchmarkCard />
+      </section>
+
+      <section className="dashboard__section">
+        <h3 className="dashboard__section-title">Türkçe Öğrenme İlgi Endeksi</h3>
+        <p className="dashboard__hint">
+          Türk dizilerinin kültürel etkisini, izleyicilerin Türkçe öğrenmeye yönelik gerçek Google
+          Trends arama ilgisi üzerinden ölçer.
+        </p>
+        <TurkishLearningIndex />
       </section>
 
       <section className="dashboard__section">

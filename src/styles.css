@@ -200,6 +200,18 @@ body {
   color: #8792a8;
 }
 
+.panel__share-note {
+  font-weight: 400;
+  font-size: 0.72rem;
+  color: #8792a8;
+}
+
+.panel__trend-line {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+
 .trend--neutral {
   color: #8792a8;
   font-style: italic;
@@ -383,6 +395,28 @@ body {
 
 .app__nav-btn--active:hover {
   color: #fff;
+}
+
+.app__nav-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 17px;
+  height: 17px;
+  margin-left: 0.4rem;
+  padding: 0 0.35rem;
+  border-radius: 999px;
+  background: #EE3135;
+  color: #fff;
+  font-size: 0.7rem;
+  font-weight: 700;
+  line-height: 1;
+  vertical-align: middle;
+}
+
+.app__nav-btn--active .app__nav-badge {
+  background: #fff;
+  color: #EE3135;
 }
 
 .app__nav-btn--logout {
@@ -1298,5 +1332,878 @@ body {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;
   }
+}
+
+/* --- Harita düzeni: sol kenar çubuğu + harita alanı (Lowy Institute esintili) --- */
+
+.app__map-layout {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+}
+
+.app__map-pane {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  min-height: 600px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Globe3D/Map2D'nin kök elemanı (bkz. src/components/Globe3D.jsx, Map2D.jsx) her zaman
+   width:100%/height:100% ile gelir — flex parent'ta bu satır olmadan bazı tarayıcılarda
+   flex item varsayılan min-height:auto nedeniyle içerik kadar küçülüp üste yapışabiliyordu;
+   min-height:600px + kendi kendine stretch, harita için her zaman kullanılabilir bir alt
+   sınır ve tam ortalanma garantiliyor. */
+.app__map-pane > * {
+  min-height: 0;
+  align-self: stretch;
+}
+
+.sidebar-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.sidebar-toggle {
+  position: absolute;
+  top: 1rem;
+  right: -14px;
+  z-index: 5;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: #EE3135;
+  color: #fff;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.95rem;
+  line-height: 1;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.4);
+}
+
+.sidebar-toggle:hover {
+  background: #f4787b;
+}
+
+.sidebar {
+  width: 280px;
+  flex-shrink: 0;
+  background: #0a0e18;
+  border-right: 1px solid rgba(255, 255, 255, 0.08);
+  padding: 1.1rem;
+  overflow-y: auto;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  transition: width 250ms ease, padding 250ms ease;
+  /* İnce/özel scrollbar — varsayılan kalın tarayıcı scrollbar'ı yerine. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.sidebar::-webkit-scrollbar {
+  width: 6px;
+}
+
+.sidebar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+}
+
+.sidebar--collapsed {
+  width: 0;
+  padding-left: 0;
+  padding-right: 0;
+  border-right: none;
+}
+
+.sidebar__top-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.sidebar__header h3 {
+  margin: 0 0 0.3rem;
+  font-size: 1rem;
+  color: #f1f3f8;
+}
+
+.sidebar__hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #8792a8;
+  line-height: 1.35;
+}
+
+.sidebar__continent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.sidebar__continent-btn {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: #b8c0d1;
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  font-size: 0.83rem;
+  cursor: pointer;
+  transition: border-color 150ms ease, color 150ms ease, background 150ms ease;
+}
+
+.sidebar__continent-btn:hover:not(:disabled) {
+  border-color: #EE3135;
+  color: #f4787b;
+}
+
+.sidebar__continent-btn--active {
+  background: #EE3135;
+  border-color: #EE3135;
+  color: #fff;
+}
+
+.sidebar__continent-btn--active:hover {
+  color: #fff;
+}
+
+.sidebar__continent-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.sidebar__continent-count {
+  font-size: 0.75rem;
+  color: inherit;
+  opacity: 0.75;
+}
+
+.sidebar__body {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.sidebar__stat {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  padding-top: 0.75rem;
+}
+
+.sidebar__stat-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8792a8;
+  margin-bottom: 0.4rem;
+}
+
+.sidebar__stat-value {
+  font-size: 1.3rem;
+  font-weight: 700;
+  color: #f1f3f8;
+}
+
+.sidebar__stat-note {
+  margin: 0.25rem 0 0;
+  font-size: 0.75rem;
+  color: #6b7488;
+  line-height: 1.35;
+}
+
+/* --- Sadeleştirilmiş büyük kartlar (Lowy Institute tarzı, senior-friendly) --- */
+
+.sidebar__big-card {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 1rem 1.1rem;
+  cursor: default;
+}
+
+button.sidebar__big-card {
+  cursor: pointer;
+  transition: border-color 150ms ease, background 150ms ease;
+}
+
+button.sidebar__big-card:hover {
+  border-color: #EE3135;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.sidebar__big-card-label {
+  font-size: 0.85rem;
+  color: #b8c0d1;
+  margin-bottom: 0.4rem;
+}
+
+.sidebar__big-card-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #f1f3f8;
+  line-height: 1.25;
+}
+
+.sidebar__big-card-value--muted {
+  font-size: 1rem;
+  font-weight: 500;
+  color: #6b7488;
+}
+
+.sidebar__big-card-meta {
+  margin-top: 0.3rem;
+  font-size: 0.85rem;
+  color: #8792a8;
+}
+
+.sidebar__details-toggle {
+  background: none;
+  border: none;
+  color: #6da7ec;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.4rem 0;
+  text-align: left;
+}
+
+.sidebar__details {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  padding-top: 0.25rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.sidebar__stat-badges {
+  display: flex;
+  gap: 0.4rem;
+  flex-wrap: wrap;
+}
+
+.sidebar__top-country {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.15rem;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  padding: 0.55rem 0.7rem;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar__top-country:hover {
+  border-color: #EE3135;
+}
+
+.sidebar__top-country-name {
+  font-weight: 600;
+  color: #f1f3f8;
+  font-size: 0.9rem;
+}
+
+.sidebar__top-country-meta {
+  font-size: 0.75rem;
+  color: #8792a8;
+}
+
+/* --- Harita görünümü anahtarı (3D Küre / 2D Harita) --- */
+
+.map-view-toggle {
+  position: absolute;
+  top: 1rem;
+  right: 1rem;
+  z-index: 5;
+  display: flex;
+  background: rgba(10, 14, 24, 0.75);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  padding: 0.2rem;
+  gap: 0.2rem;
+  backdrop-filter: blur(6px);
+}
+
+.map-view-toggle__btn {
+  background: transparent;
+  border: none;
+  color: #b8c0d1;
+  border-radius: 999px;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+
+.map-view-toggle__btn--active {
+  background: #EE3135;
+  color: #fff;
+}
+
+/* --- Dizi bazlı harita filtresi rozeti (madde 1) --- */
+
+.series-filter-badge {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: rgba(6, 182, 212, 0.15);
+  border: 1px solid rgba(34, 211, 238, 0.5);
+  border-radius: 999px;
+  padding: 0.5rem 1rem;
+  font-size: 0.82rem;
+  color: #f1f3f8;
+  backdrop-filter: blur(6px);
+  white-space: nowrap;
+}
+
+.series-filter-badge button {
+  background: rgba(255, 255, 255, 0.1);
+  border: none;
+  border-radius: 999px;
+  color: #f1f3f8;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.75rem;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.series-filter-badge button:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.series-filter-badge--loading {
+  border-color: rgba(255, 255, 255, 0.2);
+  background: rgba(255, 255, 255, 0.06);
+  color: #8792a8;
+}
+
+.series-filter-badge--error {
+  border-color: rgba(255, 107, 107, 0.5);
+  background: rgba(255, 107, 107, 0.12);
+}
+
+/* --- 2D Koroplet harita (Map2D) --- */
+
+.map2d {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  /* Lowy Institute tarzı koyu gece mavisi/füme okyanus zemini. */
+  background: #0a0f1d;
+}
+
+.map2d__svg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+
+.map2d__country {
+  /* İnce, zarif ülke sınırları. */
+  stroke: #1e293b;
+  stroke-width: 0.5;
+  cursor: pointer;
+  transition: filter 150ms ease, stroke 150ms ease, stroke-width 150ms ease;
+}
+
+/* Sade, animasyonsuz sınır + parlama vurgusu — hover/seçim/oyuncu popülerlik ağı (bkz.
+   src/App.jsx actorHighlight) burada kenar rengi/kalınlığı VE hafif bir "brightness"
+   filtresiyle ayırt edilir; sürekli halka/pulse çizen bir animasyon katmanı yok. */
+.map2d__country--hovered {
+  stroke: rgba(255, 255, 255, 0.9);
+  stroke-width: 1.2;
+  filter: brightness(1.3);
+}
+
+.map2d__country--selected {
+  stroke: #ffffff;
+  stroke-width: 1.6;
+  filter: brightness(1.15);
+}
+
+.map2d__country--highlighted {
+  stroke: #f0ad4e;
+  stroke-width: 1.8;
+  filter: brightness(1.15) drop-shadow(0 0 3px rgba(240, 173, 78, 0.7));
+}
+
+/* Kıta seçim vurgusu — aşırı yakınlaşmak yerine kıtaya dahil ülkelerin sınırlarını neon
+   camgöbeği bir hatla belirginleştirir (bkz. src/App.jsx continentHighlight state'i). */
+.map2d__country--continent {
+  stroke: #22d3ee;
+  stroke-width: 1.5;
+  filter: drop-shadow(0 0 2px rgba(34, 211, 238, 0.6));
+}
+
+.map2d__tooltip {
+  position: absolute;
+  pointer-events: none;
+  background: rgba(10, 14, 24, 0.9);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  padding: 0.5rem 0.65rem;
+  font-size: 0.8rem;
+  color: #f1f3f8;
+  max-width: 220px;
+  z-index: 10;
+}
+
+/* Kıta odaklanması (flyTo eşdeğeri) — d3-geo'nun kendi zoom/pan'ı yok, bu yüzden
+   src/App.jsx'teki focusTarget değiştiğinde JS'in hesapladığı transform'u burada
+   yumuşak bir geçişle uyguluyoruz. */
+.map2d__zoom-group {
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: 0 0;
+}
+
+
+@media (max-width: 900px) {
+  .app__map-layout {
+    flex-direction: column;
+  }
+
+  .sidebar {
+    width: 100%;
+    max-height: 40%;
+    border-right: none;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+}
+
+/* --- Küresel Kıyaslama / Türkçe Öğrenme İlgi Endeksi ortak çubuk grafiği --- */
+
+.benchmark-card {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.benchmark-card__bars {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.benchmark-card__row {
+  display: grid;
+  grid-template-columns: 140px 1fr 60px;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.benchmark-card__row-label {
+  font-size: 0.85rem;
+  color: #f1f3f8;
+}
+
+.benchmark-card__row-bar-track {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 6px;
+  height: 10px;
+  overflow: hidden;
+}
+
+.benchmark-card__row-bar {
+  height: 100%;
+  border-radius: 6px;
+  transition: width 300ms ease;
+}
+
+.benchmark-card__row-value {
+  font-size: 0.82rem;
+  color: #8792a8;
+  text-align: right;
+}
+
+/* --- Harita içi Dark Glassmorphism detay kartı (Lowy Institute stili) — Globe3D
+   (DOM/innerHTML) ve Map2D + MapPopupCard.jsx (React/foreignObject) aynı sınıfları
+   paylaşır. Yarı saydam koyu zemin + blur + neon camgöbeği kenarlık. --- */
+
+.map-popup-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  background: rgba(10, 14, 24, 0.55);
+  border: 1px solid rgba(34, 211, 238, 0.4);
+  border-radius: 14px;
+  padding: 0.75rem 0.85rem;
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(34, 211, 238, 0.08) inset;
+  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  color: #f1f3f8;
+  width: 232px;
+  transition: border-color 250ms ease, box-shadow 250ms ease;
+}
+
+.map-popup-card__top {
+  display: flex;
+  gap: 0.65rem;
+  align-items: flex-start;
+}
+
+.map-popup-card__poster-wrap {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.map-popup-card__poster {
+  width: 56px;
+  height: 82px;
+  object-fit: cover;
+  border-radius: 10px;
+  display: block;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
+}
+
+.map-popup-card__poster--empty {
+  display: inline-block;
+}
+
+/* Afişin sağ-alt köşesine hafifçe taşan dairesel IMDb rozeti. */
+.map-popup-card__imdb-badge {
+  position: absolute;
+  right: -10px;
+  bottom: -10px;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 30%, #0891b2, #0a0f1d 78%);
+  border: 1.5px solid #22d3ee;
+  box-shadow: 0 0 10px rgba(34, 211, 238, 0.55);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.map-popup-card__imdb-badge-star {
+  font-size: 0.55rem;
+}
+
+.map-popup-card__imdb-badge-value {
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: #a5f3fc;
+}
+
+.map-popup-card__body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+  padding-top: 0.1rem;
+}
+
+.map-popup-card__name {
+  font-size: 0.88rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.map-popup-card__votes {
+  font-size: 0.72rem;
+  color: #8792a8;
+}
+
+.map-popup-card__pending {
+  font-size: 0.7rem;
+  color: #6b7488;
+  font-style: italic;
+}
+
+.map-popup-card__pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+}
+
+.map-popup-card__pill {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.2rem 0.55rem;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.map-popup-card__pill--trend--up {
+  color: #5cb85c;
+  border-color: rgba(92, 184, 92, 0.4);
+  background: rgba(92, 184, 92, 0.12);
+}
+
+.map-popup-card__pill--trend--down {
+  color: #ff6b6b;
+  border-color: rgba(255, 107, 107, 0.4);
+  background: rgba(255, 107, 107, 0.12);
+}
+
+.map-popup-card__pill--trend--flat,
+.map-popup-card__pill--trend--neutral {
+  color: #8792a8;
+}
+
+.map-popup-card__cast-toggle {
+  align-self: flex-start;
+  background: rgba(34, 211, 238, 0.1);
+  border: 1px solid rgba(34, 211, 238, 0.35);
+  color: #a5f3fc;
+  border-radius: 999px;
+  padding: 0.3rem 0.7rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 200ms ease, border-color 200ms ease;
+}
+
+.map-popup-card__cast-toggle:hover {
+  background: rgba(34, 211, 238, 0.2);
+  border-color: rgba(34, 211, 238, 0.6);
+}
+
+.map-popup-card__cast-list {
+  display: none;
+  margin-top: 0.3rem;
+}
+
+.map-popup-card__cast-list--open {
+  display: block;
+}
+
+/* --- CountryPanel IMDb kartı --- */
+
+.panel__imdb {
+  margin-top: 0.4rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.panel__imdb-rating {
+  font-size: 0.9rem;
+  color: #f0ad4e;
+  font-weight: 600;
+}
+
+.panel__imdb-cast {
+  font-size: 0.78rem;
+  color: #8792a8;
+}
+
+/* --- Dairesel yüzdelik pay göstergesi (CircularProgress.jsx) --- */
+
+.circular-progress {
+  position: relative;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
+}
+
+.circular-progress svg circle {
+  transition: stroke-dashoffset 500ms ease;
+}
+
+.circular-progress__value {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.62rem;
+  font-weight: 700;
+  color: #f1f3f8;
+}
+
+.panel__score-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+}
+
+/* --- Cast Bar (dizi detayındaki oyuncu kadrosu) --- */
+
+.cast-bar {
+  display: flex;
+  gap: 0.6rem;
+  overflow-x: auto;
+  margin-top: 0.6rem;
+  padding-bottom: 0.2rem;
+}
+
+.cast-bar__item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
+  width: 64px;
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.cast-bar__photo {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.06);
+  border: 2px solid transparent;
+  transition: border-color 150ms ease;
+}
+
+.cast-bar__item:hover .cast-bar__photo {
+  border-color: #EE3135;
+}
+
+.cast-bar__photo--empty {
+  display: inline-block;
+}
+
+.cast-bar__name {
+  font-size: 0.7rem;
+  color: #f1f3f8;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+.cast-bar__character {
+  font-size: 0.65rem;
+  color: #8792a8;
+  text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 100%;
+}
+
+/* --- Oyuncu Detay Modalı --- */
+
+.actor-modal {
+  position: relative;
+  width: 100%;
+  max-width: 420px;
+  max-height: 80vh;
+  overflow-y: auto;
+  background: rgba(10, 14, 24, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  padding: 1.25rem;
+  color: #f1f3f8;
+}
+
+.actor-modal__header {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  margin-bottom: 0.5rem;
+}
+
+.actor-modal__header h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.actor-modal__photo {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.actor-modal__photo--empty {
+  display: inline-block;
+}
+
+.actor-modal__show-on-map {
+  margin-top: 0.35rem;
+}
+
+.panel__series-map-filter-btn {
+  display: block;
+  margin-top: 0.6rem;
+}
+
+.actor-modal__network-btn {
+  width: 100%;
+  margin-bottom: 1rem;
+  padding: 0.55rem 0.8rem;
+  background: rgba(240, 173, 78, 0.12);
+  border: 1px solid rgba(240, 173, 78, 0.4);
+  border-radius: 8px;
+  color: #f0ad4e;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.actor-modal__network-btn:hover {
+  background: rgba(240, 173, 78, 0.2);
+}
+
+/* --- Küresel Duolingo kartı (TurkishLearningIndex.jsx) --- */
+
+.global-stat-card {
+  background: rgba(25, 158, 112, 0.08);
+  border: 1px solid rgba(25, 158, 112, 0.3);
+  border-radius: 10px;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 0.5rem;
+}
+
+.global-stat-card__label {
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #8792a8;
+  margin-bottom: 0.3rem;
+}
+
+.global-stat-card__value {
+  font-size: 1.6rem;
+  font-weight: 700;
+  color: #f1f3f8;
+}
+
+.global-stat-card__trend {
+  font-size: 0.82rem;
+  color: #5cb85c;
+  margin-top: 0.2rem;
 }
 

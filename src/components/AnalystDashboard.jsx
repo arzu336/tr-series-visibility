@@ -344,8 +344,8 @@ export default function AnalystDashboard({ canEdit = true }) {
       <h2>Analist Paneli</h2>
       {!canEdit && (
         <p className="dashboard__hint">
-          Sadece Okuyucu erişimindesiniz — kayıtları görebilirsiniz ama düzenleyemezsiniz. Düzenleme
-          yetkisi için bir Yönetici'den Analist erişimi isteyin.
+          Kayıtları görebilirsiniz ama düzenleyemezsiniz — sınıflandırma/destinasyon onayı yalnızca
+          Yönetici (admin) rolüne açıktır.
         </p>
       )}
 

@@ -21,7 +21,7 @@ gorunurluk-platformu/
 │   ├── data-pipeline.js  TMDB çekme + zenginleştirme (route'lar ve scheduler ortak kullanır)
 │   ├── scheduler.js      kod-içi zamanlayıcı (n8n'in kod karşılığı, bkz. aşağı)
 │   ├── db.js             şema + migrasyonlar
-│   ├── tmdb.js / serpapi.js / social-listening.js / trakt.js   dış veri kaynakları
+│   ├── tmdb.js / serpapi.js / social-listening.js / imdb.js   dış veri kaynakları
 │   ├── llm.js / themes.js       LLM tema sınıflandırma + retry/backoff
 │   ├── destinations.js          sinopsis tabanlı destinasyon (turizm bölgesi) tespiti
 │   ├── aggregate.js              ülke bazlı görünürlük skoru hesaplama
@@ -40,9 +40,10 @@ gorunurluk-platformu/
 
 ## Özellikler
 
-### Harita (3D Glob)
-- `globe.gl` + `three.js` ile ülke bazlı görünürlük skoru ısı haritası
-- Bir ülkeye tıklayınca: en popüler dizi, baskın tema, trend yönü, dizi listesi + sparkline geçmişi
+### Harita (3D Glob / 2D Harita)
+- `globe.gl` + `three.js` ile ülke bazlı görünürlük skoru ısı haritası; `d3-geo` ile 2D koroplet alternatifi (görünüm seçimi kalıcı)
+- Bir ülkeye tıklayınca: en popüler dizi, baskın tema, trend yönü, dizi listesi + sparkline geçmişi + haritanın üzerinde afiş/IMDb puanı/ana karakter pop-up kartı
+- Sol kenar çubuğunda kıtasal filtre ve özet kartları
 
 ### Analist Paneli
 - **Tema Sınıflandırma**: LLM'in ürettiği tema + güven skoru; %70 altındaki tahminler "İncelenmesi Gerekenler" olarak insan denetimine düşer (human-in-the-loop, proje raporu §5.2)
@@ -51,13 +52,13 @@ gorunurluk-platformu/
 ### Arama İlgisi
 - Google Trends (SerpAPI) — ülke bazlı arama ilgisi
 - Sosyal Dinleme — Google Bilgi Grafiği beğeni oranı + YouTube fragman etkileşimi (SerpAPI)
-- Trakt.tv — kullanıcı bazlı izleyici/puanlama verisi
-- Üçü de talep-üzerine sorgulanır ve süresiz cache'lenir (SerpAPI'nin aylık kotasını korumak için — bkz. bütçe raporu)
+- IMDb (OMDb API üzerinden) — puan, oy sayısı, ana karakterler
+- Üçü de talep-üzerine sorgulanır ve cache'lenir (SerpAPI'nin aylık kotasını korumak için — bkz. bütçe raporu)
 
 ### Etki Raporu
 - Donut grafiklerle görünürlük skoruna göre en öndeki ülkeler ve en çok görünürlük kazanan destinasyonlar (validated kategorik palet, hover'da grafik↔liste bağlantılı vurgulama)
 - **Yükselen Ülkeler**: trend geçmişine dayalı gerçek yükseliş tespiti (uydurma yön göstermez, yeterli geçmiş yoksa açıkça "veri birikiyor" der) + her ülke için otomatik önerilen DiD kontrol ülkesi
-- **Veri Güveni ve Kaynak Durumu**: TMDB, LLM sınıflandırma, trend geçmişi, SerpAPI, Trakt.tv ve otomatik tazeleyicinin son başarılı çalışma zamanı/durumu
+- **Veri Güveni ve Kaynak Durumu**: TMDB, LLM sınıflandırma, trend geçmişi, SerpAPI, IMDb (OMDb) ve otomatik tazeleyicinin son başarılı çalışma zamanı/durumu
 - **Turizm ve İhracat Korelasyonu**: yöntem (Pearson + %95 güven aralığı + DiD) hazır ve test edilmiş, gerçek TÜİK/Kültür ve Turizm Bakanlığı verisi gelene kadar sayı üretmez — "Gerçek Veri Bekleniyor" olarak işaretli
 - PDF olarak yazdırma (tarayıcının native print'i; header/nav gizlenip tüm rapor tek sayfada basılır)
 
@@ -72,7 +73,7 @@ gorunurluk-platformu/
 | TMDB API | Dizi metadata, popülerlik, yayın ülkesi/platformu (JustWatch ortaklığından) | Kullanımda | Ücretsiz |
 | SerpAPI (Google Trends) | Ülke bazlı arama ilgisi | Kullanımda | Ücretsiz (aylık kotalı) |
 | SerpAPI (Google/YouTube) | Bilgi Grafiği beğeni oranı, YouTube fragman verisi | Kullanımda | Ücretsiz (aynı kota) |
-| Trakt.tv API | Kullanıcı bazlı izleme/puanlama | Kullanımda | Ücretsiz (düşük hacim) |
+| OMDb API (IMDb verisi) | Puan, oy sayısı, ana karakterler | Kullanımda | Ücretsiz (düşük hacim) |
 | Dahili LLM sunucusu | Tema sınıflandırma, güven skoru | Kullanımda | Kurumsal, ücretsiz |
 | World Bank Açık Veri API | GSYH (kişi başı), bölge, gelir grubu — DiD kontrol ülke eşleştirmesi için | Kullanımda | Ücretsiz, anahtarsız |
 | Parrot Analytics | Talep (demand) skoru | Planlı | Ücretli |
@@ -81,8 +82,8 @@ gorunurluk-platformu/
 
 ## Otomasyon ve Güvenilirlik
 
-- **Cache stratejisi**: Ham TMDB verisi 24 saat SQLite'ta cache'lenir (`cache.js`); talep-üzerine kaynaklar (SerpAPI, Trakt, World Bank) süresiz cache'lenir.
-- **Zamanlanmış tazeleme** (`scheduler.js`): Proje raporunun §4.7'sinde önerilen n8n tabanlı otomasyon katmanının kod-içi karşılığı. Ayrı bir workflow aracı kurmadan, TMDB + LLM sınıflandırma + trend anlık görüntüsünü günde bir kez otomatik tetikler — hiç kullanıcı gelmese bile trend takibi kesintiye uğramaz. SerpAPI/Trakt bilerek bu döngüye dahil edilmemiştir (aylık kota riski).
+- **Cache stratejisi**: Ham TMDB verisi 24 saat SQLite'ta cache'lenir (`cache.js`); talep-üzerine kaynaklar (SerpAPI, World Bank) süresiz, IMDb (OMDb) verisi 30 gün cache'lenir.
+- **Zamanlanmış tazeleme** (`scheduler.js`): Proje raporunun §4.7'sinde önerilen n8n tabanlı otomasyon katmanının kod-içi karşılığı. Ayrı bir workflow aracı kurmadan, TMDB + LLM sınıflandırma + trend anlık görüntüsünü günde bir kez otomatik tetikler — hiç kullanıcı gelmese bile trend takibi kesintiye uğramaz. SerpAPI/IMDb bilerek bu döngüye dahil edilmemiştir (aylık kota/oran riski).
 - **LLM sınıflandırma dayanıklılığı** (`llm.js`, `themes.js`): İstek zaman aşımı + 429/5xx için üstel geri çekilmeli (exponential backoff) yeniden deneme; kalıcı başarısızlıklar `classification_failures` tablosunda sayılıp bir sonraki denemeye kadar geri çekilme süresiyle işaretlenir. Yeni diziler en fazla 5 eşzamanlı istekle sınıflandırılır (sıralı değil).
 - **Veri Güveni paneli** (`source-health.js`): yukarıdaki her mekanizmanın durumunu (son başarı zamanı, bekleyen/başarısız kayıt sayısı) tek bir API'de (`/api/source-health`) toplar.
 
@@ -105,7 +106,7 @@ npm install
 ```bash
 TMDB_API_KEY=...           # themoviedb.org
 SERPAPI_API_KEY=...        # serpapi.com
-TRAKT_CLIENT_ID=...        # trakt.tv/oauth/applications
+OMDB_API_KEY=...           # omdbapi.com/apikey.aspx (ücretsiz)
 PORT=3001
 APP_PASSWORD=...           # ilk admin hesabının şifresi
 ADMIN_EMAIL=...            # ilk admin hesabının e-postası

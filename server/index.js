@@ -18,8 +18,13 @@ import {
 } from './destinations.js'
 import { queryTrends } from './serpapi.js'
 import { querySocialListening } from './social-listening.js'
-import { queryTraktStats } from './trakt.js'
 import { buildImpactReport } from './impact.js'
+import { getImdbDataForTmdbSeries } from './imdb.js'
+import { buildPersonImpact } from './cast.js'
+import { buildBenchmark } from './benchmark.js'
+import { getTurkishLearningIndex } from './turkish-learning-interest.js'
+import { getRegionalInterest } from './regional-interest.js'
+import { getDuolingoTurkishStats } from './duolingo.js'
 import { COOKIE_NAME, createSession, getSessionUserId, isValidSession, deleteSession, parseCookies, sessionCookieHeader } from './auth.js'
 import {
   ensureBootstrapAdmin,
@@ -135,13 +140,15 @@ app.use('/api', (req, res, next) => {
   res.status(401).json({ error: 'Giriş gerekli' })
 })
 
-// Sınıflandırma/destinasyon düzeltmelerini yalnızca Analist ve Yönetici
-// yapabilir — "Sadece Okuyucu" hesaplar görebilir ama kaydedemez.
-function requireAnalystOrAbove(req, res, next) {
+// Analist Paneli'ndeki sınıflandırma/destinasyon düzeltme ve onaylama
+// fonksiyonları yalnızca Yönetici (admin) rolüne açık — Analist ve Okuyucu
+// hesaplar görebilir ama kaydedemez. İstemci tarafı (nav sekmesini gizleme)
+// tek başına yeterli değil, bu yüzden sunucu da aynı kısıtı uygular.
+function requireAdmin(req, res, next) {
   const userId = getSessionUserId(req.cookies[COOKIE_NAME])
   const user = userId ? getUser(userId) : null
-  if (!user || user.accessLevel === 'viewer') {
-    return res.status(403).json({ error: 'Bu işlem için Analist veya Yönetici yetkisi gerekir' })
+  if (!user?.isAdmin) {
+    return res.status(403).json({ error: 'Bu işlem için Yönetici yetkisi gerekir' })
   }
   req.currentUser = user
   next()
@@ -236,7 +243,7 @@ app.get('/api/themes', async (req, res) => {
   res.json({ items: list })
 })
 
-app.post('/api/themes/:seriesId/override', requireAnalystOrAbove, (req, res) => {
+app.post('/api/themes/:seriesId/override', requireAdmin, (req, res) => {
   try {
     const { theme, reviewer } = req.body || {}
     const entry = setHumanOverride(req.params.seriesId, theme, reviewer)
@@ -286,7 +293,7 @@ app.get('/api/destinations', async (req, res) => {
   }
 })
 
-app.post('/api/destinations/:seriesId/override', requireAnalystOrAbove, (req, res) => {
+app.post('/api/destinations/:seriesId/override', requireAdmin, (req, res) => {
   try {
     const { destinationIds, reviewer } = req.body || {}
     const entry = setHumanTags(req.params.seriesId, destinationIds, reviewer)
@@ -334,12 +341,42 @@ app.get('/api/social/:seriesName', async (req, res) => {
   }
 })
 
-app.get('/api/trakt/:seriesName', async (req, res) => {
+app.get('/api/imdb/:tmdbId', async (req, res) => {
   try {
-    const data = await queryTraktStats(req.params.seriesName)
+    const data = await getImdbDataForTmdbSeries(req.params.tmdbId)
     res.json(data)
   } catch (err) {
-    console.error('[trakt] hata:', err.message)
+    console.error('[imdb] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/person/:personId', async (req, res) => {
+  try {
+    const data = await buildPersonImpact(req.params.personId)
+    res.json(data)
+  } catch (err) {
+    console.error('[person] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/regional-interest/:seriesName/:iso2', async (req, res) => {
+  try {
+    const data = await getRegionalInterest(req.params.seriesName, req.params.iso2)
+    res.json(data)
+  } catch (err) {
+    console.error('[regional-interest] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/duolingo-stats', async (req, res) => {
+  try {
+    const data = await getDuolingoTurkishStats()
+    res.json(data)
+  } catch (err) {
+    console.error('[duolingo-stats] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })
@@ -351,6 +388,26 @@ app.get('/api/impact', async (req, res) => {
     res.json(await buildImpactReport(data.countries, destinationRanking))
   } catch (err) {
     console.error('[impact] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/benchmark', async (req, res) => {
+  try {
+    const data = await buildBenchmark()
+    res.json(data)
+  } catch (err) {
+    console.error('[benchmark] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/turkish-learning-index', async (req, res) => {
+  try {
+    const data = await getTurkishLearningIndex()
+    res.json(data)
+  } catch (err) {
+    console.error('[turkish-learning-index] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })

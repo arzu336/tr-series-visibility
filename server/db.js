@@ -88,18 +88,12 @@ db.exec(`
     news_sentiment TEXT
   );
 
-  CREATE TABLE IF NOT EXISTS trakt_cache (
-    key TEXT PRIMARY KEY,
-    series_name TEXT,
-    queried_at TEXT,
-    matched_title TEXT,
-    matched_year INTEGER,
+  CREATE TABLE IF NOT EXISTS imdb_cache (
+    imdb_id TEXT PRIMARY KEY,
     rating REAL,
     votes INTEGER,
-    watchers INTEGER,
-    plays INTEGER,
-    collectors INTEGER,
-    trakt_url TEXT
+    top_cast TEXT,
+    updated_at TEXT
   );
 
   CREATE TABLE IF NOT EXISTS classification_failures (
@@ -111,11 +105,41 @@ db.exec(`
     last_failed_at INTEGER,
     next_retry_at INTEGER
   );
+
+  CREATE TABLE IF NOT EXISTS turkish_learning_cache (
+    key TEXT PRIMARY KEY,
+    queried_at TEXT,
+    by_country TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS benchmark_history (
+    country_code TEXT,
+    total_score REAL,
+    captured_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_benchmark_history_code ON benchmark_history(country_code);
+
+  CREATE TABLE IF NOT EXISTS regional_interest_cache (
+    key TEXT PRIMARY KEY,
+    series_name TEXT,
+    iso2 TEXT,
+    queried_at TEXT,
+    by_region TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS duolingo_history (
+    total_learners INTEGER,
+    captured_at INTEGER
+  );
 `)
 
 // Rastgele Denetim özelliği kaldırıldı — sadece test verisi biriktirmişti,
 // gerçek kullanım yoktu.
 db.exec('DROP TABLE IF EXISTS spot_checks')
+
+// Trakt.tv entegrasyonu kaldırıldı, yerine OMDb API tabanlı imdb_cache geldi
+// (bkz. server/imdb.js) — eski kurulumlarda kalan tabloyu temizliyoruz.
+db.exec('DROP TABLE IF EXISTS trakt_cache')
 
 const cacheColumns = db.prepare("PRAGMA table_info(cache_entries)").all()
 if (!cacheColumns.some((c) => c.name === 'updated_at')) {

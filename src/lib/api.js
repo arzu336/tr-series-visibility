@@ -40,12 +40,32 @@ export async function fetchSocialListening(seriesName) {
   return handle(await fetch(`/api/social/${encodeURIComponent(seriesName)}`))
 }
 
-export async function fetchTraktStats(seriesName) {
-  return handle(await fetch(`/api/trakt/${encodeURIComponent(seriesName)}`))
+export async function fetchImdbData(tmdbSeriesId) {
+  return handle(await fetch(`/api/imdb/${tmdbSeriesId}`))
+}
+
+export async function fetchPersonImpact(personId) {
+  return handle(await fetch(`/api/person/${personId}`))
 }
 
 export async function fetchImpactReport() {
   return handle(await fetch('/api/impact'))
+}
+
+export async function fetchBenchmark() {
+  return handle(await fetch('/api/benchmark'))
+}
+
+export async function fetchTurkishLearningIndex() {
+  return handle(await fetch('/api/turkish-learning-index'))
+}
+
+export async function fetchRegionalInterest(seriesName, iso2) {
+  return handle(await fetch(`/api/regional-interest/${encodeURIComponent(seriesName)}/${iso2}`))
+}
+
+export async function fetchDuolingoStats() {
+  return handle(await fetch('/api/duolingo-stats'))
 }
 
 export async function fetchAuthStatus() {

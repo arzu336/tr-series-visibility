@@ -1,5 +1,11 @@
-// ColorBrewer "YlOrRd" sıralı (sequential) paleti — düşük-yüksek skor için erişilebilir gradyan.
-const STOPS = ['#ffffb2', '#fecc5c', '#fd8d3c', '#f03b20', '#bd0026']
+// Lowy Institute tarzı tek-tonlu (tek hue) camgöbeği/turkuaz sıralı (sequential) palet —
+// koyu lacivert harita zemininde düşükten yükseğe okunaklı bir gradyan. dataviz skill'in
+// validate_palette.js'i ile doğrulandı (--ordinal --mode dark --surface #0a0f1d): lightness
+// monotone, tek hue (yayılım 18°), karanlık zeminde düşük uç için yeterli kontrast (3.57:1).
+// Kullanıcının istediği #06b6d4/#22d3ee/#a5f3fc aynen korundu; sadece düşük uç (#1e3a8a,
+// mavi tonu farklı bir hue idi ve zeminle yeterince kontrast etmiyordu) aynı camgöbeği
+// ailesinden iki durakla (#0e7490, #0891b2) değiştirildi.
+const STOPS = ['#0e7490', '#0891b2', '#06b6d4', '#22d3ee', '#a5f3fc']
 
 function hexToRgb(hex) {
   const n = parseInt(hex.slice(1), 16)
@@ -24,3 +30,14 @@ export function scoreToColor(t) {
 }
 
 export const legendStops = STOPS
+
+// Globe3D (WebGL) hover'da CSS filter kullanamıyor — "hafif parlama" efektini burada,
+// rengi beyaza doğru hafifçe iten bir lerp ile üretiyoruz. Map2D bunun yerine CSS
+// `filter: brightness()` kullanıyor (bkz. styles.css .map2d__country--hovered).
+export function brightenRgb(rgbString, amount = 0.25) {
+  const match = rgbString.match(/\d+/g)
+  if (!match) return rgbString
+  const [r, g, b] = match.map(Number)
+  const lift = (channel) => Math.round(lerp(channel, 255, amount))
+  return `rgb(${lift(r)}, ${lift(g)}, ${lift(b)})`
+}

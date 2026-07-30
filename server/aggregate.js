@@ -47,9 +47,19 @@ export function buildVisibility(rawData, themeStore, destinationStore = {}) {
         overview: show.overview || '',
         theme,
         destinations,
+        cast: show.cast || [],
       })
       if (!bucket.topSeries || show.popularity > bucket.topSeries.popularity) {
-        bucket.topSeries = { name: show.name, popularity: show.popularity }
+        // id + posterPath + cast: harita içi pop-up kartının (bkz. src/App.jsx popup state'i)
+        // hangi TMDB dizisi için IMDb verisi çekeceğini, afişini ve öne çıkan karakterini
+        // (cast[0]) göstereceğini bilmesi için.
+        bucket.topSeries = {
+          id: show.id,
+          name: show.name,
+          popularity: show.popularity,
+          posterPath: show.posterPath || null,
+          cast: show.cast || [],
+        }
       }
 
       bucket.themeScores[theme] = (bucket.themeScores[theme] || 0) + show.popularity

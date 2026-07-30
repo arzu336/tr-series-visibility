@@ -1,6 +1,10 @@
 import { legendStops } from '../lib/scale.js'
 
-export default function Legend() {
+// caption verilmezse (madde 1 — dizi bazlı harita filtresi aktif değilken) varsayılan TMDB
+// açıklaması gösterilir; seriesFilter aktifken App.jsx buraya gerçek anlamı (Google Trends
+// arama ilgisi) yansıtan bir açıklama geçer — aynı renk skalası farklı bir metriğe
+// uygulandığında kullanıcı bunun ne olduğunu yanlış anlamasın diye.
+export default function Legend({ caption }) {
   return (
     <div className="legend">
       <span className="legend__label">Düşük</span>
@@ -12,9 +16,12 @@ export default function Legend() {
       <span className="legend__label">Yüksek</span>
       <p
         className="legend__caption"
-        title="TMDB'nin kendi popülerlik metriği (arama, oy ve trend sinyallerinin karışımı) × o ülkede yayında olma durumu. Gerçek izlenme/rating rakamı değildir — bir yakınsama (proxy) göstergesidir."
+        title={
+          caption ||
+          "TMDB'nin kendi popülerlik metriği (arama, oy ve trend sinyallerinin karışımı) × o ülkede yayında olma durumu. Gerçek izlenme/rating rakamı değildir — bir yakınsama (proxy) göstergesidir."
+        }
       >
-        Kültürel Görünürlük Skoru (TMDB popülerliği × yayın erişimi) ⓘ
+        {caption ? caption.split(' — ')[0] : 'Kültürel Görünürlük Skoru (TMDB popülerliği × yayın erişimi)'} ⓘ
       </p>
     </div>
   )

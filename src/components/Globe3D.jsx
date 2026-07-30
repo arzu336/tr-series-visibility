@@ -1,31 +1,146 @@
 import { useEffect, useRef, useState } from 'react'
 import Globe from 'globe.gl'
 import * as THREE from 'three'
-import { scoreToColor } from '../lib/scale.js'
+import { scoreToColor, brightenRgb } from '../lib/scale.js'
+import { fetchCountryGeoJSON } from '../lib/geo.js'
+import { resolveIso2FromLabel } from '../lib/continents.js'
+import { trendLabel } from '../lib/trend.js'
 import turkishNames from '../data/country-centroids.json'
 
 function displayName(feat) {
   return turkishNames[feat.properties.ISO_A2]?.name || feat.properties.NAME
 }
 
-const COUNTRIES_GEOJSON_URL =
-  'https://raw.githubusercontent.com/vasturiano/globe.gl/master/example/datasets/ne_110m_admin_0_countries.geojson'
-
 const MIN_ALTITUDE = 0.006
 const MAX_ALTITUDE = 0.22
-const NO_DATA_COLOR = 'rgba(60, 68, 88, 0.55)'
+// Lowy Institute paleti: koyu mat lacivert taban (veri yoksa).
+const NO_DATA_COLOR = '#131c31'
 const DEFAULT_VIEW = { lat: 15, lng: 20, altitude: 2.4 }
-const FOCUS_ALTITUDE = 1.1
+// Tekil ülke odaklanması — önceki 1.1 aşırı yakınlaşıyordu, ülke ve komşularının rahatça
+// görülebildiği daha gevşek bir mesafeye çekildi.
+const FOCUS_ALTITUDE = 1.8
+const POSTER_BASE = 'https://image.tmdb.org/t/p/w154'
+const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185'
 
-export default function Globe3D({ countries, onSelect }) {
+function formatVotes(n) {
+  if (n == null) return null
+  if (n >= 1000) return `${Math.round(n / 100) / 10}k`
+  return String(n)
+}
+// İnce, zarif ülke sınırları (Map2D ile aynı renk) — hover/seçim/highlight bunun üzerine
+// sadece kenar rengi/kalınlığı olarak eklenir, ayrı bir katman yok.
+const STROKE_DEFAULT = '#1e293b'
+const STROKE_HOVER = 'rgba(255, 255, 255, 0.9)'
+const STROKE_SELECTED = '#ffffff'
+const STROKE_HIGHLIGHT = '#f0ad4e'
+const STROKE_CONTINENT = '#22d3ee'
+
+// Lowy Institute tarzı Dark Glassmorphism harita içi detay kartı — globe.gl'in htmlElement
+// API'si React'ten bağımsız çalıştığı için DOM'u burada elle inşa ediyoruz (event delegation
+// ile — inline onclick yerine querySelector + addEventListener, kapanışla d.onSelectActor'a
+// bağlanıyor). Aynı görünüm Map2D.jsx'te MapPopupCard.jsx (gerçek React bileşeni) olarak
+// tekrarlanır — ikisi de aynı .map-popup-card sınıflarını paylaşır. 1. aşama dizi + skor +
+// tema + trend + IMDb gösterir; "Ana Karakterler & Kadro" butonu kadroyu açar, bir oyuncuya
+// tıklamak mevcut ActorModal akışını (3. aşama) tetikler.
+function buildPopupElement(d) {
+  const el = document.createElement('div')
+  el.className = 'map-popup-card'
+
+  const posterHtml = d.series.posterPath
+    ? `<img class="map-popup-card__poster" src="${POSTER_BASE}${d.series.posterPath}" alt="" />`
+    : `<span class="map-popup-card__poster map-popup-card__poster--empty" aria-hidden="true"></span>`
+
+  const imdbReady = d.imdbStatus === 'ready' && d.imdb?.rating != null
+  const imdbBadgeHtml = imdbReady
+    ? `<div class="map-popup-card__imdb-badge"><span class="map-popup-card__imdb-badge-star">⭐</span><span class="map-popup-card__imdb-badge-value">${d.imdb.rating.toFixed(1)}</span></div>`
+    : ''
+  const votesOrPendingHtml =
+    imdbReady && d.imdb.votes != null
+      ? `<div class="map-popup-card__votes">(${formatVotes(d.imdb.votes)} Oy)</div>`
+      : d.imdbStatus !== 'ready'
+        ? `<div class="map-popup-card__pending">IMDb verisi güncelleniyor…</div>`
+        : ''
+
+  const trendInfo = trendLabel(d.trend)
+  const cast = d.series.cast || []
+  const castRowHtml = cast
+    .map(
+      (actor) => `
+        <button class="cast-bar__item" data-actor-id="${actor.id}">
+          ${actor.profilePath ? `<img class="cast-bar__photo" src="${PROFILE_BASE}${actor.profilePath}" alt="" />` : `<span class="cast-bar__photo cast-bar__photo--empty" aria-hidden="true"></span>`}
+          <span class="cast-bar__name">${actor.name}</span>
+          ${actor.character ? `<span class="cast-bar__character">${actor.character}</span>` : ''}
+        </button>
+      `
+    )
+    .join('')
+
+  el.innerHTML = `
+    <div class="map-popup-card__top">
+      <div class="map-popup-card__poster-wrap">
+        ${posterHtml}
+        ${imdbBadgeHtml}
+      </div>
+      <div class="map-popup-card__body">
+        <div class="map-popup-card__name">${d.series.name}</div>
+        ${votesOrPendingHtml}
+      </div>
+    </div>
+    <div class="map-popup-card__pills">
+      ${d.dominantTheme ? `<span class="map-popup-card__pill">${d.dominantTheme}${d.isThemeUncertain ? ' ?' : ''}</span>` : ''}
+      <span class="map-popup-card__pill">Skor ${d.score != null ? d.score.toFixed(1) : '—'}</span>
+      <span class="map-popup-card__pill map-popup-card__pill--${trendInfo.className}">${trendInfo.icon} ${trendInfo.pct != null ? `${trendInfo.pct}%` : 'Yeni'}</span>
+    </div>
+    ${
+      cast.length > 0
+        ? `
+      <button class="map-popup-card__cast-toggle">🎭 Ana Karakterler & Kadro <span class="map-popup-card__cast-toggle-arrow">▸</span></button>
+      <div class="map-popup-card__cast-list">
+        <div class="cast-bar">${castRowHtml}</div>
+      </div>
+    `
+        : ''
+    }
+  `
+
+  const toggleBtn = el.querySelector('.map-popup-card__cast-toggle')
+  const castListEl = el.querySelector('.map-popup-card__cast-list')
+  if (toggleBtn && castListEl) {
+    toggleBtn.addEventListener('click', () => {
+      const isOpen = castListEl.classList.toggle('map-popup-card__cast-list--open')
+      toggleBtn.querySelector('.map-popup-card__cast-toggle-arrow').textContent = isOpen ? '▾' : '▸'
+    })
+  }
+  el.querySelectorAll('.cast-bar__item').forEach((btn) => {
+    const actorId = Number(btn.dataset.actorId)
+    btn.addEventListener('click', () => d.onSelectActor?.(actorId))
+  })
+
+  return el
+}
+
+export default function Globe3D({
+  countries,
+  onSelect,
+  popup,
+  focusTarget,
+  actorHighlight,
+  selectedIso2,
+  seriesFilter,
+  continentHighlight,
+  onResetView,
+}) {
   const containerRef = useRef(null)
   const globeRef = useRef(null)
+  const hoveredRef = useRef(null)
+  const selectedIso2Ref = useRef(null)
+  const actorHighlightRef = useRef(new Set())
+  const continentHighlightRef = useRef(null)
   const [geoFeatures, setGeoFeatures] = useState(null)
 
   useEffect(() => {
-    fetch(COUNTRIES_GEOJSON_URL)
-      .then((res) => res.json())
-      .then((data) => setGeoFeatures(data.features))
+    fetchCountryGeoJSON()
+      .then(setGeoFeatures)
       .catch((err) => console.error('[Globe3D] Ülke sınırı verisi alınamadı:', err.message))
   }, [])
 
@@ -39,6 +154,17 @@ export default function Globe3D({ countries, onSelect }) {
       .atmosphereColor('#7fb6ff')
       .atmosphereAltitude(0.18)
       .polygonsTransitionDuration(300)
+      .htmlElementsData([])
+      .htmlLat((d) => d.lat)
+      .htmlLng((d) => d.lng)
+      .htmlAltitude(0.02)
+      .htmlElement(buildPopupElement)
+      // Sade hover vurgusu — globe.gl'in kendi dokümante edilen deseni: hoveredRef bir
+      // useRef olduğu için polygonStrokeColor accessor'ı her çağrıldığında güncel değeri
+      // okur, ayrı bir re-render/efekt tetiklemeye gerek kalmaz.
+      .onPolygonHover((f) => {
+        hoveredRef.current = f
+      })
 
     world.controls().autoRotate = true
     world.controls().autoRotateSpeed = 0.5
@@ -62,15 +188,46 @@ export default function Globe3D({ countries, onSelect }) {
     container.addEventListener('pointerenter', pause)
     container.addEventListener('pointerleave', resume)
 
+    // globe.gl kendi container'ının boyut değişimini izlemiyor (kurulu sürümde
+    // ResizeObserver/window-resize dinleyicisi yok) — sol panel açılıp kapandığında
+    // veya daraltılıp genişletildiğinde küre eski boyutunda kalıp yanlış ortalanmış
+    // görünüyordu. Container'ı elle izleyip .width()/.height() accessor'larını
+    // güncelliyoruz; bu şikayetin kök nedeni tam olarak buydu.
+    const resizeObserver = new ResizeObserver((entries) => {
+      const entry = entries[0]
+      if (!entry) return
+      const { width, height } = entry.contentRect
+      if (width > 0 && height > 0) {
+        world.width(width).height(height)
+      }
+    })
+    resizeObserver.observe(container)
+
     globeRef.current = world
 
     return () => {
+      resizeObserver.disconnect()
       container.removeEventListener('pointerenter', pause)
       container.removeEventListener('pointerleave', resume)
       container.innerHTML = ''
       globeRef.current = null
     }
   }, [])
+
+  // selectedIso2/actorHighlight prop'ları sık değişmez ama polygon accessor'ları
+  // (aşağıdaki efekt) her ikisini de closure ile yakaladığı için bu ref'ler üzerinden
+  // güncel tutuluyor — hover ile aynı desen.
+  useEffect(() => {
+    selectedIso2Ref.current = selectedIso2 || null
+  }, [selectedIso2])
+
+  useEffect(() => {
+    actorHighlightRef.current = new Set((actorHighlight || []).map((h) => h.iso2))
+  }, [actorHighlight])
+
+  useEffect(() => {
+    continentHighlightRef.current = continentHighlight || null
+  }, [continentHighlight])
 
   useEffect(() => {
     const world = globeRef.current
@@ -92,29 +249,62 @@ export default function Globe3D({ countries, onSelect }) {
       console.warn('[Globe3D] Hiçbir ülke sınırı verisiyle eşleşmedi (ISO_A2 kontrol edilmeli)')
     }
 
+    // Madde 1 — dizi bazlı harita filtresi: gerçek, ülke bazlı Google Trends arama ilgisi
+    // (bkz. src/App.jsx seriesFilter state'i). Dolgu/tooltip bunu kullanır; tıklama her
+    // zaman aggregate byIso2'yi kullanmaya devam eder (CountryPanel bunu bekliyor).
+    const seriesByIso2 = seriesFilter
+      ? new Map(
+          (seriesFilter.byCountry || [])
+            .map((entry) => [resolveIso2FromLabel(entry.country), entry.value])
+            .filter(([iso2]) => iso2)
+        )
+      : null
+
     world
       .polygonsData(geoFeatures)
       .polygonCapColor((f) => {
-        const c = byIso2.get(f.properties.ISO_A2)
-        return c ? scoreToColor(c.t) : NO_DATA_COLOR
+        const iso2 = f.properties.ISO_A2
+        if (seriesByIso2) {
+          const value = seriesByIso2.get(iso2)
+          return value != null ? scoreToColor(value / 100) : NO_DATA_COLOR
+        }
+        const c = byIso2.get(iso2)
+        if (!c) return NO_DATA_COLOR
+        const base = scoreToColor(c.t)
+        // "Ülke rengi hafifçe parlasın" — three-globe'un WebGL materyali CSS filter kabul
+        // etmiyor, bu yüzden hover'da rengi beyaza doğru hafifçe iten brightenRgb kullanılır
+        // (bkz. lib/scale.js) — Map2D'deki CSS brightness() filtresinin karşılığı.
+        return f === hoveredRef.current ? brightenRgb(base, 0.22) : base
       })
       .polygonSideColor(() => 'rgba(20, 24, 38, 0.35)')
-      .polygonStrokeColor(() => 'rgba(10, 14, 24, 0.6)')
+      .polygonStrokeColor((f) => {
+        const iso2 = f.properties.ISO_A2
+        // Öncelik sırası: oyuncu popülerlik ağı > seçili ülke > kıta vurgusu > hover > varsayılan.
+        if (actorHighlightRef.current.has(iso2)) return STROKE_HIGHLIGHT
+        if (iso2 === selectedIso2Ref.current) return STROKE_SELECTED
+        if (continentHighlightRef.current?.has(iso2)) return STROKE_CONTINENT
+        if (f === hoveredRef.current) return STROKE_HOVER
+        return STROKE_DEFAULT
+      })
       .polygonAltitude((f) => {
         const c = byIso2.get(f.properties.ISO_A2)
         return c ? MIN_ALTITUDE + c.t * (MAX_ALTITUDE - MIN_ALTITUDE) : 0.003
       })
       .polygonLabel((f) => {
-        const c = byIso2.get(f.properties.ISO_A2)
         const name = displayName(f)
+        const iso2 = f.properties.ISO_A2
+        if (seriesByIso2) {
+          const value = seriesByIso2.get(iso2)
+          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${value != null ? `Arama ilgisi: ${value}` : 'Veri yok'}</div>`
+        }
+        const c = byIso2.get(iso2)
         if (!c) {
           return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>Veri yok</div>`
         }
         return `
           <div style="font: 13px system-ui; padding: 4px 2px;">
             <strong>${name}</strong><br/>
-            Görünürlük skoru: ${c.score.toFixed(1)}<br/>
-            En popüler dizi: ${c.topSeries ? c.topSeries.name : '—'}
+            Görünürlük skoru: ${c.score.toFixed(1)}
           </div>
         `
       })
@@ -127,17 +317,30 @@ export default function Globe3D({ countries, onSelect }) {
         }
         onSelect?.({ ...c, name: displayName(f) })
       })
-  }, [countries, geoFeatures, onSelect])
+  }, [countries, geoFeatures, onSelect, actorHighlight, selectedIso2, seriesFilter, continentHighlight])
+
+  useEffect(() => {
+    const world = globeRef.current
+    if (!world) return
+    world.htmlElementsData(popup && popup.lat != null && popup.lng != null ? [popup] : [])
+  }, [popup])
+
+  useEffect(() => {
+    const world = globeRef.current
+    if (!world || !focusTarget) return
+    world.pointOfView({ lat: focusTarget.lat, lng: focusTarget.lng, altitude: focusTarget.altitude ?? FOCUS_ALTITUDE }, 1200)
+  }, [focusTarget])
 
   const handleReset = () => {
     globeRef.current?.pointOfView(DEFAULT_VIEW, 800)
+    onResetView?.()
   }
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       <button className="globe__reset-btn" onClick={handleReset}>
-        Genel Görünüm
+        🌐 Genel Görünüm
       </button>
     </div>
   )
