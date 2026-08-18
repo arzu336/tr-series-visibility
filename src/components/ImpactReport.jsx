@@ -1,11 +1,18 @@
 import { useEffect, useState } from 'react'
-import { fetchImpactReport } from '../lib/api.js'
+import { fetchImpactReport, fetchGlobalPeriods } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import { trendLabel } from '../lib/trend.js'
 import DonutChart from './DonutChart.jsx'
 import DonutRankedList from './DonutRankedList.jsx'
 import BenchmarkCard from './BenchmarkCard.jsx'
 import TurkishLearningIndex from './TurkishLearningIndex.jsx'
+import PeriodChart from './PeriodChart.jsx'
+import ThemeInsight from './ThemeInsight.jsx'
+
+const MONTH_NAMES_TR = [
+  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
+]
 
 // Doğrulanmış kategorik palet (dataviz skill, --mode dark, gerçek arka planımız #05070d'ye
 // göre validate_palette.js ile kontrol edildi) — sabit sırayla atanır, asla döngüyle
@@ -66,6 +73,9 @@ export default function ImpactReport({ onSelectCountry }) {
   const [error, setError] = useState(null)
   const [hoveredCountryId, setHoveredCountryId] = useState(null)
   const [hoveredDestId, setHoveredDestId] = useState(null)
+  const [periodRange, setPeriodRange] = useState('monthly')
+  const [periodData, setPeriodData] = useState(null)
+  const [periodLoading, setPeriodLoading] = useState(true)
 
   useEffect(() => {
     fetchImpactReport()
@@ -78,6 +88,25 @@ export default function ImpactReport({ onSelectCountry }) {
         setStatus('error')
       })
   }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    setPeriodLoading(true)
+    fetchGlobalPeriods(periodRange)
+      .then((res) => {
+        if (cancelled) return
+        setPeriodData(res)
+        setPeriodLoading(false)
+      })
+      .catch((err) => {
+        if (cancelled) return
+        console.error('[ImpactReport] periods', err.message)
+        setPeriodLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [periodRange])
 
   if (status === 'loading') return <div className="dashboard status">Yükleniyor…</div>
   if (status === 'error') return <div className="dashboard status status--error">Hata: {error}</div>
@@ -244,22 +273,100 @@ export default function ImpactReport({ onSelectCountry }) {
       </section>
 
       <section className="dashboard__section">
+        <h3 className="dashboard__section-title">Zaman İçinde Görünürlük</h3>
+        <p className="dashboard__hint">
+          Tüm ülkelerin toplam görünürlük skorunun periyot bazında değişimi — ham anlık görüntüler
+          budanmadan önce kalıcı bir özet tabloya taşınır (bkz. server/period-history.js), bu
+          yüzden veri zamanla kaybolmaz. Veri Temmuz 2026'da başladığı için yıllık görünüm şimdilik
+          kısmi kalacaktır.
+        </p>
+        <div style={{ opacity: periodLoading ? 0.5 : 1, transition: 'opacity 200ms ease' }}>
+          <PeriodChart
+            periods={periodData?.periods || []}
+            valueKey={periodRange === 'yearly' ? 'avgMonthlyScore' : 'totalScore'}
+            range={periodRange}
+            onRangeChange={setPeriodRange}
+            unitLabel="puan"
+          />
+        </div>
+      </section>
+
+      <section className="dashboard__section">
+        <h3 className="dashboard__section-title">Tema Bazlı AI Yorumu</h3>
+        <p className="dashboard__hint">
+          Şu anda TMDB'de en popüler Türk dizilerinin tema dağılımı + bu dağılıma dayanan bir AI
+          yorumu. AI yorumu sadece aşağıdaki sayılarla sınırlı tutulur, yeni bir istatistik uydurmaz
+          (bkz. server/llm.js generateThemeInsight).
+        </p>
+        <ThemeInsight />
+      </section>
+
+      <section className="dashboard__section">
         <h3 className="dashboard__section-title">{data.pendingAnalysis.title}</h3>
-        <div className="impact__pending-badges">
-          <span className="badge badge--uncertain">Gerçek Veri Bekleniyor</span>
-          <span className="badge badge--info" title="Yöntem (Difference-in-Differences + Pearson korelasyonu + %95 güven aralığı) yazıldı ve test edildi — sadece gerçek turist/ihracat girdisi bekliyor.">
-            Model Hesaplamaya Hazır
-          </span>
-        </div>
-        <div className="impact__pending">
-          <p>{data.pendingAnalysis.description}</p>
-          <p className="impact__pending-label">Gereken kaynaklar:</p>
-          <ul>
-            {data.pendingAnalysis.requiredSources.map((src) => (
-              <li key={src}>{src}</li>
-            ))}
-          </ul>
-        </div>
+        {data.pendingAnalysis.status === 'gerçek-veri-mevcut' ? (
+          <>
+            <div className="impact__pending-badges">
+              <span className="badge badge--info" title={data.pendingAnalysis.dataSource}>
+                Gerçek Veri — {data.pendingAnalysis.sampleSize} ülke örneklemi
+              </span>
+            </div>
+            <p className="dashboard__hint">{data.pendingAnalysis.dataSource}</p>
+            <div className="impact__rising-list">
+              {data.pendingAnalysis.countries.map((c) => (
+                <div key={c.iso2} className="impact__rising-card">
+                  <div className="impact__rising-card-top">
+                    <span className="impact__rising-card-name">{nameOf(c.iso2)}</span>
+                    <span
+                      className="impact__rising-card-change"
+                      style={{ color: c.didEstimate >= 0 ? '#5cb85c' : '#f0574a' }}
+                    >
+                      DiD {c.didEstimate > 0 ? '+' : ''}
+                      {c.didEstimate}
+                    </span>
+                  </div>
+                  <span className="impact__rising-card-meta">
+                    {MONTH_NAMES_TR[c.period.month - 1]} {c.period.beforeYear} → {c.period.afterYear} · kontrol:{' '}
+                    {nameOf(c.control.iso2)} ({c.control.reason})
+                    {c.treatmentChangePct != null &&
+                      ` · turist değişimi ${c.treatmentChangePct > 0 ? '+' : ''}${c.treatmentChangePct}%`}
+                  </span>
+                </div>
+              ))}
+            </div>
+            <p className="dashboard__hint">
+              {data.pendingAnalysis.hasEnoughForCorrelation ? (
+                <>
+                  Dizi görünürlük değişimi ile DiD-düzeltmeli turist sayısı değişimi arasındaki Pearson
+                  korelasyonu: <strong>{data.pendingAnalysis.correlation}</strong>
+                  {data.pendingAnalysis.hasEnoughForConfidenceInterval && data.pendingAnalysis.confidenceInterval
+                    ? ` (%95 güven aralığı: ${data.pendingAnalysis.confidenceInterval.low} – ${data.pendingAnalysis.confidenceInterval.high})`
+                    : ' — %95 güven aralığı için örneklem henüz yetersiz (en az 4 ülke gerekiyor).'}{' '}
+                  Bu bir korelasyondur, nedensellik iddiası değildir.
+                </>
+              ) : (
+                'Korelasyon hesaplamak için en az 3 ülkede örtüşen veri gerekiyor — şu an yeterli değil, yukarıdaki tekil ülke tahminleri (DiD) yine de geçerli.'
+              )}
+            </p>
+          </>
+        ) : (
+          <>
+            <div className="impact__pending-badges">
+              <span className="badge badge--uncertain">Gerçek Veri Bekleniyor</span>
+              <span className="badge badge--info" title="Yöntem (Difference-in-Differences + Pearson korelasyonu + %95 güven aralığı) yazıldı ve test edildi — sadece gerçek turist/ihracat girdisi bekliyor.">
+                Model Hesaplamaya Hazır
+              </span>
+            </div>
+            <div className="impact__pending">
+              <p>{data.pendingAnalysis.description}</p>
+              <p className="impact__pending-label">Gereken kaynaklar:</p>
+              <ul>
+                {data.pendingAnalysis.requiredSources.map((src) => (
+                  <li key={src}>{src}</li>
+                ))}
+              </ul>
+            </div>
+          </>
+        )}
       </section>
     </div>
   )

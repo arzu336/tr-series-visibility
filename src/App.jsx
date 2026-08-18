@@ -39,11 +39,13 @@ export default function App() {
   // Dizi bazlı harita filtresi (madde 1) — dolduğunda harita genel skor yerine SADECE bu
   // dizinin gerçek, ülke bazlı Google Trends arama ilgisine göre renklenir.
   const [seriesFilter, setSeriesFilter] = useState(null) // { seriesName, byCountry } | null
-  // Oyuncu bazlı harita filtresi — "Bu Oyuncunun Tüm Projelerini Haritada Göster" ile
-  // dolar; seriesFilter ile aynı FILL katmanını kullanır (ikisi karşılıklı dışlayıcı,
-  // aynı anda ikisi de aktif olmaz), sadece Google Trends yerine oyuncunun zaten takip
-  // edilen dizilerindeki gerçek ülke bazlı görünürlük skoru toplamını kullanır.
-  const [actorFilter, setActorFilter] = useState(null) // { actorName, byIso2: Map<iso2, score> } | null
+  // Oyuncu VEYA dizi bazlı düz/tekli harita vurgusu — "Bu Oyuncunun/Dizinin Tüm
+  // Projelerini/Ülkelerini Haritada Göster" ile dolar; seriesFilter (Trends tabanlı,
+  // gradyan) ile aynı FILL katmanını kullanır (karşılıklı dışlayıcı), ama gerçek,
+  // zaten yüklü ülke bazlı görünürlük verisinden hesaplanan düz bir "yayında/değil"
+  // işaretidir — kind alanı rozet/etiket metnini oyuncuya göre mi diziye göre mi
+  // yazacağını belirler.
+  const [highlightFilter, setHighlightFilter] = useState(null) // { kind: 'actor'|'series', label, byIso2: Map<iso2, score> } | null
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
     return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
@@ -199,6 +201,9 @@ export default function App() {
     }
   }, [activeSeries?.id])
 
+  // Panel katlanmışken bir ülkeye/oyuncuya/diziye tıklamak veri günceller ama panel
+  // görsel olarak kapalı kaldığı için hiçbir şey görünmüyordu — yeni bir seçim her zaman
+  // paneli otomatik açar.
   const handleSelect = useCallback((country) => {
     setSelected(country)
     // Tek bir ülkeye odaklanmak, önceki oyuncu popülerlik ağı vurgusunu geçersiz kılar —
@@ -207,6 +212,7 @@ export default function App() {
     setActorHighlight(null)
     setActiveSeriesId(null)
     setSearchedSeriesId(null)
+    setPanelCollapsed(false)
   }, [])
 
   const handleSelectCountryFromReport = useCallback(
@@ -217,6 +223,7 @@ export default function App() {
       setActorHighlight(null)
       setActiveSeriesId(null)
       setSearchedSeriesId(null)
+      setPanelCollapsed(false)
       setView('map')
     },
     [countries]
@@ -234,7 +241,19 @@ export default function App() {
   const handleSelectSeriesGlobal = useCallback((seriesId) => {
     setSearchedSeriesId(seriesId)
     setSelectedActorId(null)
+    setPanelCollapsed(false)
   }, [])
+
+  // Sağ paneldeki arama barından bir OYUNCU sonucuna tıklandığında (bkz. CastBar/
+  // PanelSearch) — actor view'ı açar VE paneli otomatik açık hale getirir.
+  const handleSelectActor = useCallback((personId) => {
+    setSelectedActorId(personId)
+    setPanelCollapsed(false)
+  }, [])
+
+  // Arama barından bir ÜLKE sonucuna tıklandığında (bkz. PanelSearch) — mevcut
+  // handleSelectCountryFromReport ile aynı akış, sadece adı farklı bir giriş noktası.
+  const handleSelectCountryGlobal = handleSelectCountryFromReport
 
   // Kıta odaklanması (flyTo) — sidebar'da bir kıta seçildiğinde haritayı o kıtanın gerçek
   // ülke merkezlerinden hesaplanan ağırlık merkezine yumuşak geçişle götürür VE o kıtaya
@@ -255,9 +274,9 @@ export default function App() {
 
   // Bir oyuncunun (sağ paneldeki oyuncu görünümünde) "Bu Oyuncunun Tüm Projelerini Haritada
   // Göster" eylemi — o oyuncunun TÜM dizilerindeki TÜM ülkeleri (skorları toplanmış) hem
-  // kenar vurgusu (actorHighlight, Lowy tarzı düğüm ağı) hem de dolgu/koroplet filtresi
-  // (actorFilter) olarak haritaya geçirir — seriesFilter ile aynı FILL katmanını paylaştığı
-  // için ikisi karşılıklı dışlayıcıdır.
+  // kenar vurgusu (actorHighlight, Lowy tarzı düğüm ağı) hem de dolgu (highlightFilter)
+  // olarak haritaya geçirir — seriesFilter ile aynı FILL katmanını paylaştığı için ikisi
+  // karşılıklı dışlayıcıdır.
   const handleShowActorNetwork = useCallback((actorName, seriesList) => {
     const byIso2 = new Map()
     for (const series of seriesList || []) {
@@ -274,15 +293,30 @@ export default function App() {
       }))
       .filter((h) => h.lat != null && h.lng != null)
     setActorHighlight(highlight)
-    setActorFilter({ actorName, byIso2 })
+    setHighlightFilter({ kind: 'actor', label: actorName, byIso2 })
     setSeriesFilter(null)
     setSelectedActorId(null)
   }, [])
 
-  // TrendsExplorer'da zaten sorgulanmış sonucu tekrar fetch etmeden doğrudan kullanır.
+  // SeriesPanel'deki "Bu Dizinin Küresel Dağılımını Haritada Göster" eylemi — Trends'ten
+  // (arama ilgisi) ayrı bir istek atmaz; SeriesPanel'in zaten client-side hesapladığı
+  // GERÇEK yayın ülkesi listesini (series.countries) doğrudan kullanır. Önceden Google
+  // Trends arama ilgisi verisi (seriesFilter) kullanılıyordu ama bu, "arama ilgisi" ile
+  // "gerçekten yayında olma"yı karıştırıyordu — Trends verisi bazı ülkeler için hiç
+  // olmayabildiğinden dizinin GERÇEKTEN yayınlandığı ülkeler haritada boş görünüyordu.
+  const handleShowSeriesAvailability = useCallback((seriesName, countryScores) => {
+    const byIso2 = new Map((countryScores || []).map((c) => [c.iso2, c.score]))
+    setHighlightFilter({ kind: 'series', label: seriesName, byIso2 })
+    setActorHighlight(null)
+    setSeriesFilter(null)
+  }, [])
+
+  // TrendsExplorer'da zaten sorgulanmış sonucu tekrar fetch etmeden doğrudan kullanır —
+  // bu, Google Trends ARAMA İLGİSİ gradyanını gösteren ayrı/farklı bir özellik
+  // (handleShowSeriesAvailability'nin gerçek yayın verisiyle karıştırılmamalı).
   const handleShowSeriesOnMap = useCallback((result) => {
     setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
-    setActorFilter(null)
+    setHighlightFilter(null)
     setActorHighlight(null)
     setView('map')
   }, [])
@@ -291,8 +325,8 @@ export default function App() {
     setSeriesFilter(null)
   }, [])
 
-  const clearActorFilter = useCallback(() => {
-    setActorFilter(null)
+  const clearHighlightFilter = useCallback(() => {
+    setHighlightFilter(null)
     setActorHighlight(null)
   }, [])
 
@@ -453,12 +487,20 @@ export default function App() {
                         <button onClick={clearSeriesFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
                       </div>
                     )}
-                    {actorFilter && (
+                    {highlightFilter && (
                       <div className="series-filter-badge">
                         <span>
-                          Filtre: <strong>{actorFilter.actorName}</strong> Projeleri
+                          {highlightFilter.kind === 'actor' ? (
+                            <>
+                              Filtre: <strong>{highlightFilter.label}</strong> Projeleri
+                            </>
+                          ) : (
+                            <>
+                              Filtre: <strong>{highlightFilter.label}</strong> — Yayınlandığı Ülkeler
+                            </>
+                          )}
                         </span>
-                        <button onClick={clearActorFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
+                        <button onClick={clearHighlightFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
                       </div>
                     )}
                     {mapView === '3d' ? (
@@ -470,7 +512,7 @@ export default function App() {
                         actorHighlight={actorHighlight}
                         selectedIso2={selected?.iso2}
                         seriesFilter={seriesFilter}
-                        actorFilter={actorFilter}
+                        highlightFilter={highlightFilter}
                         continentHighlight={continentHighlight}
                         onResetView={handleResetMapView}
                       />
@@ -483,7 +525,7 @@ export default function App() {
                         actorHighlight={actorHighlight}
                         selectedIso2={selected?.iso2}
                         seriesFilter={seriesFilter}
-                        actorFilter={actorFilter}
+                        highlightFilter={highlightFilter}
                         continentHighlight={continentHighlight}
                         onResetView={handleResetMapView}
                       />
@@ -492,8 +534,10 @@ export default function App() {
                       caption={
                         seriesFilter
                           ? `"${seriesFilter.seriesName}" için ülke bazlı Google Trends arama ilgisi (0-100) — gerçek izlenme rakamı değil, arama ilgisine dayalı bir yakınsama (proxy) göstergesidir.`
-                          : actorFilter
-                            ? `"${actorFilter.actorName}" oyuncusunun takip edilen dizilerinden en az birinin gerçekten yayınlandığı ülkeler işaretlenir.`
+                          : highlightFilter
+                            ? highlightFilter.kind === 'actor'
+                              ? `"${highlightFilter.label}" oyuncusunun takip edilen dizilerinden en az birinin gerçekten yayınlandığı ülkeler işaretlenir.`
+                              : `"${highlightFilter.label}" dizisinin gerçekten yayınlandığı ülkeler işaretlenir.`
                             : undefined
                       }
                     />
@@ -501,9 +545,10 @@ export default function App() {
                       country={selected}
                       allCountries={countries}
                       onClose={handleCloseSelection}
-                      onSelectActor={setSelectedActorId}
+                      onSelectActor={handleSelectActor}
                       onSelectSeries={handleSelectSeries}
                       onSelectSeriesGlobal={handleSelectSeriesGlobal}
+                      onSelectCountry={handleSelectCountryGlobal}
                       activeSeriesId={activeSeries?.id}
                       collapsed={panelCollapsed}
                       onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
@@ -512,7 +557,7 @@ export default function App() {
                       onShowActorNetwork={handleShowActorNetwork}
                       activeSeriesGlobalId={searchedSeriesId}
                       onCloseSeriesGlobal={() => setSearchedSeriesId(null)}
-                      onShowSeriesOnMap={handleShowSeriesOnMap}
+                      onShowSeriesOnMap={handleShowSeriesAvailability}
                     />
                   </div>
                 </div>

@@ -131,6 +131,25 @@ db.exec(`
     total_learners INTEGER,
     captured_at INTEGER
   );
+
+  CREATE TABLE IF NOT EXISTS visibility_history_monthly (
+    iso2 TEXT,
+    year INTEGER,
+    month INTEGER,
+    avg_score REAL,
+    sample_count INTEGER,
+    PRIMARY KEY (iso2, year, month)
+  );
+
+  CREATE TABLE IF NOT EXISTS tourist_arrivals (
+    iso2 TEXT,
+    year INTEGER,
+    month INTEGER,
+    visitor_count INTEGER,
+    source_bulletin TEXT,
+    imported_at TEXT,
+    PRIMARY KEY (iso2, year, month)
+  );
 `)
 
 // Rastgele Denetim özelliği kaldırıldı — sadece test verisi biriktirmişti,

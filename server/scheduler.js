@@ -1,5 +1,7 @@
 import db from './db.js'
 import { getEnrichedVisibility } from './data-pipeline.js'
+import { rollupMonthlyIfNeeded } from './period-history.js'
+import { syncTourismDataIfNeeded } from './services/tourismData.js'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000 // her 30 dakikada bir "sırası geldi mi" kontrolü
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000 // hedef: günde 1 kez
@@ -15,10 +17,22 @@ async function runScheduledRefresh() {
   console.log('[scheduler] zamanlanmış veri tazeleme başladı')
   try {
     await getEnrichedVisibility()
+    // Ham visibility_history budanmadan önce (bkz. MAX_SNAPSHOTS_PER_COUNTRY, history.js)
+    // tamamlanmış ayları kalıcı özet tabloya taşır — kendi günlük kapısı var (period-history.js).
+    rollupMonthlyIfNeeded()
     setMetaStmt.run(META_KEY, String(Date.now()))
     console.log('[scheduler] zamanlanmış veri tazeleme tamamlandı')
   } catch (err) {
     console.error('[scheduler] zamanlanmış veri tazeleme başarısız:', err.message)
+  }
+
+  // Turizm bülteni ayda bir yayınlanıyor — günlük tazelemeden BAĞIMSIZ, kendi haftalık kapısıyla
+  // (tourismData.js) çalışır; başarısız olursa (site erişilemez, format değişmiş) diğer hiçbir
+  // özelliği etkilemez.
+  try {
+    await syncTourismDataIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] turizm verisi senkronizasyonu başarısız:', err.message)
   }
 }
 

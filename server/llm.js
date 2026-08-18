@@ -111,3 +111,36 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
     confidence: Math.max(0, Math.min(100, Math.round(Number(parsed.confidence)))),
   }
 }
+
+// Tema Bazlı AI Yorumu (bkz. server/services/themeInsight.js): modele SADECE verilen sayılarla
+// konuşmasını söylüyoruz — yeni bir istatistik, oran veya karşılaştırma UYDURMAMASI için prompt
+// açıkça kısıtlanıyor. Sonuç, sayısal dağılımın YANINDA gösterilen bir yorum katmanıdır; sayısal
+// veri hiçbir zaman bu fonksiyonun başarısına bağımlı değildir (bkz. themeInsight.js'teki
+// try/catch — LLM başarısız olursa dağılım yine de döner).
+export async function generateThemeInsight(distribution) {
+  const lines = distribution
+    .map((d) => `- ${d.theme}: ${d.seriesCount} dizi, ${d.countriesReached} ülkede yayında`)
+    .join('\n')
+
+  const prompt = `Aşağıda, şu anda TMDB'de en popüler Türk dizilerinin tema dağılımı var (tema başına
+kaç dizi ve toplamda kaç ülkede yayında olduğu). Bu sayılara dayanarak, hangi temanın öne çıktığını
+ve bunun ne anlama gelebileceğini anlatan 2-3 cümlelik dürüst bir Türkçe yorum yaz.
+
+KURALLAR:
+- SADECE aşağıda verilen sayılarla konuş, yeni bir istatistik veya yüzde UYDURMA.
+- Bunun TMDB'nin kendi tema etiketlemesine dayalı bir gözlem olduğunu, kesin bir sosyolojik
+  bulgu olmadığını ima eden bir dille yaz (iddialı/kesin ifadelerden kaçın).
+- Sadece yorum metnini yaz, başka açıklama ekleme.
+
+Tema dağılımı:
+${lines}
+
+Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce metni yazma:
+{"insight": "..."}`
+
+  const parsed = await callLLMForJson(prompt, 400)
+  if (!parsed.insight || typeof parsed.insight !== 'string') {
+    throw new Error('LLM geçerli bir insight metni döndürmedi')
+  }
+  return parsed.insight.trim()
+}

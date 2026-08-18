@@ -15,9 +15,15 @@ const MIN_ALTITUDE = 0.006
 const MAX_ALTITUDE = 0.22
 // Lowy Institute paleti: koyu mat lacivert taban (veri yoksa).
 const NO_DATA_COLOR = '#131c31'
-// Oyuncu filtresi (actorFilter) düz/tekli bir "bu ülkede yayında" işareti — Map2D.jsx'teki
-// aynı sabitle eşleşir (kıta vurgusuyla aynı camgöbeği).
-const ACTOR_FILTER_COLOR = '#22d3ee'
+// Oyuncu veya dizi filtresi (highlightFilter) düz/tekli bir "bu ülkede yayında" işareti —
+// Map2D.jsx'teki aynı sabitle eşleşir (kıta vurgusuyla aynı camgöbeği).
+const HIGHLIGHT_FILTER_COLOR = '#22d3ee'
+// TMDB/JustWatch'ta hiç sağlayıcı verisi olmayan, sadece Google Trends arama ilgisi TAHMİNİ
+// (server/services/proxyScore.js) olan ülkeler — gerçek verinin sıralı camgöbeği skalasından
+// (scoreToColor) KASITLI olarak ayrı, sabit bir amber tonu: skorları hep 0 olduğu için gerçek
+// skalaya girselerdi en soğuk durakla karışır, kullanıcı "gerçekten çok düşük" ile "gerçek veri
+// yok, bu bir tahmin"i ayırt edemezdi. Map2D.jsx'teki aynı sabitle eşleşir.
+const PROXY_DATA_COLOR = '#b45309'
 const DEFAULT_VIEW = { lat: 15, lng: 20, altitude: 2.4 }
 // Tekil ülke odaklanması — önceki 1.1 aşırı yakınlaşıyordu, ülke ve komşularının rahatça
 // görülebildiği daha gevşek bir mesafeye çekildi.
@@ -103,7 +109,7 @@ export default function Globe3D({
   actorHighlight,
   selectedIso2,
   seriesFilter,
-  actorFilter,
+  highlightFilter,
   continentHighlight,
   onResetView,
 }) {
@@ -216,9 +222,12 @@ export default function Globe3D({
     const world = globeRef.current
     if (!world || !geoFeatures || !countries || countries.length === 0) return
 
-    const scores = countries.map((c) => c.score)
-    const minScore = Math.min(...scores)
-    const maxScore = Math.max(...scores)
+    // Ölçek (min/max) yalnızca gerçek TMDB verili ülkelerden hesaplanır — proxy ülkelerin
+    // sabit 0 skoru dahil edilirse minScore her zaman 0'a çekilir ve GERÇEK ülkelerin
+    // arasındaki fark de bozulur (bkz. PROXY_DATA_COLOR tanımındaki not).
+    const realScores = countries.filter((c) => c.dataSource !== 'proxy').map((c) => c.score)
+    const minScore = realScores.length > 0 ? Math.min(...realScores) : 0
+    const maxScore = realScores.length > 0 ? Math.max(...realScores) : 1
     const range = maxScore - minScore || 1
 
     const byIso2 = new Map()
@@ -243,11 +252,12 @@ export default function Globe3D({
         )
       : null
 
-    // Oyuncu bazlı harita filtresi (bkz. src/App.jsx actorFilter) — bir skor gradyanı değil,
-    // düz/tekli bir "bu ülkede yayında" işareti (bkz. Map2D.jsx'teki aynı sadeleştirme).
-    const actorByIso2 = actorFilter
+    // Oyuncu/dizi bazlı harita filtresi (bkz. src/App.jsx highlightFilter) — bir skor
+    // gradyanı değil, düz/tekli bir "bu ülkede yayında" işareti (bkz. Map2D.jsx'teki aynı
+    // sadeleştirme).
+    const highlightByIso2 = highlightFilter
       ? new Map(
-          Array.from(actorFilter.byIso2 instanceof Map ? actorFilter.byIso2.entries() : []).map(([iso2, score]) => [
+          Array.from(highlightFilter.byIso2 instanceof Map ? highlightFilter.byIso2.entries() : []).map(([iso2, score]) => [
             iso2,
             { score },
           ])
@@ -258,9 +268,9 @@ export default function Globe3D({
       .polygonsData(geoFeatures)
       .polygonCapColor((f) => {
         const iso2 = f.properties.ISO_A2
-        if (actorByIso2) {
-          const entry = actorByIso2.get(iso2)
-          return entry ? ACTOR_FILTER_COLOR : NO_DATA_COLOR
+        if (highlightByIso2) {
+          const entry = highlightByIso2.get(iso2)
+          return entry ? HIGHLIGHT_FILTER_COLOR : NO_DATA_COLOR
         }
         if (seriesByIso2) {
           const value = seriesByIso2.get(iso2)
@@ -268,7 +278,7 @@ export default function Globe3D({
         }
         const c = byIso2.get(iso2)
         if (!c) return NO_DATA_COLOR
-        const base = scoreToColor(c.t)
+        const base = c.dataSource === 'proxy' ? PROXY_DATA_COLOR : scoreToColor(c.t)
         // "Ülke rengi hafifçe parlasın" — three-globe'un WebGL materyali CSS filter kabul
         // etmiyor, bu yüzden hover'da rengi beyaza doğru hafifçe iten brightenRgb kullanılır
         // (bkz. lib/scale.js) — Map2D'deki CSS brightness() filtresinin karşılığı.
@@ -286,13 +296,17 @@ export default function Globe3D({
       })
       .polygonAltitude((f) => {
         const c = byIso2.get(f.properties.ISO_A2)
-        return c ? MIN_ALTITUDE + c.t * (MAX_ALTITUDE - MIN_ALTITUDE) : 0.003
+        if (!c) return 0.003
+        // Proxy ülkelerin skoru sabit 0 → gerçek min/max'a göre t negatif çıkabilir, bu da
+        // ülkeyi küre yüzeyinin altına gömerdi. Sabit, en düşük gerçek yükseklikte kalırlar.
+        if (c.dataSource === 'proxy') return MIN_ALTITUDE
+        return MIN_ALTITUDE + c.t * (MAX_ALTITUDE - MIN_ALTITUDE)
       })
       .polygonLabel((f) => {
         const name = displayName(f)
         const iso2 = f.properties.ISO_A2
-        if (actorByIso2) {
-          const entry = actorByIso2.get(iso2)
+        if (highlightByIso2) {
+          const entry = highlightByIso2.get(iso2)
           return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${entry ? `Görünürlük skoru: ${entry.score.toFixed(1)}` : 'Veri yok'}</div>`
         }
         if (seriesByIso2) {
@@ -302,6 +316,9 @@ export default function Globe3D({
         const c = byIso2.get(iso2)
         if (!c) {
           return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>Veri yok</div>`
+        }
+        if (c.dataSource === 'proxy') {
+          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>⚡ Arama hacmi tahmini: ${c.searchInterestScore} (TMDB'de yayın verisi yok)</div>`
         }
         return `
           <div style="font: 13px system-ui; padding: 4px 2px;">
@@ -319,7 +336,7 @@ export default function Globe3D({
         }
         onSelect?.({ ...c, name: displayName(f) })
       })
-  }, [countries, geoFeatures, onSelect, actorHighlight, selectedIso2, seriesFilter, actorFilter, continentHighlight])
+  }, [countries, geoFeatures, onSelect, actorHighlight, selectedIso2, seriesFilter, highlightFilter, continentHighlight])
 
   useEffect(() => {
     popupRef.current = popup

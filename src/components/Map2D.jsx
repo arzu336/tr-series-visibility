@@ -13,9 +13,13 @@ function displayName(feat) {
 // Lowy Institute paleti: koyu mat lacivert taban (veri yoksa) — koyu okyanus zemininden
 // (.map2d arka planı, bkz. styles.css) net ayrışsın diye hafifçe daha açık.
 const NO_DATA_COLOR = '#131c31'
-// Oyuncu filtresi (actorFilter) düz/tekli bir "bu ülkede yayında" işareti — palette'in
-// zaten validated en canlı durağı, kıta vurgusuyla (STROKE_CONTINENT) aynı camgöbeği.
-const ACTOR_FILTER_COLOR = '#22d3ee'
+// Oyuncu veya dizi filtresi (highlightFilter) düz/tekli bir "bu ülkede yayında" işareti —
+// palette'in zaten validated en canlı durağı, kıta vurgusuyla (STROKE_CONTINENT) aynı camgöbeği.
+const HIGHLIGHT_FILTER_COLOR = '#22d3ee'
+// TMDB/JustWatch'ta hiç sağlayıcı verisi olmayan, sadece Google Trends arama ilgisi TAHMİNİ
+// (server/services/proxyScore.js) olan ülkeler — gerçek verinin sıralı camgöbeği skalasından
+// KASITLI olarak ayrı, sabit bir amber tonu (Globe3D.jsx'teki aynı sabitle eşleşir).
+const PROXY_DATA_COLOR = '#b45309'
 const VIEWBOX_WIDTH = 960
 const VIEWBOX_HEIGHT = 500
 const DEFAULT_ZOOM = { scale: 1, tx: 0, ty: 0 }
@@ -34,7 +38,7 @@ export default function Map2D({
   actorHighlight,
   selectedIso2,
   seriesFilter,
-  actorFilter,
+  highlightFilter,
   continentHighlight,
   onResetView,
 }) {
@@ -61,9 +65,11 @@ export default function Map2D({
 
   const byIso2 = useMemo(() => {
     if (!countries || countries.length === 0) return new Map()
-    const scores = countries.map((c) => c.score)
-    const minScore = Math.min(...scores)
-    const maxScore = Math.max(...scores)
+    // Ölçek yalnızca gerçek TMDB verili ülkelerden hesaplanır — proxy ülkelerin sabit 0 skoru
+    // dahil edilirse minScore her zaman 0'a çekilir ve gerçek ülkeler arası fark bozulur.
+    const realScores = countries.filter((c) => c.dataSource !== 'proxy').map((c) => c.score)
+    const minScore = realScores.length > 0 ? Math.min(...realScores) : 0
+    const maxScore = realScores.length > 0 ? Math.max(...realScores) : 1
     const range = maxScore - minScore || 1
     const map = new Map()
     countries.forEach((c) => map.set(c.iso2, { ...c, t: (c.score - minScore) / range }))
@@ -106,17 +112,17 @@ export default function Map2D({
     return map
   }, [seriesFilter])
 
-  // Oyuncu bazlı harita filtresi (bkz. src/App.jsx actorFilter) — bir skor gradyanı değil,
-  // düz/tekli bir "bu ülkede yayında" işareti: kullanıcı sadece hangi ülkelerin oyuncunun
-  // takip edilen dizilerinden en az birini yayınladığını görmek istedi, ülkeden ülkeye
-  // popülerlik farkını değil.
-  const actorByIso2 = useMemo(() => {
-    if (!actorFilter) return null
-    const entries = Array.from(actorFilter.byIso2 instanceof Map ? actorFilter.byIso2.entries() : [])
+  // Oyuncu/dizi bazlı harita filtresi (bkz. src/App.jsx highlightFilter) — bir skor
+  // gradyanı değil, düz/tekli bir "bu ülkede yayında" işareti: kullanıcı sadece hangi
+  // ülkelerin gerçekten yayında olduğunu görmek istedi, ülkeden ülkeye popülerlik
+  // farkını değil.
+  const highlightByIso2 = useMemo(() => {
+    if (!highlightFilter) return null
+    const entries = Array.from(highlightFilter.byIso2 instanceof Map ? highlightFilter.byIso2.entries() : [])
     const map = new Map()
     entries.forEach(([iso2, score]) => map.set(iso2, { score }))
     return map
-  }, [actorFilter])
+  }, [highlightFilter])
 
   // Pop-up artık SVG <foreignObject> içinde değil, normal bir DOM elemanı olarak
   // .map2d üzerine bindiriliyor — foreignObject içindeki sabit-CSS-pikselli içerik,
@@ -226,20 +232,22 @@ export default function Map2D({
             else if (isHovered) variantClass = 'map2d__country--hovered'
             const className = ['map2d__country', variantClass].filter(Boolean).join(' ')
             // Dolgu önceliği: oyuncu filtresi > dizi filtresi > genel görünürlük skoru —
-            // App.jsx actorFilter/seriesFilter'ı karşılıklı dışlayıcı tuttuğu için normalde
+            // App.jsx highlightFilter/seriesFilter'ı karşılıklı dışlayıcı tuttuğu için normalde
             // ikisi aynı anda dolu olmaz, ama öncelik sırası yine de tanımlı.
-            const actorEntry = actorByIso2?.get(iso2)
+            const highlightEntry = highlightByIso2?.get(iso2)
             const seriesValue = seriesByIso2?.get(iso2)
-            const fill = actorByIso2
-              ? actorEntry
-                ? ACTOR_FILTER_COLOR
+            const fill = highlightByIso2
+              ? highlightEntry
+                ? HIGHLIGHT_FILTER_COLOR
                 : NO_DATA_COLOR
               : seriesByIso2
                 ? seriesValue != null
                   ? scoreToColor(seriesValue / 100)
                   : NO_DATA_COLOR
                 : c
-                  ? scoreToColor(c.t)
+                  ? c.dataSource === 'proxy'
+                    ? PROXY_DATA_COLOR
+                    : scoreToColor(c.t)
                   : NO_DATA_COLOR
             return (
               <path
@@ -266,8 +274,8 @@ export default function Map2D({
           {(() => {
             const name = displayName(hovered)
             const iso2 = hovered.properties.ISO_A2
-            if (actorByIso2) {
-              const entry = actorByIso2.get(iso2)
+            if (highlightByIso2) {
+              const entry = highlightByIso2.get(iso2)
               return (
                 <>
                   <strong>{name}</strong>
@@ -293,6 +301,15 @@ export default function Map2D({
                   <strong>{name}</strong>
                   <br />
                   Veri yok
+                </>
+              )
+            }
+            if (c.dataSource === 'proxy') {
+              return (
+                <>
+                  <strong>{name}</strong>
+                  <br />
+                  ⚡ Arama hacmi tahmini: {c.searchInterestScore} (TMDB'de yayın verisi yok)
                 </>
               )
             }

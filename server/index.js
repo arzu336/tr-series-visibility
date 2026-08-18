@@ -10,6 +10,13 @@ import { THEMES, getThemeStore, setHumanOverride, effectiveTheme, effectiveConfi
 import { getRawSeriesDataCached, getEnrichedVisibility } from './data-pipeline.js'
 import { startScheduler } from './scheduler.js'
 import {
+  getMonthlyPeriods,
+  getYearlyPeriods,
+  getGlobalMonthlyPeriods,
+  getGlobalYearlyPeriods,
+} from './period-history.js'
+import { getThemeInsight } from './services/themeInsight.js'
+import {
   DESTINATIONS,
   ensureDetected,
   getDestinationStore,
@@ -221,6 +228,40 @@ app.get('/api/visibility', async (req, res) => {
 
 app.get('/api/taxonomy', (req, res) => {
   res.json({ themes: THEMES })
+})
+
+// Ay/yıl periyodu görünümü — server/period-history.js. `range` yoksa/geçersizse aylık.
+app.get('/api/history/global-periods', (req, res) => {
+  try {
+    const range = req.query.range === 'yearly' ? 'yearly' : 'monthly'
+    const periods = range === 'yearly' ? getGlobalYearlyPeriods() : getGlobalMonthlyPeriods()
+    res.json({ range, periods })
+  } catch (err) {
+    console.error('[history/global-periods] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/history/:iso2/periods', (req, res) => {
+  try {
+    const range = req.query.range === 'yearly' ? 'yearly' : 'monthly'
+    const iso2 = req.params.iso2.toUpperCase()
+    const periods = range === 'yearly' ? getYearlyPeriods(iso2) : getMonthlyPeriods(iso2)
+    res.json({ range, iso2, periods })
+  } catch (err) {
+    console.error('[history/:iso2/periods] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/theme-insight', async (req, res) => {
+  try {
+    const data = await getThemeInsight()
+    res.json(data)
+  } catch (err) {
+    console.error('[theme-insight] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
 })
 
 app.get('/api/themes', async (req, res) => {

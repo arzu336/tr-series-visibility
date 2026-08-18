@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchImdbData, fetchTrends } from '../lib/api.js'
+import { fetchImdbData } from '../lib/api.js'
 import CastBar from './CastBar.jsx'
 import countryNames from '../data/country-centroids.json'
 
@@ -23,7 +23,6 @@ function formatVotes(n) {
 export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onShowOnMap }) {
   const [imdb, setImdb] = useState(null)
   const [imdbStatus, setImdbStatus] = useState('loading')
-  const [mapFilterStatus, setMapFilterStatus] = useState('idle') // idle | loading | error
 
   const series = useMemo(() => {
     let base = null
@@ -63,16 +62,11 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
     return <p className="dashboard__empty">Bu dizi için veri bulunamadı.</p>
   }
 
-  const handleShowOnMap = async () => {
-    setMapFilterStatus('loading')
-    try {
-      const result = await fetchTrends(series.name)
-      onShowOnMap?.(result)
-      setMapFilterStatus('idle')
-    } catch (err) {
-      console.error('[SeriesPanel] harita filtresi alınamadı:', err.message)
-      setMapFilterStatus('error')
-    }
+  // series.countries zaten allCountries'ten çıkarılmış GERÇEK yayın listesi (aşağıdaki
+  // "Yayınlandığı Ülkeler" ile birebir aynı veri) — ayrı bir Google Trends isteğine gerek
+  // yok, harita da doğrudan bu gerçek listeye göre işaretlenir.
+  const handleShowOnMap = () => {
+    onShowOnMap?.(series.name, series.countries)
   }
 
   return (
@@ -102,14 +96,10 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
       <button
         className="actor-modal__network-btn"
         onClick={handleShowOnMap}
-        disabled={mapFilterStatus === 'loading'}
-        title="Bu dizinin gerçek, ülke bazlı Google Trends arama ilgisini haritada göster"
+        title="Bu dizinin gerçekten yayınlandığı ülkeleri haritada işaretle"
       >
-        {mapFilterStatus === 'loading' ? 'Yükleniyor…' : '🗺️ Bu Dizinin Küresel Dağılımını Haritada Göster'}
+        🗺️ Bu Dizinin Yayınlandığı Ülkeleri Haritada Göster
       </button>
-      {mapFilterStatus === 'error' && (
-        <p className="dashboard__empty">Bu dizi için arama ilgisi verisi alınamadı.</p>
-      )}
 
       {series.cast?.length > 0 && (
         <>
@@ -119,6 +109,12 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
       )}
 
       <h3>Yayınlandığı Ülkeler</h3>
+      <p
+        className="dashboard__hint"
+        title="Bu dizinin kendi popülerliği ülkeden ülkeye değişmez (TMDB tek bir değer verir) — sağdaki sayı o ÜLKENİN tüm Türk dizisi görünürlük skorudur, en büyük pazarlar üstte sıralanır."
+      >
+        Sağdaki değer bu dizinin değil, ülkenin genel Türk dizisi görünürlük skorudur ⓘ
+      </p>
       <ul className="panel__series-list">
         {series.countries.map((c) => (
           <li key={c.iso2} className="panel__series-item panel__series-item--static">

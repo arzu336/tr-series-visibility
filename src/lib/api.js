@@ -132,6 +132,18 @@ export async function changePassword(currentPassword, newPassword) {
   )
 }
 
+export async function fetchGlobalPeriods(range = 'monthly') {
+  return handle(await fetch(`/api/history/global-periods?range=${range}`))
+}
+
+export async function fetchCountryPeriods(iso2, range = 'monthly') {
+  return handle(await fetch(`/api/history/${iso2}/periods?range=${range}`))
+}
+
+export async function fetchThemeInsight() {
+  return handle(await fetch('/api/theme-insight'))
+}
+
 export async function fetchDestinationTaxonomy() {
   return handle(await fetch('/api/destinations/taxonomy'))
 }
