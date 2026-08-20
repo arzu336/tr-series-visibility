@@ -6,7 +6,14 @@ import cors from 'cors'
 import compression from 'compression'
 import rateLimit from 'express-rate-limit'
 import { buildDestinationRanking } from './aggregate.js'
-import { THEMES, getThemeStore, setHumanOverride, effectiveTheme, effectiveConfidence } from './themes.js'
+import {
+  THEMES,
+  getThemeStore,
+  setHumanOverride,
+  clearHumanOverride,
+  effectiveTheme,
+  effectiveConfidence,
+} from './themes.js'
 import { getRawSeriesDataCached, getEnrichedVisibility } from './data-pipeline.js'
 import { startScheduler } from './scheduler.js'
 import {
@@ -16,11 +23,13 @@ import {
   getGlobalYearlyPeriods,
 } from './period-history.js'
 import { getThemeInsight } from './services/themeInsight.js'
+import { getAllLatestArrivals } from './services/tourismData.js'
 import {
   DESTINATIONS,
   ensureDetected,
   getDestinationStore,
   setHumanTags,
+  clearHumanTags,
   effectiveDestinations,
 } from './destinations.js'
 import { queryTrends } from './serpapi.js'
@@ -254,6 +263,18 @@ app.get('/api/history/:iso2/periods', (req, res) => {
   }
 })
 
+// T.C. Kültür ve Turizm Bakanlığı (YİGM) sınır bülteninden otomatik çekilen turist giriş
+// verisinin ham, ülke bazlı listesi — src/components/ContinentSidebar.jsx kıtaya göre süzüyor
+// (bkz. findTopLearningCountry ile aynı client-side filtre deseni).
+app.get('/api/tourism-summary', (req, res) => {
+  try {
+    res.json({ items: getAllLatestArrivals() })
+  } catch (err) {
+    console.error('[tourism-summary] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
 app.get('/api/theme-insight', async (req, res) => {
   try {
     const data = await getThemeInsight()
@@ -303,6 +324,26 @@ app.post('/api/themes/:seriesId/override', requireAdmin, (req, res) => {
   }
 })
 
+// İnsan override'ını siler, kaydı LLM'in orijinal sınıflandırmasına döndürür — Analist
+// Paneli'ndeki "AI önerisine geri dön" eylemi.
+app.post('/api/themes/:seriesId/clear-override', requireAdmin, (req, res) => {
+  try {
+    const entry = clearHumanOverride(req.params.seriesId)
+    res.json({
+      id: entry.id,
+      name: entry.name,
+      overview: entry.overview,
+      theme: entry.theme,
+      confidence: entry.confidence,
+      effectiveTheme: effectiveTheme(entry),
+      effectiveConfidence: effectiveConfidence(entry),
+      humanOverride: entry.humanOverride,
+    })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
 app.get('/api/destinations/taxonomy', (req, res) => {
   res.json({ destinations: DESTINATIONS.map((d) => ({ id: d.id, name: d.name })) })
 })
@@ -311,7 +352,7 @@ app.get('/api/destinations', async (req, res) => {
   try {
     const raw = await getRawSeriesDataCached()
     const liveIds = new Set(raw.series.map((s) => s.id))
-    const store = ensureDetected(raw.series)
+    const store = await ensureDetected(raw.series)
     const list = Object.values(store)
       .filter((entry) => liveIds.has(entry.id))
       .map((entry) => {
@@ -321,6 +362,7 @@ app.get('/api/destinations', async (req, res) => {
           name: entry.name,
           overview: entry.overview,
           autoDetected: entry.autoDetected,
+          detectionMethod: entry.detectionMethod,
           humanTags: entry.humanTags,
           effectiveDestinations: destinations,
           isUntagged: destinations.length === 0,
@@ -338,6 +380,27 @@ app.post('/api/destinations/:seriesId/override', requireAdmin, (req, res) => {
   try {
     const { destinationIds, reviewer } = req.body || {}
     const entry = setHumanTags(req.params.seriesId, destinationIds, reviewer)
+    res.json({
+      id: entry.id,
+      name: entry.name,
+      overview: entry.overview,
+      autoDetected: entry.autoDetected,
+      humanTags: entry.humanTags,
+      effectiveDestinations: effectiveDestinations(entry),
+      isUntagged: effectiveDestinations(entry).length === 0,
+    })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+// İnsan etiketini siler, kaydı sinopsis bazlı otomatik tespite döndürür — Analist
+// Paneli'ndeki "AI önerisine geri dön" eylemi. setHumanTags(id, []) ile KARIŞTIRILMAMALI:
+// o "insan sıfır destinasyon onayladı" demek, bu ise "hiç insan onayı yok" demek (bkz.
+// destinations.js clearHumanTags).
+app.post('/api/destinations/:seriesId/clear-override', requireAdmin, (req, res) => {
+  try {
+    const entry = clearHumanTags(req.params.seriesId)
     res.json({
       id: entry.id,
       name: entry.name,

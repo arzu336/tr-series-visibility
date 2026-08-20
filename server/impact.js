@@ -1,5 +1,5 @@
 import { suggestControlCountry } from './control-matching.js'
-import { getVisitorSeries, getTrackedIso2s } from './services/tourismData.js'
+import { getVisitorSeries, getTrackedIso2s, pickBeforeAfterPair } from './services/tourismData.js'
 
 // "Yükselen Ülkeler" kartında gösterilen top-5, dünyadaki en çok yükselen 5 ülkeyi gösterir —
 // bunlar genelde çok küçük/az turistli ülkeler oluyor (ör. Ekvator Ginesi, Monako), YİGM bülteninde
@@ -148,27 +148,6 @@ async function withSuggestedControls(risingList, risingIso2Set) {
       return { ...c, suggestedControl }
     })
   )
-}
-
-// getVisitorSeries(iso2) sonucundan (bir bültenin aynı ayı için birden çok yıl) en güncel
-// "önce/sonra" çiftini seçer — en çok yıl verisi olan ayı alır (şu an tek bülten kaynağı
-// olduğu için pratikte hep aynı ay), en yeni iki yılı before/after olarak döner. <2 veri
-// noktası varsa null — uydurma bir karşılaştırma yapılmaz.
-function pickBeforeAfterPair(series) {
-  const byMonth = new Map()
-  for (const s of series) {
-    if (!byMonth.has(s.month)) byMonth.set(s.month, [])
-    byMonth.get(s.month).push(s)
-  }
-  let best = null
-  for (const list of byMonth.values()) {
-    if (list.length >= 2 && (!best || list.length > best.length)) best = list
-  }
-  if (!best) return null
-  const sorted = [...best].sort((a, b) => a.year - b.year)
-  const after = sorted[sorted.length - 1]
-  const before = sorted[sorted.length - 2]
-  return { before: before.visitorCount, after: after.visitorCount, beforeYear: before.year, afterYear: after.year, month: before.month }
 }
 
 // Yükselen her ülke için: kendi turist verisi + otomatik kontrol ülkesinin (suggestControlCountry)

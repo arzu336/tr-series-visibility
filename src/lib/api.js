@@ -28,6 +28,10 @@ export async function submitThemeOverride(seriesId, theme, reviewer) {
   )
 }
 
+export async function clearThemeOverride(seriesId) {
+  return handle(await fetch(`/api/themes/${seriesId}/clear-override`, { method: 'POST' }))
+}
+
 export async function fetchTrendSeriesList() {
   return handle(await fetch('/api/trends/series'))
 }
@@ -144,6 +148,10 @@ export async function fetchThemeInsight() {
   return handle(await fetch('/api/theme-insight'))
 }
 
+export async function fetchTourismSummary() {
+  return handle(await fetch('/api/tourism-summary'))
+}
+
 export async function fetchDestinationTaxonomy() {
   return handle(await fetch('/api/destinations/taxonomy'))
 }
@@ -160,4 +168,8 @@ export async function submitDestinationOverride(seriesId, destinationIds, review
       body: JSON.stringify({ destinationIds, reviewer }),
     })
   )
+}
+
+export async function clearDestinationOverride(seriesId) {
+  return handle(await fetch(`/api/destinations/${seriesId}/clear-override`, { method: 'POST' }))
 }

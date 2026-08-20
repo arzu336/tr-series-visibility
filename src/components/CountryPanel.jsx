@@ -62,10 +62,6 @@ function RegionalInterest({ seriesName, iso2 }) {
           </div>
         ))}
       </div>
-      <p className="dashboard__hint">
-        Google Trends bölgesel arama ilgisi (0-100) — gerçek izlenme rakamı değil, arama
-        ilgisine dayalı bir yakınsama (proxy) göstergesidir.
-      </p>
     </div>
   )
 }
@@ -281,7 +277,11 @@ export default function CountryPanel({
               <button className="panel__back-btn" onClick={onCloseActor}>
                 ← Ülkeye dön
               </button>
-              <ActorPanel personId={activeActorId} onShowNetwork={onShowActorNetwork} />
+              <ActorPanel
+                personId={activeActorId}
+                onShowNetwork={onShowActorNetwork}
+                onSelectSeriesGlobal={onSelectSeriesGlobal}
+              />
             </>
           ) : activeSeriesGlobalId != null ? (
             <>

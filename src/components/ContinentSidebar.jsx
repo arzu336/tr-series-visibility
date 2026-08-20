@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CONTINENTS, groupByContinent, resolveIso2FromLabel, topSeriesInContinent } from '../lib/continents.js'
 import { computeSharePct, totalScoreOf } from '../lib/scoreShare.js'
-import { fetchTurkishLearningIndex, fetchDuolingoStats } from '../lib/api.js'
+import { fetchTurkishLearningIndex, fetchDuolingoStats, fetchTourismSummary } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 
 function nameOf(iso2) {
@@ -12,20 +12,50 @@ function round1(n) {
   return Math.round(n * 10) / 10
 }
 
-// server/impact.js'teki PENDING_ANALYSIS ile aynı dürüstlük ilkesi: gerçek
-// TÜİK/Kültür ve Turizm Bakanlığı ihracat-turizm verisi kurumsal talep dışında
-// temin edilemiyor, bu yüzden burada da uydurma bir rakam üretilmiyor.
-function ExportTourismPending() {
+const MONTH_NAMES_TR = [
+  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
+  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
+]
+
+// Turizm kısmı artık gerçek veri: server/services/tourismData.js, T.C. Kültür ve Turizm
+// Bakanlığı'nın (YİGM) aylık sınır bültenini otomatik çekiyor (bkz. /api/tourism-summary).
+// Dizi ihracatı (ülke bazlı $) kısmı ise hâlâ kamuya açık değil (araştırıldı — sadece toplam
+// ulusal rakam yayınlanıyor) — server/impact.js'teki PENDING_ANALYSIS ile aynı dürüstlük
+// ilkesiyle, o kısım için uydurma bir rakam üretilmiyor.
+function ExportTourismStats({ tourismItems, continentCountries }) {
+  const iso2Set = new Set((continentCountries || []).map((c) => c.iso2))
+  const matched = (tourismItems || [])
+    .filter((item) => iso2Set.has(item.iso2))
+    .sort((a, b) => b.visitorCount - a.visitorCount)
+
   return (
     <div className="sidebar__stat">
-      <div className="sidebar__stat-label">İhracat ve Turizm Rakamları</div>
-      <div className="sidebar__stat-badges">
-        <span className="badge badge--uncertain">Gerçek Veri Bekleniyor</span>
+      <div
+        className="sidebar__stat-label"
+        title="T.C. Kültür ve Turizm Bakanlığı (YİGM) Sınır İstatistikleri Bülteni'nden otomatik çekilir."
+      >
+        🧳 Turizm Rakamları ⓘ
       </div>
-      <p className="sidebar__stat-note">
-        Ülke bazlı turist girişi ve dizi ihracatı rakamları kurumsal veri talebiyle temin edilene
-        kadar burada gösterilmiyor.
-      </p>
+      {matched.length === 0 ? (
+        <p className="sidebar__stat-note">
+          Bu kıtadaki ülkeler için henüz turist giriş verisi yok — bülten büyük/orta ölçekli turist
+          pazarlarını ayrı satırla listeliyor, küçük ülkeler "diğer ülkeler" toplamına giriyor ve
+          ayrıştırılamıyor.
+        </p>
+      ) : (
+        <ol className="sidebar__top-list">
+          {matched.slice(0, 3).map((item) => (
+            <li key={item.iso2}>
+              <span className="sidebar__top-country-name">{nameOf(item.iso2)}</span>
+              <span className="sidebar__top-country-meta">
+                {item.visitorCount.toLocaleString('tr-TR')} turist ({MONTH_NAMES_TR[item.month - 1]} {item.afterYear})
+                {item.changePct != null &&
+                  ` · ${item.changePct > 0 ? '+' : ''}${item.changePct}% (${item.beforeYear}→${item.afterYear})`}
+              </span>
+            </li>
+          ))}
+        </ol>
+      )}
     </div>
   )
 }
@@ -58,6 +88,7 @@ export default function ContinentSidebar({
   const [learningStatus, setLearningStatus] = useState('loading')
   const [duolingo, setDuolingo] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
+  const [tourismItems, setTourismItems] = useState([])
 
   useEffect(() => {
     fetchTurkishLearningIndex()
@@ -66,6 +97,15 @@ export default function ContinentSidebar({
         setLearningStatus('ready')
       })
       .catch(() => setLearningStatus('unavailable'))
+  }, [])
+
+  useEffect(() => {
+    fetchTourismSummary()
+      .then((res) => setTourismItems(res.items || []))
+      .catch((err) => {
+        console.error('[ContinentSidebar] tourism-summary', err.message)
+        setTourismItems([])
+      })
   }, [])
 
   useEffect(() => {
@@ -206,7 +246,7 @@ export default function ContinentSidebar({
                   </p>
                 </div>
 
-                <ExportTourismPending />
+                <ExportTourismStats tourismItems={tourismItems} continentCountries={selected.countries} />
               </div>
             )}
           </div>

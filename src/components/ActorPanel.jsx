@@ -16,7 +16,7 @@ const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 // ülkede farklı bir platformda olabilir); dizi başına tek bir "platform" alanı göstermek
 // gerçek veriyi yanlış temsil eder/uydurma bir basitleştirme olurdu, bu yüzden bilinçli
 // olarak eklenmedi (bkz. proje genelindeki "gerçek veri yoksa uydurulmaz" ilkesi).
-export default function ActorPanel({ personId, onShowNetwork }) {
+export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlobal }) {
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
@@ -108,7 +108,12 @@ export default function ActorPanel({ personId, onShowNetwork }) {
             {data.series.map((s) => {
               const imdb = imdbBySeriesId[s.id]
               return (
-                <li key={s.id} className="panel__series-item">
+                <li
+                  key={s.id}
+                  className="panel__series-item"
+                  onClick={() => onSelectSeriesGlobal?.(s.id)}
+                  title="Bu dizinin kadrosunu ve gerçekten yayınlandığı ülkeleri gör"
+                >
                   <div className="panel__series-row">
                     {s.posterPath ? (
                       <img className="panel__series-poster" src={`${POSTER_BASE}${s.posterPath}`} alt="" />

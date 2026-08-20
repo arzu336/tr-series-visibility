@@ -244,6 +244,16 @@ export default function App() {
     setPanelCollapsed(false)
   }, [])
 
+  // Analist Paneli'ndeki bir kayıttan "Haritada Gör" — harita görünümüne geçer ve o dizinin
+  // SeriesPanel'ini (kadro + gerçek yayın ülkeleri) açar, handleSelectSeriesGlobal ile aynı akış.
+  const handleViewSeriesOnMap = useCallback(
+    (seriesId) => {
+      setView('map')
+      handleSelectSeriesGlobal(seriesId)
+    },
+    [handleSelectSeriesGlobal]
+  )
+
   // Sağ paneldeki arama barından bir OYUNCU sonucuna tıklandığında (bkz. CastBar/
   // PanelSearch) — actor view'ı açar VE paneli otomatik açık hale getirir.
   const handleSelectActor = useCallback((personId) => {
@@ -295,7 +305,9 @@ export default function App() {
     setActorHighlight(highlight)
     setHighlightFilter({ kind: 'actor', label: actorName, byIso2 })
     setSeriesFilter(null)
-    setSelectedActorId(null)
+    // Not: selectedActorId kasıtlı olarak temizlenmiyor — harita vurgusu açılırken
+    // ActorPanel'in kapanıp oyuncu bilgisinin kaybolmaması için (bkz. kullanıcı geri
+    // bildirimi: "haritada göster dediğimde oyuncuyla ilgili her şey gidiyor").
   }, [])
 
   // SeriesPanel'deki "Bu Dizinin Küresel Dağılımını Haritada Göster" eylemi — Trends'ten
@@ -458,7 +470,13 @@ export default function App() {
 
       <main className="app__main">
         <Suspense fallback={<div className="status">Yükleniyor…</div>}>
-          {view === 'dashboard' && user?.isAdmin && <AnalystDashboard canEdit={Boolean(user?.isAdmin)} />}
+          {view === 'dashboard' && user?.isAdmin && (
+            <AnalystDashboard
+              canEdit={Boolean(user?.isAdmin)}
+              reviewerName={user?.name || user?.email || 'anonim'}
+              onViewSeriesOnMap={handleViewSeriesOnMap}
+            />
+          )}
           {view === 'trends' && <TrendsExplorer onShowOnMap={handleShowSeriesOnMap} />}
           {view === 'impact' && (
             <ImpactReport onSelectCountry={handleSelectCountryFromReport} />

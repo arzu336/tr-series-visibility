@@ -1329,6 +1329,19 @@ body {
   color: #5cb85c;
 }
 
+.dashboard__bulk-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 0.9rem;
+  padding: 0.5rem 0.85rem;
+  background: rgba(6, 182, 212, 0.1);
+  border: 1px solid rgba(6, 182, 212, 0.35);
+  border-radius: 10px;
+  font-size: 0.82rem;
+  color: #f1f3f8;
+}
+
 .dashboard__section {
   margin-bottom: 1.75rem;
   background: #0e1420;
@@ -1362,6 +1375,22 @@ body {
   font-size: 0.8rem;
   cursor: pointer;
   padding: 0;
+  text-decoration: underline;
+}
+
+/* "Haritada gör" gibi ikincil, her satırda tekrar eden eylemler için — ana Düzelt/Kaydet
+   eylemleriyle görsel olarak yarışmasın diye soluk, küçük ve alt çizgisiz (sadece hover'da). */
+.dashboard__map-link {
+  background: none;
+  border: none;
+  color: #6b7480;
+  font-size: 0.72rem;
+  cursor: pointer;
+  padding: 0;
+}
+
+.dashboard__map-link:hover {
+  color: #b8c0d1;
   text-decoration: underline;
 }
 

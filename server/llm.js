@@ -112,6 +112,37 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
   }
 }
 
+// Dizi özetinden hangi destinasyon(lar)ın (Türkiye'deki turistik yer/bölge) öne çıktığını
+// çıkarır — server/destinations.js'teki eski anahtar kelime taramasının (detectDestinations)
+// yerini alan birincil yöntem: sinopsis çoğu zaman yer adını birebir geçirmiyor, LLM bağlamdan
+// çıkarabiliyor. Hiçbiri uymuyorsa boş dizi döner — uydurma bir eşleşme dayatılmaz.
+export async function classifyDestinationsWithLLM(overview, name, destinations) {
+  const list = destinations.map((d) => `${d.id}: ${d.name}`).join('\n')
+  const prompt = `Aşağıda bir Türk dizisinin adı ve özeti var. Bu listedeki destinasyonlardan
+(Türkiye'deki turistik yer/bölge) HANGİLERİ bu dizinin konusunda/kurgusunda GERÇEKTEN öne çıkıyor
+veya geçiyor?
+
+Destinasyon listesi (id: isim):
+${list}
+
+Dizi adı: ${name}
+Özet: """${overview || '(özet yok)'}"""
+
+KURALLAR:
+- Sadece özette/adda GERÇEKTEN ima edilen ya da açıkça belirtilen destinasyonları seç.
+- Emin değilsen veya hiçbiri uymuyorsa BOŞ LİSTE döndür — bir destinasyon uydurmak yerine boş
+  bırakmak her zaman doğrudur.
+- Sadece yukarıdaki id'lerden seç, yeni bir id uydurma.
+
+Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce metni yazma:
+{"destinationIds": ["id1", "id2"]}`
+
+  const parsed = await callLLMForJson(prompt, 300)
+  const validIds = new Set(destinations.map((d) => d.id))
+  const candidateIds = Array.isArray(parsed.destinationIds) ? parsed.destinationIds : []
+  return candidateIds.filter((id) => validIds.has(id))
+}
+
 // Tema Bazlı AI Yorumu (bkz. server/services/themeInsight.js): modele SADECE verilen sayılarla
 // konuşmasını söylüyoruz — yeni bir istatistik, oran veya karşılaştırma UYDURMAMASI için prompt
 // açıkça kısıtlanıyor. Sonuç, sayısal dağılımın YANINDA gösterilen bir yorum katmanıdır; sayısal

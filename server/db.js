@@ -106,6 +106,16 @@ db.exec(`
     next_retry_at INTEGER
   );
 
+  CREATE TABLE IF NOT EXISTS destination_classification_failures (
+    id INTEGER PRIMARY KEY,
+    name TEXT,
+    overview TEXT,
+    failure_count INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    last_failed_at INTEGER,
+    next_retry_at INTEGER
+  );
+
   CREATE TABLE IF NOT EXISTS turkish_learning_cache (
     key TEXT PRIMARY KEY,
     queried_at TEXT,
@@ -180,6 +190,18 @@ if (!usersColumns.some((c) => c.name === 'access_level')) {
 const themeColumns = db.prepare("PRAGMA table_info(theme_classifications)").all()
 if (themeColumns.some((c) => c.name === 'sentiment')) {
   db.exec('ALTER TABLE theme_classifications DROP COLUMN sentiment')
+}
+
+// Destinasyon tespiti artık birincil olarak LLM kullanıyor (bkz. server/destinations.js,
+// server/llm.js classifyDestinationsWithLLM), eski anahtar kelime taraması sadece LLM
+// başarısız olursa devreye giriyor — hangi yöntemin kullanıldığını (Analist Paneli'nde
+// şeffaflık için) ayırt edebilmek üzere kolon ekleniyor. Var olan kayıtlar (bu değişiklikten
+// önce hep anahtar kelimeyle üretilmişti) 'keyword' olarak işaretlenir ki LLM'e yeniden
+// denenmeleri için "pending" sayılsınlar (bkz. ensureDetected'teki pending filtresi).
+const destColumns = db.prepare("PRAGMA table_info(destination_classifications)").all()
+if (!destColumns.some((c) => c.name === 'detection_method')) {
+  db.exec("ALTER TABLE destination_classifications ADD COLUMN detection_method TEXT")
+  db.exec("UPDATE destination_classifications SET detection_method = 'keyword' WHERE detection_method IS NULL")
 }
 
 export default db

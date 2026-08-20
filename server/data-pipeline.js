@@ -24,7 +24,7 @@ export async function getRawSeriesDataCached() {
 export async function getEnrichedVisibility() {
   const raw = await getRawSeriesDataCached()
   const themeStore = await ensureClassified(raw.series)
-  const destinationStore = ensureDetected(raw.series)
+  const destinationStore = await ensureDetected(raw.series)
   const data = buildVisibility(raw, themeStore, destinationStore)
 
   // Eksik ülke fallback katmanı: SERPAPI_API_KEY tanımlı değilse, aylık kota dolmuşsa veya

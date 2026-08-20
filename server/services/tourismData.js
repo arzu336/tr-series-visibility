@@ -176,3 +176,52 @@ export function getVisitorCount(iso2, year, month) {
 export function getTrackedIso2s() {
   return new Set(selectTrackedIso2Stmt.all().map((r) => r.iso2))
 }
+
+// getVisitorSeries(iso2) sonucundan (bir bültenin aynı ayı için birden çok yıl) en güncel
+// "önce/sonra" çiftini seçer — en çok yıl verisi olan ayı alır (şu an tek bülten kaynağı
+// olduğu için pratikte hep aynı ay), en yeni iki yılı before/after olarak döner. <2 veri
+// noktası varsa null — uydurma bir karşılaştırma yapılmaz. server/impact.js (DiD/Pearson) ve
+// getAllLatestArrivals (kıta özeti) aynı fonksiyonu paylaşır.
+export function pickBeforeAfterPair(series) {
+  const byMonth = new Map()
+  for (const s of series) {
+    if (!byMonth.has(s.month)) byMonth.set(s.month, [])
+    byMonth.get(s.month).push(s)
+  }
+  let best = null
+  for (const list of byMonth.values()) {
+    if (list.length >= 2 && (!best || list.length > best.length)) best = list
+  }
+  if (!best) return null
+  const sorted = [...best].sort((a, b) => a.year - b.year)
+  const after = sorted[sorted.length - 1]
+  const before = sorted[sorted.length - 2]
+  return { before: before.visitorCount, after: after.visitorCount, beforeYear: before.year, afterYear: after.year, month: before.month }
+}
+
+function round1(n) {
+  return Math.round(n * 10) / 10
+}
+
+// src/components/ContinentSidebar.jsx'teki kıta bazlı turizm kartı için: her izlenen ülkenin en
+// güncel önce/sonra çiftini + % değişimini döner. Kıta filtresi client-side yapılıyor (bkz.
+// findTopLearningCountry deseni — learningIndex de aynı şekilde global çekilip kıtaya göre
+// süzülüyor), burada sadece ham liste üretiliyor.
+export function getAllLatestArrivals() {
+  const items = []
+  for (const iso2 of getTrackedIso2s()) {
+    const pair = pickBeforeAfterPair(getVisitorSeries(iso2))
+    if (!pair) continue
+    const changePct = pair.before === 0 ? null : round1(((pair.after - pair.before) / pair.before) * 100)
+    items.push({
+      iso2,
+      month: pair.month,
+      beforeYear: pair.beforeYear,
+      afterYear: pair.afterYear,
+      visitorCount: pair.after,
+      previousVisitorCount: pair.before,
+      changePct,
+    })
+  }
+  return items
+}

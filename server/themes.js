@@ -136,6 +136,19 @@ export function setHumanOverride(seriesId, theme, reviewer) {
   return rowToEntry(selectOneStmt.get(id))
 }
 
+// İnsan override'ını siler, kaydı LLM'in orijinal sınıflandırmasına döndürür — Analist
+// Paneli'ndeki "AI önerisine geri dön" butonu için (bkz. AnalystDashboard.jsx). Orijinal
+// LLM sonucu (theme/confidence) hiç silinmiyor, sadece override_* kolonları NULL'a çekiliyor.
+export function clearHumanOverride(seriesId) {
+  const id = Number(seriesId)
+  const row = selectOneStmt.get(id)
+  if (!row) {
+    throw new Error(`Dizi bulunamadı: ${seriesId}`)
+  }
+  updateOverrideStmt.run(null, null, null, id)
+  return rowToEntry(selectOneStmt.get(id))
+}
+
 export function effectiveTheme(entry) {
   return entry.humanOverride?.theme ?? entry.theme
 }
