@@ -449,28 +449,13 @@ app.get('/api/trends/series', async (req, res) => {
   }
 })
 
-app.get('/api/trends/:seriesName', async (req, res) => {
-  try {
-    const data = await queryTrends(req.params.seriesName)
-    res.json(data)
-  } catch (err) {
-    console.error('[trends] hata:', err.message)
-    res.status(502).json({ error: err.message })
-  }
-})
-
-app.get('/api/social/:seriesName', async (req, res) => {
-  try {
-    const data = await querySocialListening(req.params.seriesName)
-    res.json(data)
-  } catch (err) {
-    console.error('[social] hata:', err.message)
-    res.status(502).json({ error: err.message })
-  }
-})
-
 // TrendsExplorer.jsx — Kıyaslama Modu. En fazla 5 (arayüz 3'e sınırlıyor) dizinin göreceli
 // arama payı, KÜRESEL (geo verilmez — bkz. trendsShareOfSearch.js'teki iso2 genellemesi).
+// DİKKAT: bu route'un aşağıdaki /api/trends/:seriesName'den ÖNCE tanımlı olması ZORUNLU —
+// Express route'ları kayıt SIRASINA göre eşleştirir, sonra tanımlansaydı ":seriesName" joker
+// deseni "share-of-search"i sahte bir dizi adı sanıp önce yakalardı (gerçek bir bug olarak
+// yaşandı: SerpAPI'nin "share-of-search" diye bir dizi bulamaması gibi yanıltıcı bir hataya yol
+// açıyordu — aynı sebeple /api/trends/timeseries/:seriesName da spesifik önce gelmeli).
 app.get('/api/trends/share-of-search', async (req, res) => {
   try {
     const titles = String(req.query.titles || '')
@@ -487,6 +472,7 @@ app.get('/api/trends/share-of-search', async (req, res) => {
 
 // TrendsExplorer.jsx — Küresel 12 Aylık Trend Çizgisi. Tek dizi, geo verilmez (dünya geneli
 // haftalık arama hacmi) — bkz. serpApiCache.js'teki fetchTrendsTimeSeriesRaw'ın iso2-opsiyonel hâli.
+// Aynı gerekçeyle (yukarıdaki not) /api/trends/:seriesName'den ÖNCE tanımlı.
 app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
   try {
     const key = timeSeriesCacheKey(req.params.seriesName, null, 'today 12-m')
@@ -496,6 +482,26 @@ app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/timeseries] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/trends/:seriesName', async (req, res) => {
+  try {
+    const data = await queryTrends(req.params.seriesName)
+    res.json(data)
+  } catch (err) {
+    console.error('[trends] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/social/:seriesName', async (req, res) => {
+  try {
+    const data = await querySocialListening(req.params.seriesName)
+    res.json(data)
+  } catch (err) {
+    console.error('[social] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })
