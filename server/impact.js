@@ -81,11 +81,10 @@ function round2(n) {
 const PENDING_ANALYSIS = {
   title: 'Turizm ve İhracat Korelasyonu',
   status: 'gerçek-veri-bekleniyor',
-  description:
-    'Şu anda görünürlüğü yükselen ülkelerin turist giriş verisi (T.C. Kültür ve Turizm Bakanlığı YİGM sınır bülteninden otomatik çekiliyor) ya henüz senkronize edilmedi ya da bu ülkeler bültende ayrı satırla geçmiyor (küçük/az turistli ülkeler "DİĞER ÜLKELER" alt toplamına giriyor, satır bazında ayrıştırılamıyor). Dizi ihracatı (ülke bazlı $) verisi ise hâlâ kamuya açık değil — sadece toplam ulusal rakam yayınlanıyor. Veri örtüştüğünde burada gerçek bir Difference-in-Differences (DiD) düzeltmesi ve Pearson korelasyonu gösterilecek — hesaplama yöntemi zaten hazır ve doğrulanmış durumda.',
+  description: 'Yükselen ülkeler için turist/ihracat verisi henüz eşleşmedi.',
   requiredSources: [
-    'TÜİK/Kültür ve Turizm Bakanlığı (YİGM) turist giriş istatistikleri — otomatik çekiliyor, şu anki yükselen ülkeler için henüz eşleşen veri yok',
-    'Kültür ve Turizm Bakanlığı / TGA dizi ihracat verisi (ülke bazlı) — hâlâ kamuya açık değil, kurumsal talep gerekiyor',
+    'YİGM turist giriş istatistikleri — otomatik çekiliyor, eşleşen veri yok',
+    'Dizi ihracatı (ülke bazlı) — kamuya açık değil',
   ],
 }
 
@@ -201,8 +200,7 @@ async function computeTourismCorrelation(risingCountries) {
   return {
     title: 'Turizm ve İhracat Korelasyonu',
     status: 'gerçek-veri-mevcut',
-    dataSource:
-      'T.C. Kültür ve Turizm Bakanlığı (YİGM) Sınır İstatistikleri Bülteni — otomatik, aylık çekiliyor (bkz. server/services/tourismData.js)',
+    dataSource: 'YİGM Sınır İstatistikleri Bülteni (otomatik)',
     sampleSize: withData.length,
     correlation,
     confidenceInterval: confInterval,

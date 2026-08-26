@@ -155,6 +155,76 @@ def get_rating(tconst: str, cache_dir: Path) -> Optional[tuple[float, int]]:
     return None
 
 
+def fetch_series_batch(tconsts: list[str], cache_dir: Path) -> dict[str, ImdbSeriesInfo]:
+    """Çok sayıda (ör. 200) tconst için TEK GEÇİŞTE tarar — fetch_series()'i 200 kez
+    çağırmak, basics (~226 MB) ve akas (~511 MB) dosyalarını 200 kez baştan taramak
+    anlamına gelirdi (pratik değil). Bunun yerine istenen tconst kümesi bir kez
+    indekslenir. Bulunamayan tconst'lar dönen sözlükte hiç yer almaz — uydurma bir
+    kayıt eklenmez."""
+    import pandas as pd
+
+    wanted = set(tconsts)
+
+    basics_by_id: dict[str, dict] = {}
+    for row in _iter_tsv_rows(download_dataset("basics", cache_dir)):
+        if row["tconst"] in wanted:
+            basics_by_id[row["tconst"]] = row
+
+    ratings_by_id: dict[str, tuple[float, int]] = {}
+    for row in _iter_tsv_rows(download_dataset("ratings", cache_dir)):
+        if row["tconst"] in wanted:
+            ratings_by_id[row["tconst"]] = (float(row["averageRating"]), int(row["numVotes"]))
+
+    akas_by_id: dict[str, list[LocalizedTitle]] = {tc: [] for tc in wanted}
+    seen: set[tuple[str, str, str]] = set()
+    for chunk in pd.read_csv(
+        download_dataset("akas", cache_dir),
+        sep="\t",
+        compression="gzip",
+        chunksize=200_000,
+        dtype=str,
+        na_values="\\N",
+        keep_default_na=False,
+        quoting=csv.QUOTE_NONE,
+    ):
+        matched = chunk[chunk["titleId"].isin(wanted)]
+        if matched.empty:
+            continue
+        for _, row in matched.iterrows():
+            region = row.get("region")
+            if not region or isinstance(region, float):
+                continue
+            tid = row["titleId"]
+            title = row["title"]
+            key = (tid, region, title)
+            if key in seen:
+                continue
+            seen.add(key)
+            akas_by_id[tid].append(
+                LocalizedTitle(region=region, title=title, is_original=str(row.get("isOriginalTitle")) == "1")
+            )
+
+    now = datetime.now(timezone.utc)
+    results: dict[str, ImdbSeriesInfo] = {}
+    for tconst in tconsts:
+        basics = basics_by_id.get(tconst)
+        if not basics:
+            continue
+        rating = ratings_by_id.get(tconst)
+        results[tconst] = ImdbSeriesInfo(
+            tconst=tconst,
+            primary_title=basics["primaryTitle"],
+            original_title=basics["originalTitle"],
+            start_year=int(basics["startYear"]) if _none_if_na(basics["startYear"]) else None,
+            end_year=int(basics["endYear"]) if _none_if_na(basics["endYear"]) else None,
+            average_rating=rating[0] if rating else None,
+            num_votes=rating[1] if rating else None,
+            localized_titles=akas_by_id.get(tconst, []),
+            fetched_at=now,
+        )
+    return results
+
+
 def fetch_series(name_or_id: str, cache_dir: Path) -> Optional[ImdbSeriesInfo]:
     """Ana giriş noktası. Eşleşme yoksa None döner (uydurma bir sonuç üretmez).
     Birden fazla eşleşme varsa (aynı isimde birden çok dizi) ilkini kullanır —

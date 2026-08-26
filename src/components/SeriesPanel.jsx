@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { fetchImdbData } from '../lib/api.js'
+import { fetchImdbData, fetchSeriesEnrichment } from '../lib/api.js'
 import CastBar from './CastBar.jsx'
 import countryNames from '../data/country-centroids.json'
 
@@ -23,6 +23,7 @@ function formatVotes(n) {
 export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onShowOnMap }) {
   const [imdb, setImdb] = useState(null)
   const [imdbStatus, setImdbStatus] = useState('loading')
+  const [enrichment, setEnrichment] = useState(null)
 
   const series = useMemo(() => {
     let base = null
@@ -58,6 +59,23 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
     }
   }, [seriesId])
 
+  // data-pipeline-python/batch_run.py'nin ürettiği Dizilah topluluk puanı + IMDb ülke
+  // bazlı yerelleştirilmiş isim verisi (bkz. server/services/pipelineData.js) —
+  // pipeline'da hiç işlenmemiş bir dizi için sessizce null kalır, panel çökmez.
+  useEffect(() => {
+    if (seriesId == null) return
+    let cancelled = false
+    setEnrichment(null)
+    fetchSeriesEnrichment(seriesId)
+      .then((res) => {
+        if (!cancelled) setEnrichment(res)
+      })
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [seriesId])
+
   if (!series) {
     return <p className="dashboard__empty">Bu dizi için veri bulunamadı.</p>
   }
@@ -85,6 +103,17 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
               {imdb.votes != null ? ` (${formatVotes(imdb.votes)} Oy)` : ''}
             </p>
           )}
+          {enrichment?.dizilah?.communityRating != null && (
+            <p
+              className="panel__series-imdb-line"
+              title="Dizilah topluluk puanı (5 üzerinden)."
+            >
+              📺 {enrichment.dizilah.communityRating.toFixed(1)}/5
+              {enrichment.dizilah.voteCount != null ? ` (${formatVotes(enrichment.dizilah.voteCount)} oy)` : ''}
+              {enrichment.dizilah.channel ? ` · ${enrichment.dizilah.channel}` : ''}
+              {enrichment.dizilah.status ? ` · ${enrichment.dizilah.status}` : ''}
+            </p>
+          )}
         </div>
       </div>
 
@@ -109,11 +138,8 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
       )}
 
       <h3>Yayınlandığı Ülkeler</h3>
-      <p
-        className="dashboard__hint"
-        title="Bu dizinin kendi popülerliği ülkeden ülkeye değişmez (TMDB tek bir değer verir) — sağdaki sayı o ÜLKENİN tüm Türk dizisi görünürlük skorudur, en büyük pazarlar üstte sıralanır."
-      >
-        Sağdaki değer bu dizinin değil, ülkenin genel Türk dizisi görünürlük skorudur ⓘ
+      <p className="dashboard__hint" title="Sağdaki sayı ülkenin genel görünürlük skorudur.">
+        Ülkenin genel skoru ⓘ
       </p>
       <ul className="panel__series-list">
         {series.countries.map((c) => (
@@ -127,6 +153,27 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
           </li>
         ))}
       </ul>
+
+      {enrichment?.imdb?.localizedTitles?.length > 0 && (
+        <>
+          <h3>Uluslararası İsimler</h3>
+          <p className="dashboard__hint" title="Ülke bazlı isim kaydı.">
+            Dünya genelinde bilindiği isimler ⓘ
+          </p>
+          <ul className="panel__series-list">
+            {enrichment.imdb.localizedTitles.map((lt) => (
+              <li key={`${lt.region}-${lt.title}`} className="panel__series-item panel__series-item--static">
+                <div className="panel__series-row">
+                  <span className="panel__series-info">
+                    <span className="panel__series-name">{nameOf(lt.region)}</span>
+                  </span>
+                  <span className="panel__series-score">{lt.title}</span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </>
   )
 }

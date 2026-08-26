@@ -24,6 +24,8 @@ import {
 } from './period-history.js'
 import { getThemeInsight } from './services/themeInsight.js'
 import { getAllLatestArrivals } from './services/tourismData.js'
+import { getSeriesEnrichment } from './services/pipelineData.js'
+import { getSeriesPopularityMap } from './series-period-history.js'
 import {
   DESTINATIONS,
   ensureDetected,
@@ -41,6 +43,9 @@ import { buildBenchmark } from './benchmark.js'
 import { getTurkishLearningIndex } from './turkish-learning-interest.js'
 import { getRegionalInterest } from './regional-interest.js'
 import { getDuolingoTurkishStats } from './duolingo.js'
+import { fetchAndAnalyzeSentiment } from './services/newsSentiment.js'
+import { calculateCountryCompositeScore } from './services/countryScoringEngine.js'
+import { getCached } from './cache.js'
 import { COOKIE_NAME, createSession, getSessionUserId, isValidSession, deleteSession, parseCookies, sessionCookieHeader } from './auth.js'
 import {
   ensureBootstrapAdmin,
@@ -275,6 +280,20 @@ app.get('/api/tourism-summary', (req, res) => {
   }
 })
 
+// CountryPanel'deki "Yayındaki diziler" listesinin Aylık/Yıllık/5 Yıllık dönemlere göre
+// yeniden sıralanabilmesi için — tüm dizilerin (tmdb_id) o dönemdeki ortalama popülerliğini
+// döner, ülkeye göre süzme client-side yapılır (bkz. server/series-period-history.js).
+app.get('/api/series-popularity', (req, res) => {
+  try {
+    const range = ['monthly', 'yearly', '5yearly'].includes(req.query.range) ? req.query.range : 'monthly'
+    const map = getSeriesPopularityMap(range)
+    res.json({ range, items: Object.fromEntries(map) })
+  } catch (err) {
+    console.error('[series-popularity] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
 app.get('/api/theme-insight', async (req, res) => {
   try {
     const data = await getThemeInsight()
@@ -455,6 +474,20 @@ app.get('/api/imdb/:tmdbId', async (req, res) => {
   }
 })
 
+// data-pipeline-python/batch_run.py'nin ürettiği Dizilah topluluk puanı + IMDb ülke
+// bazlı yerelleştirilmiş isim verisi — pipeline hiç çalıştırılmamışsa ya da bu dizi
+// için veri yoksa (services/pipelineData.js) dürüstçe { dizilah: null, imdb: null }
+// döner, hata fırlatmaz.
+app.get('/api/series-enrichment/:tmdbId', (req, res) => {
+  try {
+    const data = getSeriesEnrichment(Number(req.params.tmdbId))
+    res.json(data || { dizilah: null, imdb: null })
+  } catch (err) {
+    console.error('[series-enrichment] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
 app.get('/api/person/:personId', async (req, res) => {
   try {
     const data = await buildPersonImpact(req.params.personId)
@@ -471,6 +504,46 @@ app.get('/api/regional-interest/:seriesName/:iso2', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[regional-interest] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+// Proje raporu §4.6 "Basın/Haber Duygu Analizi" — dizi ve ülke bazlı duygu oranları, baskın
+// ton, LLM'in kurumsal Türkçe özeti ve son 5 haber künyesi. seriesId TMDB kimliği; dizi adı
+// canlı raw-series-providers önbelleğinden çözülür (data-pipeline.js'in doldurduğu, bkz.
+// server/data-pipeline.js) — bu önbellek henüz hiç dolmamışsa (uygulama az önce başladıysa)
+// dürüstçe 404 döneriz, uydurma bir isimle SerpAPI'ye gitmeyiz. Bu kod tabanında henüz o
+// ülkeye özel yerelleştirilmiş bir dizi adı kaynağı yok (bkz. data-pipeline-python'daki AYRI
+// imdb_localized_titles, Node tarafından erişilemiyor) — localTitle bilerek null geçilir,
+// fetchAndAnalyzeSentiment bu durumda dürüstçe seriesName'e düşer.
+app.get('/api/media-sentiment/:seriesId/:iso2', async (req, res) => {
+  try {
+    const seriesId = Number(req.params.seriesId)
+    const rawSeries = getCached('raw-series-providers')
+    const series = rawSeries?.series?.find((s) => s.id === seriesId)
+    if (!series) {
+      res.status(404).json({ error: `TMDB id ${seriesId} için canlı dizi verisi bulunamadı` })
+      return
+    }
+    const data = await fetchAndAnalyzeSentiment(seriesId, series.name, null, req.params.iso2)
+    res.json(data)
+  } catch (err) {
+    console.error('[media-sentiment] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+// Proje raporu — TMDB'nin tek küresel popülerlik skoruna bağımlılığı azaltan 4 faktörlü
+// (Share of Search %40, Netflix Top 10 %30, Basın Algısı %15, Yayın Varlığı %15) ülke
+// liderlik tablosu (bkz. server/services/countryScoringEngine.js). Share of Search canlı bir
+// SerpAPI çağrısı gerektirdiği için (cache-first olsa da ilk seferinde kota harcar) diğer
+// GET uçları gibi anlık değil — bu yüzden burada da aynı honest-502 deseni korunuyor.
+app.get('/api/country-leaderboard/:iso2', async (req, res) => {
+  try {
+    const data = await calculateCountryCompositeScore(req.params.iso2)
+    res.json(data)
+  } catch (err) {
+    console.error('[country-leaderboard] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })

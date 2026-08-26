@@ -3,9 +3,11 @@ import Sparkline from './Sparkline.jsx'
 import CastBar from './CastBar.jsx'
 import ActorPanel from './ActorPanel.jsx'
 import SeriesPanel from './SeriesPanel.jsx'
-import { fetchRegionalInterest, fetchCountryPeriods } from '../lib/api.js'
+import { fetchRegionalInterest, fetchCountryPeriods, fetchSeriesPopularity } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import PeriodChart from './PeriodChart.jsx'
+import MediaSentimentCard, { HybridScoreTag } from './MediaSentimentCard.jsx'
+import CountryLeaderboard from './CountryLeaderboard.jsx'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w92'
@@ -216,6 +218,43 @@ export default function CountryPanel({
   const [expandedId, setExpandedId] = useState(null)
   const [periodRange, setPeriodRange] = useState('monthly')
   const [countryPeriods, setCountryPeriods] = useState(null)
+  const [seriesRange, setSeriesRange] = useState('current')
+  const [seriesPopularity, setSeriesPopularity] = useState(null)
+
+  // Tüm dizilerin (ülkeden bağımsız — TMDB popülerliği zaten global tek bir değer, bkz.
+  // server/series-period-history.js) dönem bazlı ortalaması — 'current' seçiliyse hiç
+  // istek atılmaz, dizinin O ANKİ canlı popülerliği (mevcut/eski davranış) kullanılır.
+  useEffect(() => {
+    if (seriesRange === 'current') {
+      setSeriesPopularity(null)
+      return
+    }
+    let cancelled = false
+    fetchSeriesPopularity(seriesRange)
+      .then((res) => {
+        if (!cancelled) setSeriesPopularity(res.items)
+      })
+      .catch((err) => {
+        if (!cancelled) console.error('[CountryPanel] series-popularity', err.message)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [seriesRange])
+
+  // 'current' seçiliyse mevcut davranış (canlı popülerliğe göre, aggregate.js'in zaten
+  // sıraladığı sıra) korunur. Aksi halde seçili dönemdeki ortalama popülerliğe göre yeniden
+  // sıralanır — o dönem için geçmişi olmayan (yeni) diziler dürüstçe canlı değerine düşer,
+  // listeden atılmaz/0 sayılmaz.
+  const sortedSeriesList = useMemo(() => {
+    const list = country?.seriesList || []
+    if (seriesRange === 'current' || !seriesPopularity) return list
+    return [...list].sort((a, b) => {
+      const aValue = seriesPopularity[a.id]?.value ?? a.popularity
+      const bValue = seriesPopularity[b.id]?.value ?? b.popularity
+      return bValue - aValue
+    })
+  }, [country?.seriesList, seriesRange, seriesPopularity])
 
   useEffect(() => {
     setExpandedId(null)
@@ -309,30 +348,25 @@ export default function CountryPanel({
               {country.dataSource === 'proxy' ? (
                 <span
                   className="panel__data-badge panel__data-badge--proxy"
-                  title="TMDB/JustWatch'ta bu ülke için hiçbir yayın sağlayıcı verisi yok. Gösterilen değer, Google Trends üzerinden gerçek yayın/izlenme verisi DEĞİL, sadece arama ilgisine dayalı bir tahmindir."
+                  title="Yayın verisi yok — arama ilgisi tahmini."
                 >
                   ⚡ Arama Hacmi Tahmini
                 </span>
               ) : (
-                <span className="panel__data-badge panel__data-badge--tmdb" title="Bu ülkenin verisi TMDB/JustWatch'ın gerçek yayın sağlayıcı kataloğundan geliyor.">
-                  ✓ TMDB Resmi Veri
+                <span className="panel__data-badge panel__data-badge--tmdb" title="Resmi yayın verisi.">
+                  ✓ Resmi Veri
                 </span>
               )}
 
               {country.dataSource === 'proxy' ? (
-                <p className="panel__subtitle">
-                  TMDB/JustWatch'ta yayın sağlayıcı verisi yok — arama hacmi endeksi: {country.searchInterestScore}/100
-                </p>
+                <p className="panel__subtitle">Arama hacmi endeksi: {country.searchInterestScore}/100</p>
               ) : (
                 <p className="panel__subtitle">{country.seriesCount} dizi yayında</p>
               )}
 
               <h3>Trend ve Görünürlük Geçmişi</h3>
               {country.dataSource === 'proxy' ? (
-                <p className="dashboard__empty">
-                  Bu ülke için gerçek bir görünürlük geçmişi tutulmuyor (skor gerçek yayın
-                  verisine değil, tek seferlik bir arama ilgisi tahminine dayanıyor).
-                </p>
+                <p className="dashboard__empty">Görünürlük geçmişi tutulmuyor.</p>
               ) : (
                 <>
                   <Sparkline history={country.history} />
@@ -353,21 +387,44 @@ export default function CountryPanel({
                 </>
               )}
 
+              {country.dataSource !== 'proxy' && (
+                <>
+                  <h3>Yerel Sıralama</h3>
+                  <CountryLeaderboard iso2={country.iso2} />
+                </>
+              )}
+
               {country.dataSource === 'proxy' ? (
                 <>
                   <h3>Yayındaki diziler</h3>
-                  <p className="dashboard__empty">
-                    Bu ülke için TMDB/JustWatch'ta hiçbir dizi/yayın sağlayıcı eşleşmesi
-                    bulunamadı. Yukarıdaki {country.searchInterestScore}/100 değeri, "
-                    {country.proxyQueryTerm}" terimi için Google Trends arama ilgisi
-                    endeksidir — gerçek yayın veya izlenme verisi değildir.
-                  </p>
+                  <p className="dashboard__empty">Bu ülke için yayın verisi yok.</p>
                 </>
               ) : (
                 <>
                   <h3>Yayındaki diziler</h3>
+                  <div className="period-toggle" role="group" aria-label="Popülerlik dönemi">
+                    {[
+                      ['current', 'Şu An'],
+                      ['monthly', 'Aylık'],
+                      ['yearly', 'Yıllık'],
+                      ['5yearly', '5 Yıllık'],
+                    ].map(([value, label]) => (
+                      <button
+                        key={value}
+                        className={
+                          seriesRange === value ? 'period-toggle__btn period-toggle__btn--active' : 'period-toggle__btn'
+                        }
+                        onClick={() => setSeriesRange(value)}
+                      >
+                        {label}
+                      </button>
+                    ))}
+                  </div>
+                  {seriesRange !== 'current' && seriesPopularity && Object.values(seriesPopularity).some((v) => v.isPartial) && (
+                    <p className="dashboard__hint">Bazı diziler için veri henüz kısmi.</p>
+                  )}
                   <ul className="panel__series-list">
-                    {country.seriesList.map((s) => {
+                    {sortedSeriesList.map((s) => {
                   const key = s.id ?? s.name
                   const isExpanded = expandedId === key
                   const isActiveOnMap = activeSeriesId != null && s.id === activeSeriesId
@@ -400,12 +457,28 @@ export default function CountryPanel({
                             {yearOf(s.firstAirDate) || '—'} · {s.theme}
                           </span>
                         </span>
-                        <span className="panel__series-score">{s.popularity.toFixed(1)}</span>
+                        <span className="panel__series-score">
+                          {(seriesRange !== 'current' && seriesPopularity?.[s.id]?.value != null
+                            ? seriesPopularity[s.id].value
+                            : s.popularity
+                          ).toFixed(1)}
+                          {seriesRange !== 'current' && seriesPopularity?.[s.id]?.isPartial && (
+                            <span title="Bu dönem için veri henüz kısmi">*</span>
+                          )}
+                          {seriesRange !== 'current' && seriesPopularity?.[s.id]?.source === 'reytingtv_rank' && (
+                            <span className="panel__series-source-tag" title="Türkiye'deki gerçek günlük reyting sırasına dayanıyor (canlı popülerlik verisi değil)">
+                              TR
+                            </span>
+                          )}
+                        </span>
                       </div>
                       {isExpanded && (
                         <div className="panel__series-detail" onClick={(e) => e.stopPropagation()}>
                           <p className="panel__series-overview">{s.overview || 'Bu dizi için özet bulunmuyor.'}</p>
                           <CastBar cast={s.cast} onSelectActor={onSelectActor} />
+                          <HybridScoreTag seriesName={s.name} iso2={country.iso2} />
+                          <h4 className="panel__series-detail-heading">Basın &amp; Medya Algısı</h4>
+                          <MediaSentimentCard seriesId={s.id} iso2={country.iso2} seriesName={s.name} />
                         </div>
                       )}
                     </li>

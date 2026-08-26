@@ -67,6 +67,11 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_visibility_history_iso2 ON visibility_history(iso2);
 
+  -- SÜRESİZ (TTL'siz) eski SerpAPI önbellek tabloları — server/services/serpApiCache.js artık
+  -- bunların yerine genel amaçlı, TTL'li cache_entries'i kullanıyor (bkz. serpApiCache.js'in
+  -- başındaki not ve migrateLegacySerpApiCaches). Bu üçü SADECE bir kerelik geçiş (zaten
+  -- harcanmış SerpAPI kotasıyla çekilmiş veriyi kaybetmemek için) kaynağı olarak DROP
+  -- EDİLMİYOR — yeni kod bunlara hiç yazmıyor/okumuyor.
   CREATE TABLE IF NOT EXISTS trends_cache (
     key TEXT PRIMARY KEY,
     series_name TEXT,
@@ -160,6 +165,50 @@ db.exec(`
     imported_at TEXT,
     PRIMARY KEY (iso2, year, month)
   );
+
+  -- "Yayındaki diziler" listesinin Aylık/Yıllık/5 Yıllık dönemlere göre yeniden
+  -- sıralanabilmesi için — TMDB popülerliği ülkeye özel değil (tek global değer, bkz.
+  -- server/series-period-history.js), bu yüzden ülke bazında değil sadece dizi (tmdb_id)
+  -- bazında tutuluyor; bir ülkedeki sıralama, o ülkenin GÜNCEL yayın listesini bu tabloyla
+  -- eşleştirerek client-side/handler'da yapılır.
+  CREATE TABLE IF NOT EXISTS series_popularity_history (
+    tmdb_id INTEGER,
+    popularity REAL,
+    captured_at INTEGER
+  );
+  CREATE INDEX IF NOT EXISTS idx_series_popularity_history_id ON series_popularity_history(tmdb_id);
+
+  CREATE TABLE IF NOT EXISTS series_popularity_monthly (
+    tmdb_id INTEGER,
+    year INTEGER,
+    month INTEGER,
+    avg_popularity REAL,
+    sample_count INTEGER,
+    PRIMARY KEY (tmdb_id, year, month)
+  );
+
+  -- Proje raporu §4.6 "Basın/Haber Duygu Analizi" — bkz. server/services/newsSentiment.js.
+  -- trends_cache/social_listening_cache gibi ham SerpAPI yanıtı değil, LLM'in ÜRETTİĞİ bir
+  -- analiz sonucu tutulduğu için (kendi TTL'i, kendi "son 5 haber" sorgu şekli var) ayrı bir
+  -- tablo — genel amaçlı cache_entries'e sıkıştırmak yerine gerçek sütunlarla tutuluyor ki
+  -- Analist Paneli ileride bunu doğrudan SELECT ile listeleyebilsin.
+  CREATE TABLE IF NOT EXISTS media_sentiment (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    series_id INTEGER NOT NULL,
+    country_iso2 TEXT NOT NULL,
+    query_used TEXT,
+    total_news_count INTEGER,
+    positive_score REAL,
+    neutral_score REAL,
+    negative_score REAL,
+    dominant_sentiment TEXT,
+    llm_summary TEXT,
+    raw_articles TEXT,
+    created_at TEXT,
+    expires_at INTEGER
+  );
+  CREATE UNIQUE INDEX IF NOT EXISTS idx_media_sentiment_series_country
+    ON media_sentiment(series_id, country_iso2);
 `)
 
 // Rastgele Denetim özelliği kaldırıldı — sadece test verisi biriktirmişti,
@@ -202,6 +251,18 @@ const destColumns = db.prepare("PRAGMA table_info(destination_classifications)")
 if (!destColumns.some((c) => c.name === 'detection_method')) {
   db.exec("ALTER TABLE destination_classifications ADD COLUMN detection_method TEXT")
   db.exec("UPDATE destination_classifications SET detection_method = 'keyword' WHERE detection_method IS NULL")
+}
+
+// Aylık/Yıllık dönem satırları iki farklı kaynaktan gelebilir: canlı TMDB popülerlik
+// anlık görüntülerinin ortalaması (rutin, ileriye dönük) veya data-pipeline-python'daki
+// ReytingTV geriye dönük dizi sıralaması taramasının doldurduğu gerçek geçmiş veri
+// (bkz. data-pipeline-python/reytingtv_ranker.py). İkisinin sayı ölçeği farklı (TMDB
+// popülerliği sınırsız/büyük, ReytingTV sıra skoru 10-100 arası) — karıştırmamak için
+// hangi kaynaktan geldiği ayrı tutulur, önyüz bunu dürüstçe etiketleyebilir.
+const seriesMonthlyColumns = db.prepare("PRAGMA table_info(series_popularity_monthly)").all()
+if (!seriesMonthlyColumns.some((c) => c.name === 'source')) {
+  db.exec("ALTER TABLE series_popularity_monthly ADD COLUMN source TEXT")
+  db.exec("UPDATE series_popularity_monthly SET source = 'tmdb_snapshot' WHERE source IS NULL")
 }
 
 export default db

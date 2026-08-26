@@ -14,14 +14,8 @@ export default function Legend({ caption }) {
         ))}
       </div>
       <span className="legend__label">Yüksek</span>
-      <p
-        className="legend__caption"
-        title={
-          caption ||
-          "TMDB'nin kendi popülerlik metriği (arama, oy ve trend sinyallerinin karışımı) × o ülkede yayında olma durumu. Gerçek izlenme/rating rakamı değildir — bir yakınsama (proxy) göstergesidir."
-        }
-      >
-        {caption ? caption.split(' — ')[0] : 'Kültürel Görünürlük Skoru (TMDB popülerliği × yayın erişimi)'} ⓘ
+      <p className="legend__caption" title={caption || 'Popülerlik × yayın erişimi — proxy gösterge.'}>
+        {caption ? caption.split(' — ')[0] : 'Kültürel Görünürlük Skoru'} ⓘ
       </p>
     </div>
   )

@@ -1,5 +1,5 @@
 const TMDB_BASE = 'https://api.themoviedb.org/3'
-const TOP_N_SERIES = 200
+const TOP_N_SERIES = 400
 const PAGE_SIZE = 20
 // "Yayında" kabul edilen erişim türleri: abonelik (flatrate) ve ücretsiz (free).
 // rent/buy hariç tutulur çünkü tek seferlik satın alma, yaygın kültürel erişimi göstermez.

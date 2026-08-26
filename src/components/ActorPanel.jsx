@@ -98,7 +98,7 @@ export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlob
           <button
             className="actor-modal__network-btn"
             onClick={() => onShowNetwork?.(data.person.name, data.series)}
-            title="Bu oyuncunun dizilerinden en az birinin yayınlandığı ülkeleri haritada işaretle"
+            title="Yayınlandığı ülkeleri haritada işaretle"
           >
             🌐 Bu Oyuncunun Tüm Projelerini Haritada Göster
           </button>
@@ -124,7 +124,7 @@ export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlob
                       <span className="panel__series-name">
                         {s.name}
                         {imdb?.status === 'ready' && imdb.rating != null && (
-                          <span className="panel__series-imdb" title="IMDb puanı">
+                          <span className="panel__series-imdb" title="Puan">
                             ⭐ {imdb.rating.toFixed(1)}
                           </span>
                         )}

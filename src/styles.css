@@ -549,6 +549,484 @@ body {
   color: #8792a8;
 }
 
+.panel__series-source-tag {
+  margin-left: 0.3rem;
+  padding: 0.05rem 0.3rem;
+  border-radius: 3px;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  background: rgba(224, 62, 82, 0.15);
+  color: #e03e52;
+  vertical-align: middle;
+}
+
+.panel__series-detail-heading {
+  margin: 0.3rem 0 -0.1rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8792a8;
+}
+
+/* --- Hibrit Yerel Skor (proje raporu §4.6) — TMDB popülerliğinin yanına, Google Trends
+   ağırlıklı çarpanı ve nihai skoru dürüstçe gösterir. --- */
+.hybrid-score {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  padding: 0.5rem 0.65rem;
+  background: rgba(57, 135, 229, 0.08);
+  border: 1px solid rgba(57, 135, 229, 0.25);
+  border-radius: 8px;
+  font-size: 0.78rem;
+}
+
+.hybrid-score--loading {
+  color: #8792a8;
+  font-style: italic;
+  font-size: 0.78rem;
+}
+
+.hybrid-score--low {
+  background: rgba(240, 173, 78, 0.08);
+  border-color: rgba(240, 173, 78, 0.3);
+}
+
+.hybrid-score__row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.hybrid-score__label {
+  color: #9aa4b8;
+}
+
+.hybrid-score__value {
+  font-weight: 600;
+  color: #6da7ec;
+  font-variant-numeric: tabular-nums;
+}
+
+.hybrid-score__value--final {
+  color: #f1f3f8;
+}
+
+.hybrid-score__note {
+  margin-top: 0.15rem;
+  font-size: 0.72rem;
+  color: #f0ad4e;
+}
+
+/* --- Basın & Medya Algısı (proje raporu §4.6) --- */
+.media-sentiment {
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+  padding: 0.7rem 0.75rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+}
+
+.media-sentiment--empty {
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.media-sentiment__scan-btn {
+  background: transparent;
+  border: 1px solid rgba(238, 49, 53, 0.5);
+  color: #EE3135;
+  border-radius: 999px;
+  padding: 0.3rem 0.85rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease, color 150ms ease;
+}
+
+.media-sentiment__scan-btn:hover {
+  background: #EE3135;
+  color: #fff;
+}
+
+.media-sentiment__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.media-sentiment__badge {
+  padding: 0.2rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.media-sentiment__badge--positive {
+  background: rgba(92, 184, 92, 0.18);
+  color: #5cb85c;
+}
+
+.media-sentiment__badge--neutral {
+  background: rgba(57, 135, 229, 0.18);
+  color: #6da7ec;
+}
+
+.media-sentiment__badge--negative {
+  background: rgba(229, 72, 77, 0.18);
+  color: #e5484d;
+}
+
+.media-sentiment__meta {
+  font-size: 0.7rem;
+  color: #8792a8;
+}
+
+.media-sentiment__bar {
+  display: flex;
+  height: 10px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.media-sentiment__bar-seg {
+  height: 100%;
+  transition: width 300ms ease;
+}
+
+.media-sentiment__bar-seg--positive {
+  background: #5cb85c;
+}
+
+.media-sentiment__bar-seg--neutral {
+  background: #6da7ec;
+}
+
+.media-sentiment__bar-seg--negative {
+  background: #e5484d;
+}
+
+.media-sentiment__bar-legend {
+  display: flex;
+  gap: 0.9rem;
+  font-size: 0.7rem;
+  color: #9aa4b8;
+  flex-wrap: wrap;
+}
+
+.media-sentiment__bar-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.media-sentiment__dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.media-sentiment__dot--positive {
+  background: #5cb85c;
+}
+
+.media-sentiment__dot--neutral {
+  background: #6da7ec;
+}
+
+.media-sentiment__dot--negative {
+  background: #e5484d;
+}
+
+.media-sentiment__summary {
+  margin: 0;
+  padding: 0.55rem 0.7rem;
+  border-left: 3px solid #EE3135;
+  background: rgba(238, 49, 53, 0.06);
+  border-radius: 0 6px 6px 0;
+  font-size: 0.8rem;
+  font-style: italic;
+  line-height: 1.55;
+  color: #d7dbe6;
+}
+
+.media-sentiment__summary cite {
+  display: block;
+  margin-top: 0.35rem;
+  font-size: 0.65rem;
+  font-style: normal;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  color: #8792a8;
+}
+
+.media-sentiment--skeleton {
+  gap: 0.45rem;
+}
+
+.media-sentiment__skel-bar,
+.media-sentiment__skel-line {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.09) 37%,
+    rgba(255, 255, 255, 0.04) 63%
+  );
+  background-size: 400% 100%;
+  animation: media-sentiment-shimmer 1.4s ease infinite;
+}
+
+.media-sentiment__skel-bar {
+  height: 22px;
+}
+
+.media-sentiment__skel-line {
+  height: 12px;
+  width: 80%;
+}
+
+.media-sentiment__skel-line--short {
+  width: 45%;
+}
+
+@keyframes media-sentiment-shimmer {
+  0% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0 50%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .media-sentiment__skel-bar,
+  .media-sentiment__skel-line {
+    animation: none;
+  }
+}
+
+/* --- Ülke Sıralaması (Share of Search + Netflix + Basın) --- */
+.leaderboard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.leaderboard__badge {
+  align-self: flex-start;
+  padding: 0.25rem 0.7rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.leaderboard__badge--verified {
+  background: rgba(92, 184, 92, 0.18);
+  color: #5cb85c;
+}
+
+.leaderboard__badge--partial {
+  background: rgba(240, 173, 78, 0.18);
+  color: #f0ad4e;
+}
+
+.leaderboard__badge--weak {
+  background: rgba(139, 150, 148, 0.18);
+  color: #8792a8;
+}
+
+.leaderboard__sos-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8792a8;
+  margin-top: 0.2rem;
+}
+
+.leaderboard__sos-bar {
+  display: flex;
+  height: 10px;
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.leaderboard__sos-seg {
+  height: 100%;
+  transition: width 300ms ease;
+}
+
+.leaderboard__sos-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.7rem;
+  font-size: 0.7rem;
+  color: #9aa4b8;
+}
+
+.leaderboard__sos-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.leaderboard__sos-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.leaderboard__list {
+  list-style: none;
+  margin: 0.3rem 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.leaderboard__row {
+  display: grid;
+  grid-template-columns: 1.3rem 2.2rem 1fr auto;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.4rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.leaderboard__row:last-child {
+  border-bottom: none;
+}
+
+.leaderboard__rank {
+  font-family: inherit;
+  font-weight: 700;
+  font-size: 0.85rem;
+  color: #6b7480;
+  text-align: center;
+}
+
+.leaderboard__poster {
+  width: 2.2rem;
+  height: 3.15rem;
+  border-radius: 4px;
+  object-fit: cover;
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.leaderboard__poster--empty {
+  display: block;
+}
+
+.leaderboard__info {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.leaderboard__name {
+  font-size: 0.85rem;
+  color: #f1f3f8;
+  font-weight: 600;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leaderboard__mini-bar {
+  display: flex;
+  height: 5px;
+  border-radius: 3px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  cursor: help;
+}
+
+.leaderboard__mini-seg {
+  height: 100%;
+}
+
+.leaderboard__mini-seg--sos {
+  background: #3987e5;
+}
+
+.leaderboard__mini-seg--netflix {
+  background: #e5484d;
+}
+
+.leaderboard__mini-seg--sentiment {
+  background: #5cb85c;
+}
+
+.leaderboard__evidence {
+  font-size: 0.68rem;
+  color: #6b7480;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.leaderboard__score {
+  font-weight: 700;
+  font-size: 0.95rem;
+  color: #f1f3f8;
+  font-variant-numeric: tabular-nums;
+}
+
+.leaderboard--skeleton {
+  gap: 0.5rem;
+}
+
+.leaderboard__skel-badge,
+.leaderboard__skel-bar,
+.leaderboard__skel-row {
+  border-radius: 6px;
+  background: linear-gradient(
+    90deg,
+    rgba(255, 255, 255, 0.04) 25%,
+    rgba(255, 255, 255, 0.09) 37%,
+    rgba(255, 255, 255, 0.04) 63%
+  );
+  background-size: 400% 100%;
+  animation: media-sentiment-shimmer 1.4s ease infinite;
+}
+
+.leaderboard__skel-badge {
+  height: 18px;
+  width: 45%;
+}
+
+.leaderboard__skel-bar {
+  height: 10px;
+}
+
+.leaderboard__skel-row {
+  height: 40px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .leaderboard__skel-badge,
+  .leaderboard__skel-bar,
+  .leaderboard__skel-row {
+    animation: none;
+  }
+}
+
 .badge {
   display: inline-block;
   padding: 0.15rem 0.55rem;
@@ -978,6 +1456,31 @@ body {
 .search-input:focus {
   outline: none;
   border-color: #EE3135;
+}
+
+/* .dashboard__summary'deki filtre/sıralama <select>'leri (tema/destinasyon filtresi, sıralama)
+   className'siz bırakılmıştı — tarayıcı varsayılan BEYAZ arka planla render ediyordu, koyu
+   panelin içinde göz yormayan bir uyumsuzluk yaratıyordu. .search-input'le aynı görsel dile
+   (koyu zemin, hap biçimi) getiriliyor. */
+.dashboard__summary select {
+  background: #0e1420;
+  color: #f1f3f8;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 0.4rem 0.9rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dashboard__summary select:focus {
+  outline: none;
+  border-color: #EE3135;
+}
+
+.dashboard__summary select option {
+  background: #0e1420;
+  color: #f1f3f8;
 }
 
 .search-input::placeholder {

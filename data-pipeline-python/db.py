@@ -5,10 +5,11 @@ uygulamasının şemasına (server/db.js) izinsiz/otomatik bir migration eklemek
 """
 from __future__ import annotations
 
+import json
 import sqlite3
 from pathlib import Path
 
-from models import DizilahSeriesInfo, ImdbSeriesInfo
+from models import CountryLeaderboard, DizilahSeriesInfo, ImdbSeriesInfo, NetflixCountryRanking, ReytingTvDailyRank
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS dizilah_series (
@@ -57,12 +58,75 @@ CREATE TABLE IF NOT EXISTS imdb_localized_titles (
     is_original INTEGER,
     PRIMARY KEY (tconst, region, title)
 );
+
+-- Node uygulamasının (gorunurluk-platformu) TMDB kimliğini bu pipeline'ın ürettiği
+-- dizilah_series.slug / imdb_series.tconst ile JOIN edebilmesi için. tmdb_id, ana
+-- uygulamanın gerçek zamanlı ürettiği kimlik olduğu için burada sabit/statik veri.
+CREATE TABLE IF NOT EXISTS series_mapping (
+    tmdb_id INTEGER PRIMARY KEY,
+    name TEXT,
+    dizilah_slug TEXT,
+    imdb_id TEXT
+);
+
+-- country_score_engine.py'nin ürettiği kompozit sıralama — her (ülke, dizi) çifti için
+-- tek satır, evidence JSON dizi olarak saklanır (bkz. save_country_leaderboard).
+CREATE TABLE IF NOT EXISTS country_show_rankings (
+    country_code TEXT,
+    show_title TEXT,
+    local_score REAL,
+    netflix_peak_position INTEGER,
+    netflix_weeks_in_top10 INTEGER,
+    trends_avg_interest REAL,
+    trends_direction TEXT,
+    locally_available INTEGER,
+    evidence TEXT,
+    generated_at TEXT,
+    PRIMARY KEY (country_code, show_title)
+);
+
+-- reytingtv_ranker.py'nin taradığı gerçek günlük TR Top 10 verisi — bkz. modül docstring'i
+-- (sayısal reyting/pay YOK, sadece SIRA). PRIMARY KEY aynı gün/kategori/dizi için tekrar
+-- taramada üzerine yazar (idempotent backfill).
+-- netflix_pipeline.py'nin doldurduğu, TMDB kimliğiyle eşlenmiş resmi Netflix Top 10 verisi.
+-- rank_score sıraya dayalı türetilmiş bir puandır, GERÇEK izlenme saati/sayısı DEĞİLDİR
+-- (bkz. netflix_country_ranker.py modül docstring'i — ülke bazlı dosyada bu veri hiç yok).
+CREATE TABLE IF NOT EXISTS netflix_country_rankings (
+    country_iso2 TEXT,
+    tmdb_id INTEGER,
+    show_title TEXT,
+    matched_title TEXT,
+    weeks_in_top10 INTEGER,
+    peak_rank INTEGER,
+    rank_score REAL,
+    last_week_date TEXT,
+    updated_at TEXT,
+    PRIMARY KEY (country_iso2, tmdb_id)
+);
+
+CREATE TABLE IF NOT EXISTS reytingtv_daily_ranks (
+    tmdb_id INTEGER,
+    air_date TEXT,
+    category TEXT,
+    rank INTEGER,
+    rank_score REAL,
+    matched_title TEXT,
+    program_raw TEXT,
+    source_url TEXT,
+    fetched_at TEXT,
+    PRIMARY KEY (tmdb_id, air_date, category)
+);
 """
 
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
     conn = sqlite3.connect(db_path)
+    # WAL modu: server/services/countryScoringEngine.js bu dosyaya SÜREKLİ AÇIK, salt-okunur
+    # bir bağlantı tutuyor (bkz. o dosyadaki not) — varsayılan rollback-journal modunda bu,
+    # Python buraya yazarken "database is locked" riski yaratırdı. WAL, okuyucularla yazıcının
+    # birbirini bloklamadan aynı anda çalışmasına izin verir (server/db.js'teki aynı ayar).
+    conn.execute("PRAGMA journal_mode = WAL")
     conn.executescript(SCHEMA)
     return conn
 
@@ -159,5 +223,100 @@ def save_imdb_series(conn: sqlite3.Connection, info: ImdbSeriesInfo) -> None:
     conn.executemany(
         "INSERT INTO imdb_localized_titles (tconst, region, title, is_original) VALUES (?, ?, ?, ?)",
         [(info.tconst, lt.region, lt.title, int(lt.is_original)) for lt in info.localized_titles],
+    )
+    conn.commit()
+
+
+def save_series_mapping(conn: sqlite3.Connection, tmdb_id: int, name: str, dizilah_slug: str, imdb_id: str | None) -> None:
+    conn.execute(
+        """
+        INSERT INTO series_mapping (tmdb_id, name, dizilah_slug, imdb_id)
+        VALUES (?, ?, ?, ?)
+        ON CONFLICT(tmdb_id) DO UPDATE SET
+            name = excluded.name,
+            dizilah_slug = excluded.dizilah_slug,
+            imdb_id = excluded.imdb_id
+        """,
+        (tmdb_id, name, dizilah_slug, imdb_id),
+    )
+    conn.commit()
+
+
+def save_netflix_country_rankings(conn: sqlite3.Connection, rankings: list[NetflixCountryRanking]) -> None:
+    conn.executemany(
+        """
+        INSERT INTO netflix_country_rankings
+            (country_iso2, tmdb_id, show_title, matched_title, weeks_in_top10, peak_rank,
+             rank_score, last_week_date, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(country_iso2, tmdb_id) DO UPDATE SET
+            show_title = excluded.show_title,
+            matched_title = excluded.matched_title,
+            weeks_in_top10 = excluded.weeks_in_top10,
+            peak_rank = excluded.peak_rank,
+            rank_score = excluded.rank_score,
+            last_week_date = excluded.last_week_date,
+            updated_at = excluded.updated_at
+        """,
+        [
+            (
+                r.country_iso2, r.tmdb_id, r.show_title, r.matched_title, r.weeks_in_top10,
+                r.peak_rank, r.rank_score, r.last_week_date, r.updated_at.isoformat(),
+            )
+            for r in rankings
+        ],
+    )
+    conn.commit()
+
+
+def save_reytingtv_daily_ranks(conn: sqlite3.Connection, ranks: list[ReytingTvDailyRank], fetched_at: str) -> None:
+    conn.executemany(
+        """
+        INSERT INTO reytingtv_daily_ranks
+            (tmdb_id, air_date, category, rank, rank_score, matched_title, program_raw, source_url, fetched_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(tmdb_id, air_date, category) DO UPDATE SET
+            rank = excluded.rank,
+            rank_score = excluded.rank_score,
+            matched_title = excluded.matched_title,
+            program_raw = excluded.program_raw,
+            source_url = excluded.source_url,
+            fetched_at = excluded.fetched_at
+        """,
+        [
+            (
+                r.tmdb_id, r.air_date.isoformat(), r.category, r.rank, r.rank_score,
+                r.matched_title, r.program_raw, r.source_url, fetched_at,
+            )
+            for r in ranks
+        ],
+    )
+    conn.commit()
+
+
+def save_country_leaderboard(conn: sqlite3.Connection, leaderboard: CountryLeaderboard) -> None:
+    conn.execute("DELETE FROM country_show_rankings WHERE country_code = ?", (leaderboard.country_code,))
+    conn.executemany(
+        """
+        INSERT INTO country_show_rankings
+            (country_code, show_title, local_score, netflix_peak_position, netflix_weeks_in_top10,
+             trends_avg_interest, trends_direction, locally_available, evidence, generated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        [
+            (
+                leaderboard.country_code,
+                e.show_title,
+                e.local_score,
+                e.netflix_signal.peak_position if e.netflix_signal else None,
+                e.netflix_signal.weeks_in_top10 if e.netflix_signal else None,
+                e.trends_signal.avg_interest if e.trends_signal else None,
+                e.trends_signal.trend_direction if e.trends_signal else None,
+                int(e.locally_available),
+                json.dumps(e.evidence, ensure_ascii=False),
+                leaderboard.generated_at.isoformat(),
+            )
+            for e in leaderboard.entries
+        ],
     )
     conn.commit()

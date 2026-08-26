@@ -56,9 +56,9 @@ function RisingCountryList({ items, accent = '#5cb85c' }) {
           {item.control && (
             <span
               className="impact__rank-control"
-              title="Difference-in-Differences (DiD) yöntemiyle otomatik önerilen kıyaslama ülkesi — kur dalgalanması/mevsimsellik gibi ortak dışsal etkileri ayrıştırmak için kullanılır."
+              title="Otomatik önerilen kıyaslama ülkesi (DiD yöntemi)."
             >
-              Küresel Etki ve Turizm Analizi Modülü — kıyaslama ülkesi: <strong>{item.control.label}</strong> ({item.control.reason})
+              Kıyaslama: <strong>{item.control.label}</strong> ({item.control.reason})
             </span>
           )}
         </div>
@@ -184,17 +184,12 @@ export default function ImpactReport({ onSelectCountry }) {
 
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Şu Anki Öne Çıkanlar</h3>
-        <p className="dashboard__hint">
-          Canlı veriden hesaplanan gerçek görünürlük skorları — tahmin veya örnek veri değil.
-          "Diğer" dilimi, listelenmeyen kalan {data.topCountriesByVisibility.length < 6 ? 'ülkelerin' : 'kalemlerin'} toplamını temsil eder.
-          Görünürlük skoru TMDB'nin popülerlik metriğine dayanır — gerçek izlenme rakamı değil,
-          bir yakınsama (proxy) göstergesidir.
-        </p>
+        <p className="dashboard__hint">Canlı veri — "Diğer" kalan toplamı temsil eder.</p>
         <div className="donut-panels">
           <div className="donut-panel">
             <h4
               className="impact__rank-title"
-              title="TMDB popülerlik puanı × yayın erişimi — gerçek izlenme rakamı değildir."
+              title="Popülerlik puanı × yayın erişimi — gerçek izlenme rakamı değildir."
             >
               Görünürlük skoruna göre en öndeki ülkeler ⓘ
             </h4>
@@ -243,20 +238,13 @@ export default function ImpactReport({ onSelectCountry }) {
 
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Küresel Kıyaslama — Türkiye vs ABD, Güney Kore, İspanya</h3>
-        <p className="dashboard__hint">
-          Türkiye'nin dizi görünürlüğünü, en büyük üç dizi ihracatçısı ülkeyle kıyaslar. Küresel
-          Pazar Payı ve İhracat Yapılan Ülke Sayısı TMDB popülerlik/yayın-erişimi verisine dayalı
-          bir proxy'dir — resmi ihracat istatistiği değildir (aşağıda metodoloji notuna bakın).
-        </p>
+        <p className="dashboard__hint">Türkiye vs en büyük 3 dizi ihracatçısı ülke.</p>
         <BenchmarkCard />
       </section>
 
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Türkçe Öğrenme İlgi Endeksi</h3>
-        <p className="dashboard__hint">
-          Türk dizilerinin kültürel etkisini, izleyicilerin Türkçe öğrenmeye yönelik gerçek Google
-          Trends arama ilgisi üzerinden ölçer.
-        </p>
+        <p className="dashboard__hint">Arama ilgisine dayalı.</p>
         <TurkishLearningIndex />
       </section>
 
@@ -274,12 +262,7 @@ export default function ImpactReport({ onSelectCountry }) {
 
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Zaman İçinde Görünürlük</h3>
-        <p className="dashboard__hint">
-          Tüm ülkelerin toplam görünürlük skorunun periyot bazında değişimi — ham anlık görüntüler
-          budanmadan önce kalıcı bir özet tabloya taşınır (bkz. server/period-history.js), bu
-          yüzden veri zamanla kaybolmaz. Veri Temmuz 2026'da başladığı için yıllık görünüm şimdilik
-          kısmi kalacaktır.
-        </p>
+        <p className="dashboard__hint">Toplam görünürlük skorunun ay/yıl bazında değişimi.</p>
         <div style={{ opacity: periodLoading ? 0.5 : 1, transition: 'opacity 200ms ease' }}>
           <PeriodChart
             periods={periodData?.periods || []}
@@ -292,12 +275,8 @@ export default function ImpactReport({ onSelectCountry }) {
       </section>
 
       <section className="dashboard__section">
-        <h3 className="dashboard__section-title">Tema Bazlı AI Yorumu</h3>
-        <p className="dashboard__hint">
-          Şu anda TMDB'de en popüler Türk dizilerinin tema dağılımı + bu dağılıma dayanan bir AI
-          yorumu. AI yorumu sadece aşağıdaki sayılarla sınırlı tutulur, yeni bir istatistik uydurmaz
-          (bkz. server/llm.js generateThemeInsight).
-        </p>
+        <h3 className="dashboard__section-title">Tema Dağılımı</h3>
+        <p className="dashboard__hint">Yapay zeka yorumu dahil.</p>
         <ThemeInsight />
       </section>
 
@@ -336,15 +315,13 @@ export default function ImpactReport({ onSelectCountry }) {
             <p className="dashboard__hint">
               {data.pendingAnalysis.hasEnoughForCorrelation ? (
                 <>
-                  Dizi görünürlük değişimi ile DiD-düzeltmeli turist sayısı değişimi arasındaki Pearson
-                  korelasyonu: <strong>{data.pendingAnalysis.correlation}</strong>
+                  Pearson korelasyonu: <strong>{data.pendingAnalysis.correlation}</strong>
                   {data.pendingAnalysis.hasEnoughForConfidenceInterval && data.pendingAnalysis.confidenceInterval
-                    ? ` (%95 güven aralığı: ${data.pendingAnalysis.confidenceInterval.low} – ${data.pendingAnalysis.confidenceInterval.high})`
-                    : ' — %95 güven aralığı için örneklem henüz yetersiz (en az 4 ülke gerekiyor).'}{' '}
-                  Bu bir korelasyondur, nedensellik iddiası değildir.
+                    ? ` (%95 GA: ${data.pendingAnalysis.confidenceInterval.low}–${data.pendingAnalysis.confidenceInterval.high})`
+                    : ' — örneklem yetersiz.'}
                 </>
               ) : (
-                'Korelasyon hesaplamak için en az 3 ülkede örtüşen veri gerekiyor — şu an yeterli değil, yukarıdaki tekil ülke tahminleri (DiD) yine de geçerli.'
+                'Korelasyon için örneklem yetersiz — tekil ülke tahminleri (DiD) geçerli.'
               )}
             </p>
           </>
@@ -352,7 +329,7 @@ export default function ImpactReport({ onSelectCountry }) {
           <>
             <div className="impact__pending-badges">
               <span className="badge badge--uncertain">Gerçek Veri Bekleniyor</span>
-              <span className="badge badge--info" title="Yöntem (Difference-in-Differences + Pearson korelasyonu + %95 güven aralığı) yazıldı ve test edildi — sadece gerçek turist/ihracat girdisi bekliyor.">
+              <span className="badge badge--info" title="Yöntem hazır, gerçek veri bekleniyor.">
                 Model Hesaplamaya Hazır
               </span>
             </div>

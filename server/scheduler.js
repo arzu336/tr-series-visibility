@@ -1,6 +1,7 @@
 import db from './db.js'
 import { getEnrichedVisibility } from './data-pipeline.js'
 import { rollupMonthlyIfNeeded } from './period-history.js'
+import { rollupSeriesMonthlyIfNeeded } from './series-period-history.js'
 import { syncTourismDataIfNeeded } from './services/tourismData.js'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000 // her 30 dakikada bir "sırası geldi mi" kontrolü
@@ -20,6 +21,7 @@ async function runScheduledRefresh() {
     // Ham visibility_history budanmadan önce (bkz. MAX_SNAPSHOTS_PER_COUNTRY, history.js)
     // tamamlanmış ayları kalıcı özet tabloya taşır — kendi günlük kapısı var (period-history.js).
     rollupMonthlyIfNeeded()
+    rollupSeriesMonthlyIfNeeded()
     setMetaStmt.run(META_KEY, String(Date.now()))
     console.log('[scheduler] zamanlanmış veri tazeleme tamamlandı')
   } catch (err) {

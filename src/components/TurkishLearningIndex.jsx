@@ -31,7 +31,7 @@ function GlobalDuolingoCard() {
 
   if (status === 'loading') return <div className="dashboard__empty">Yükleniyor…</div>
   if (status === 'unavailable' || !data) {
-    return <p className="dashboard__empty">Duolingo verisi şu anda alınamıyor.</p>
+    return <p className="dashboard__empty">Veri şu anda alınamıyor.</p>
   }
 
   const { trend } = data
@@ -44,13 +44,10 @@ function GlobalDuolingoCard() {
 
   return (
     <div className="global-stat-card">
-      <div className="global-stat-card__label">🌍 Küresel Duolingo Türkçe Öğrencisi</div>
+      <div className="global-stat-card__label">🌍 Küresel Türkçe Öğrencisi</div>
       <div className="global-stat-card__value">{new Intl.NumberFormat('tr-TR').format(data.totalLearners)}</div>
       <div className="global-stat-card__trend">{trendText}</div>
-      <p className="dashboard__hint" style={{ margin: '0.4rem 0 0' }}>
-        Duolingo'nun herkese açık kurs listesinden gerçek, ülke bazlı DEĞİL küresel tek bir
-        rakam — Duolingo ülke bazlı öğrenci kırılımı sağlamıyor.
-      </p>
+      <p className="dashboard__hint" style={{ margin: '0.4rem 0 0' }}>Küresel rakam — ülke bazlı değil.</p>
     </div>
   )
 }
@@ -80,10 +77,7 @@ export default function TurkishLearningIndex() {
       {status === 'loading' && <div className="status">Yükleniyor…</div>}
 
       {status === 'pending' || (status === 'ready' && !data?.byCountry?.length) ? (
-        <p className="dashboard__empty" style={{ marginTop: '0.75rem' }}>
-          Veri birikiyor — "learn Turkish", "Türkçe kursu" ve "Turkish language course" için
-          gerçek Google Trends arama hacmi henüz alınamadı.
-        </p>
+        <p className="dashboard__empty" style={{ marginTop: '0.75rem' }}>Veri birikiyor.</p>
       ) : null}
 
       {status === 'ready' && data?.byCountry?.length > 0 && (
@@ -106,11 +100,7 @@ export default function TurkishLearningIndex() {
               ))
             })()}
           </div>
-          <p className="dashboard__hint">
-            Ülke bazlı: Google Trends arama hacmi endeksi (0-100) — "learn Turkish", "Türkçe
-            kursu" ve "Turkish language course" terimlerinin ortalaması. Gerçek kurs kaydı/
-            öğrenci sayısı değil, arama ilgisine dayalı bir yakınsama (proxy) göstergesidir.
-          </p>
+          <p className="dashboard__hint">Ülke bazlı arama ilgisi (0-100).</p>
         </div>
       )}
     </div>

@@ -11,7 +11,6 @@ export default function TrendsExplorer({ onShowOnMap }) {
   const [selected, setSelected] = useState('')
   const [result, setResult] = useState(null)
   const [social, setSocial] = useState(null)
-  const [socialError, setSocialError] = useState(null)
   const [imdb, setImdb] = useState(null)
   const [imdbError, setImdbError] = useState(null)
   const [status, setStatus] = useState('loading') // loading | idle | querying | ready | error
@@ -34,7 +33,6 @@ export default function TrendsExplorer({ onShowOnMap }) {
     if (!selected) return
     setStatus('querying')
     setError(null)
-    setSocialError(null)
     setSocial(null)
     setImdbError(null)
     setImdb(null)
@@ -50,8 +48,8 @@ export default function TrendsExplorer({ onShowOnMap }) {
     try {
       const socialData = await fetchSocialListening(selected)
       setSocial(socialData)
-    } catch (err) {
-      setSocialError(err.message)
+    } catch {
+      // Fragman ikincil bir bilgi — bulunamazsa/erişilemezse sessizce atlanır.
     }
     const selectedId = seriesList.find((s) => s.name === selected)?.id
     if (selectedId != null) {
@@ -67,13 +65,7 @@ export default function TrendsExplorer({ onShowOnMap }) {
   return (
     <div className="dashboard">
       <h2>Açık Kaynak İstihbaratı ve Küresel Veri Toplama Ağı</h2>
-      <p className="dashboard__hint">
-        Arama ilgisi, sosyal medya etkileşimi ve küresel izleyici platformlarından toplanan
-        sinyalleri tek panelde birleştiren modüler, kaynak-bazlı veri toplama mimarisi — her
-        kaynak bağımsız bir modül olarak çalışır, gerektiğinde değiştirilebilir. Aylık sorgu
-        kotası sınırlıdır; her dizi yalnızca ilk sorguda kota harcar, sonrasında süresiz
-        cache'lenir. Bu yüzden otomatik değil, seçtiğiniz dizi için talep üzerine çalışır.
-      </p>
+      <p className="dashboard__hint">Talep üzerine sorgulanır, sonuç kalıcı olarak önbelleklenir.</p>
 
       <div className="trends__controls">
         <input
@@ -100,114 +92,16 @@ export default function TrendsExplorer({ onShowOnMap }) {
 
       {status === 'error' && <div className="status status--error">Hata: {error}</div>}
 
-      {result && (
+      {(imdbError || imdb) && (
         <section className="dashboard__section">
-          <div className="dashboard__header-row">
-            <h3 className="dashboard__section-title">Ülke Bazlı Arama İlgisi</h3>
-            {result.byCountry.length > 0 && (
-              <button className="dashboard__export-btn dashboard__export-btn--ghost" onClick={() => onShowOnMap?.(result)}>
-                🗺️ Haritada Göster
-              </button>
-            )}
-          </div>
-          <p className="dashboard__hint">
-            "{result.seriesName}" için {result.fromCache ? "cache'den okundu" : 'yeni çekildi'}
-            {' · '}
-            {new Date(result.queriedAt).toLocaleString('tr-TR')}
-          </p>
-          {result.byCountry.length === 0 ? (
-            <p className="dashboard__empty">Bu dizi için ülke bazlı arama ilgisi verisi bulunamadı.</p>
-          ) : (
-            <table className="dashboard__table">
-              <thead>
-                <tr>
-                  <th>Ülke</th>
-                  <th>Arama İlgisi (0-100)</th>
-                </tr>
-              </thead>
-              <tbody>
-                {result.byCountry.map((row) => (
-                  <tr key={row.country}>
-                    <td>{row.country}</td>
-                    <td>{row.value}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          )}
-        </section>
-      )}
-
-      {socialError && (
-        <section className="dashboard__section">
-          <h3 className="dashboard__section-title">Sosyal Dinleme</h3>
-          <p className="dashboard__empty">Sosyal dinleme verisi alınamadı: {socialError}</p>
-        </section>
-      )}
-
-      {social && (
-        <section className="dashboard__section">
-          <h3 className="dashboard__section-title">Sosyal Dinleme</h3>
-          <p className="dashboard__hint">
-            {social.fromCache ? "cache'den okundu" : 'yeni çekildi'} · {new Date(social.queriedAt).toLocaleString('tr-TR')}
-          </p>
-
-          <h4 className="impact__rank-title">Beğeni Oranı</h4>
-          {social.knowledgeGraph?.ratings?.length > 0 ? (
-            <ul className="panel__series-list">
-              {social.knowledgeGraph.ratings.map((r, i) => (
-                <li key={i} className="panel__series-item">
-                  <div className="panel__series-row">
-                    <span className="panel__series-info">
-                      <span className="panel__series-name">{r.source}</span>
-                    </span>
-                    <span className="panel__series-score">{r.rating}</span>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="dashboard__empty">Bu dizi için beğeni oranı bulunamadı.</p>
-          )}
-
-          <h4 className="impact__rank-title" style={{ marginTop: '1.25rem' }}>YouTube Fragmanı</h4>
-          {social.youtube ? (
-            <p className="dashboard__hint" style={{ margin: 0 }}>
-              <a href={social.youtube.link} target="_blank" rel="noreferrer" className="dashboard__link-btn">
-                {social.youtube.title}
-              </a>
-              {' — '}
-              {social.youtube.channel || 'Bilinmeyen kanal'}
-              {social.youtube.channelVerified && ' ✓'}
-              {' · '}
-              {formatViews(social.youtube.views)} izlenme
-              {social.youtube.publishedDate && ` · ${social.youtube.publishedDate}`}
-            </p>
-          ) : (
-            <p className="dashboard__empty">Bu dizi için fragman bulunamadı.</p>
-          )}
-        </section>
-      )}
-
-      {imdbError && (
-        <section className="dashboard__section">
-          <h3 className="dashboard__section-title">IMDb Verisi</h3>
-          <p className="dashboard__empty">IMDb verisi alınamadı: {imdbError}</p>
-        </section>
-      )}
-
-      {imdb && (
-        <section className="dashboard__section">
-          <h3 className="dashboard__section-title">IMDb Verisi</h3>
-          {imdb.status === 'ready' ? (
-            <>
-              <p className="dashboard__hint">
-                {imdb.fromCache ? "cache'den okundu" : 'yeni çekildi'} · {new Date(imdb.updatedAt).toLocaleString('tr-TR')}
-              </p>
-              <ul className="panel__series-list" style={{ marginTop: '0.75rem' }}>
+          <h3 className="dashboard__section-title">Puan Verisi</h3>
+          {imdbError && <p className="dashboard__empty">Veri alınamadı: {imdbError}</p>}
+          {imdb && (
+            imdb.status === 'ready' ? (
+              <ul className="panel__series-list">
                 <li className="panel__series-item">
                   <div className="panel__series-row">
-                    <span className="panel__series-info"><span className="panel__series-name">IMDb Puanı</span></span>
+                    <span className="panel__series-info"><span className="panel__series-name">Puan</span></span>
                     <span className="panel__series-score">
                       {imdb.rating != null ? `⭐ ${imdb.rating.toFixed(1)}/10` : '—'}
                       {imdb.votes != null ? ` (${formatViews(imdb.votes)} oy)` : ''}
@@ -223,10 +117,63 @@ export default function TrendsExplorer({ onShowOnMap }) {
                   </div>
                 </li>
               </ul>
-            </>
-          ) : (
-            <p className="dashboard__empty">IMDb verisi güncelleniyor…</p>
+            ) : (
+              <p className="dashboard__empty">Veri güncelleniyor…</p>
+            )
           )}
+
+          {social?.youtube && (
+            <>
+              <h4 className="impact__rank-title" style={{ marginTop: '1.25rem' }}>Fragman</h4>
+              <p className="dashboard__hint" style={{ margin: 0 }}>
+                <a href={social.youtube.link} target="_blank" rel="noreferrer" className="dashboard__link-btn">
+                  {social.youtube.title}
+                </a>
+                {' — '}
+                {social.youtube.channel || 'Bilinmeyen kanal'}
+                {social.youtube.channelVerified && ' ✓'}
+                {' · '}
+                {formatViews(social.youtube.views)} izlenme
+                {social.youtube.publishedDate && ` · ${social.youtube.publishedDate}`}
+              </p>
+            </>
+          )}
+        </section>
+      )}
+
+      {result && (
+        <section className="dashboard__section">
+          <div className="dashboard__header-row">
+            <h3 className="dashboard__section-title">Ülke Bazlı Arama İlgisi</h3>
+            {result.byCountry.length > 0 && (
+              <button className="dashboard__export-btn dashboard__export-btn--ghost" onClick={() => onShowOnMap?.(result)}>
+                🗺️ Haritada Göster
+              </button>
+            )}
+          </div>
+          {(() => {
+            const withInterest = result.byCountry.filter((row) => row.value > 0)
+            return withInterest.length === 0 ? (
+              <p className="dashboard__empty">Bu dizi için ülke bazlı arama ilgisi verisi bulunamadı.</p>
+            ) : (
+              <table className="dashboard__table">
+                <thead>
+                  <tr>
+                    <th>Ülke</th>
+                    <th>Arama İlgisi (0-100)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {withInterest.map((row) => (
+                    <tr key={row.country}>
+                      <td>{row.country}</td>
+                      <td>{row.value}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )
+          })()}
         </section>
       )}
     </div>

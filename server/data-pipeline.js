@@ -5,6 +5,7 @@ import { ensureDetected } from './destinations.js'
 import { buildVisibility, mergeProxyFallback } from './aggregate.js'
 import { getTrend, maybeRecordSnapshot, loadHistoryStore } from './history.js'
 import { getFallbackInterestScores } from './services/proxyScore.js'
+import { maybeRecordSeriesSnapshot } from './series-period-history.js'
 
 const RAW_CACHE_KEY = 'raw-series-providers'
 const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 saat
@@ -47,6 +48,10 @@ export async function getEnrichedVisibility() {
       : { ...c, trend: getTrend(history, c.iso2, c.score), history: (history[c.iso2] || []).slice(-20) }
   )
   maybeRecordSnapshot(history, data.countries.filter((c) => c.dataSource !== 'proxy'))
+  // "Yayındaki diziler" listesinin Aylık/Yıllık/5 Yıllık sıralaması için — bkz.
+  // server/series-period-history.js. Ülke skoru snapshot'ıyla aynı ritimde, kendi ayrı
+  // meta anahtarıyla çalışır.
+  maybeRecordSeriesSnapshot(raw.series)
 
   return { data, raw, destinationStore }
 }

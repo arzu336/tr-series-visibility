@@ -71,7 +71,7 @@ function buildPopupElement(d) {
     imdbReady && d.imdb.votes != null
       ? `<div class="map-popup-card__votes">(${formatVotes(d.imdb.votes)} Oy)</div>`
       : d.imdbStatus !== 'ready'
-        ? `<div class="map-popup-card__pending">IMDb verisi güncelleniyor…</div>`
+        ? `<div class="map-popup-card__pending">Puan güncelleniyor…</div>`
         : ''
 
   const trendInfo = trendLabel(d.trend)
@@ -318,7 +318,7 @@ export default function Globe3D({
           return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>Veri yok</div>`
         }
         if (c.dataSource === 'proxy') {
-          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>⚡ Arama hacmi tahmini: ${c.searchInterestScore} (TMDB'de yayın verisi yok)</div>`
+          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>⚡ Arama hacmi tahmini: ${c.searchInterestScore} (yayın verisi yok)</div>`
         }
         return `
           <div style="font: 13px system-ui; padding: 4px 2px;">

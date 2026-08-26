@@ -22,7 +22,7 @@ function MapLinkButton({ seriesId, onViewSeriesOnMap }) {
       type="button"
       className="dashboard__map-link"
       onClick={() => onViewSeriesOnMap(seriesId)}
-      title="Bu dizinin kadrosunu ve gerçekten yayınlandığı ülkeleri haritada gör (Analist Paneli'nden çıkılır)"
+      title="Haritada gör (panelden çıkılır)"
     >
       Haritada gör
     </button>
@@ -231,11 +231,7 @@ function DestinationSection({ canEdit, reviewerName, onViewSeriesOnMap }) {
 
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Etiketlenmemiş Diziler</h3>
-        <p className="dashboard__hint">
-          LLM (ve başarısız olursa yedek olarak anahtar kelime taraması) sinopsiste bilinen bir
-          destinasyon bulamadı. Diziyi biliyorsanız hangi destinasyonu öne çıkardığını işaretleyip
-          kaydedin — eşleşme yoksa bu alan boş kalır, bir çekim lokasyonu iddiası değildir.
-        </p>
+        <p className="dashboard__hint">Yapay zeka destinasyon bulamadı — elle etiketleyin.</p>
         {untagged.length === 0 ? (
           <p className="dashboard__empty">Şu anda etiketlenmemiş dizi yok.</p>
         ) : (
@@ -318,8 +314,8 @@ function DestinationSection({ canEdit, reviewerName, onViewSeriesOnMap }) {
                   {item.humanTags
                     ? 'İnsan'
                     : item.detectionMethod === 'llm'
-                      ? 'LLM'
-                      : 'Anahtar kelime (yedek)'}
+                      ? 'Yapay Zeka'
+                      : 'Anahtar kelime'}
                 </td>
                 <td>
                   {!canEdit ? null : editingId === item.id ? (
@@ -483,10 +479,7 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
     <div className="dashboard">
       <h2>Analist Paneli</h2>
       {!canEdit && (
-        <p className="dashboard__hint">
-          Kayıtları görebilirsiniz ama düzenleyemezsiniz — sınıflandırma/destinasyon onayı yalnızca
-          Yönetici (admin) rolüne açıktır.
-        </p>
+        <p className="dashboard__hint">Salt okunur — düzenleme yalnızca Yönetici'ye açık.</p>
       )}
 
       <nav className="app__nav dashboard__tabs">
@@ -543,10 +536,7 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
 
               <section className="dashboard__section">
                 <h3 className="dashboard__section-title">İncelenmesi Gerekenler</h3>
-                <p className="dashboard__hint">
-                  Güven skoru {CONFIDENCE_THRESHOLD}'in altındaki kayıtlar — LLM net bir eşleşme
-                  bulamadı. Doğru temayı seçip "Onayla" ile kaydedin.
-                </p>
+                <p className="dashboard__hint">Yapay zeka güven skoru düşük — gözden geçirin.</p>
                 {canEdit && selectedInView > 0 && (
                   <div className="dashboard__bulk-bar">
                     <span>{selectedInView} seçili</span>
@@ -651,7 +641,7 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
                         <td>
                           <span className="badge badge--ok">{item.effectiveConfidence}</span>
                         </td>
-                        <td>{item.humanOverride ? 'İnsan' : 'LLM'}</td>
+                        <td>{item.humanOverride ? 'İnsan' : 'Yapay Zeka'}</td>
                         <td>
                           {!canEdit ? null : editingId === item.id ? (
                             <EditControls
@@ -674,7 +664,7 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
                                     className="dashboard__link-btn"
                                     disabled={savingId === item.id}
                                     onClick={() => handleRevert(item)}
-                                    title="İnsan override'ını sil, LLM'in orijinal sınıflandırmasına geri dön"
+                                    title="Yapay zeka önerisine geri dön"
                                   >
                                     AI önerisine dön
                                   </button>

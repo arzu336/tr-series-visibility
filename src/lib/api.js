@@ -48,6 +48,10 @@ export async function fetchImdbData(tmdbSeriesId) {
   return handle(await fetch(`/api/imdb/${tmdbSeriesId}`))
 }
 
+export async function fetchSeriesEnrichment(tmdbSeriesId) {
+  return handle(await fetch(`/api/series-enrichment/${tmdbSeriesId}`))
+}
+
 export async function fetchPersonImpact(personId) {
   return handle(await fetch(`/api/person/${personId}`))
 }
@@ -70,6 +74,18 @@ export async function fetchRegionalInterest(seriesName, iso2) {
 
 export async function fetchDuolingoStats() {
   return handle(await fetch('/api/duolingo-stats'))
+}
+
+export async function fetchSeriesPopularity(range = 'monthly') {
+  return handle(await fetch(`/api/series-popularity?range=${range}`))
+}
+
+export async function fetchMediaSentiment(seriesId, iso2) {
+  return handle(await fetch(`/api/media-sentiment/${seriesId}/${iso2}`))
+}
+
+export async function fetchCountryLeaderboard(iso2) {
+  return handle(await fetch(`/api/country-leaderboard/${iso2}`))
 }
 
 export async function fetchAuthStatus() {

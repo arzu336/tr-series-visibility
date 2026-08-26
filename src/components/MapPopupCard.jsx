@@ -42,7 +42,7 @@ export default function MapPopupCard({ popup }) {
           {imdbStatus === 'ready' && imdb?.votes != null ? (
             <div className="map-popup-card__votes">({formatVotes(imdb.votes)} Oy)</div>
           ) : imdbStatus !== 'ready' ? (
-            <div className="map-popup-card__pending">IMDb verisi güncelleniyor…</div>
+            <div className="map-popup-card__pending">Puan güncelleniyor…</div>
           ) : null}
         </div>
       </div>

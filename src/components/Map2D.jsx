@@ -309,7 +309,7 @@ export default function Map2D({
                 <>
                   <strong>{name}</strong>
                   <br />
-                  ⚡ Arama hacmi tahmini: {c.searchInterestScore} (TMDB'de yayın verisi yok)
+                  ⚡ Arama hacmi tahmini: {c.searchInterestScore} (yayın verisi yok)
                 </>
               )
             }

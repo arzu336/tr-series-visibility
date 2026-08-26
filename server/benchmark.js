@@ -71,7 +71,6 @@ export async function buildBenchmark() {
   return {
     generatedAt: new Date().toISOString(),
     countries,
-    methodology:
-      'Küresel Pazar Payı ve İhracat Yapılan Ülke Sayısı, TMDB popülerlik puanı ve yayın erişimi verisine dayalı bir yakınsama (proxy) göstergesidir — resmi ihracat veya pazar payı istatistiği değildir.',
+    methodology: 'TMDB verisine dayalı proxy gösterge — resmi istatistik değildir.',
   }
 }

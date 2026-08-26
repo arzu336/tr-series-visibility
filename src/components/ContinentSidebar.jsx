@@ -30,18 +30,11 @@ function ExportTourismStats({ tourismItems, continentCountries }) {
 
   return (
     <div className="sidebar__stat">
-      <div
-        className="sidebar__stat-label"
-        title="T.C. Kültür ve Turizm Bakanlığı (YİGM) Sınır İstatistikleri Bülteni'nden otomatik çekilir."
-      >
+      <div className="sidebar__stat-label" title="YİGM Sınır İstatistikleri Bülteni'nden otomatik.">
         🧳 Turizm Rakamları ⓘ
       </div>
       {matched.length === 0 ? (
-        <p className="sidebar__stat-note">
-          Bu kıtadaki ülkeler için henüz turist giriş verisi yok — bülten büyük/orta ölçekli turist
-          pazarlarını ayrı satırla listeliyor, küçük ülkeler "diğer ülkeler" toplamına giriyor ve
-          ayrıştırılamıyor.
-        </p>
+        <p className="sidebar__stat-note">Bu kıtada henüz turist verisi yok.</p>
       ) : (
         <ol className="sidebar__top-list">
           {matched.slice(0, 3).map((item) => (
@@ -198,12 +191,12 @@ export default function ContinentSidebar({
                   <div className="sidebar__big-card-value">
                     {nameOf(topLearningCountry.iso2)} — {topLearningCountry.value}
                   </div>
-                  <div className="sidebar__big-card-meta">Google Trends ilgi skoru (0-100)</div>
+                  <div className="sidebar__big-card-meta">Arama ilgisi skoru (0-100)</div>
                 </>
               )}
               {globalMomentum && (
                 <div className="sidebar__big-card-meta">
-                  🌍 Küresel Duolingo ivmesi: {globalMomentum.changePct > 0 ? '+' : ''}
+                  🌍 Küresel Dil Öğrenim İvmesi: {globalMomentum.changePct > 0 ? '+' : ''}
                   {globalMomentum.changePct}% (son {globalMomentum.windowDays} gün)
                 </div>
               )}
@@ -236,7 +229,7 @@ export default function ContinentSidebar({
                 </div>
 
                 <div className="sidebar__stat">
-                  <div className="sidebar__stat-label" title="TMDB popülerlik puanına dayalı yakınsama (proxy) göstergesi — gerçek izlenme rakamı değildir.">
+                  <div className="sidebar__stat-label" title="Popülerlik verisine dayalı gösterge.">
                     Kıtasal Kültürel Erişim Skoru ⓘ
                   </div>
                   <div className="sidebar__stat-value">{round1(selected.averageScore)}</div>

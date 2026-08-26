@@ -3,3 +3,4 @@ beautifulsoup4>=4.12
 lxml>=5.2
 pydantic>=2.9
 pandas>=2.2
+python-dotenv>=1.0

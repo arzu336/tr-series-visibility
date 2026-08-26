@@ -43,18 +43,13 @@ export default function ThemeInsight() {
           </div>
         ))}
       </div>
-      <p className="dashboard__hint">
-        Çubuklar TMDB popülerlik toplamına göre; her tema için kaç dizi ve toplamda kaç ülkede
-        yayında olduğu (countriesReached) sağdaki dizi sayısının yanında görülebilir. Bu, TMDB'nin
-        kendi tema etiketlemesine dayalı bir gözlemdir — resmi bir içerik sınıflandırması değildir.
-      </p>
       {data.insightText ? (
         <div className="theme-insight__ai-box">
-          <span className="theme-insight__ai-label">🤖 AI Yorumu</span>
+          <span className="theme-insight__ai-label">🤖 Yapay Zeka</span>
           <p>{data.insightText}</p>
         </div>
       ) : (
-        <p className="dashboard__empty">AI yorumu şu anda üretilemedi — sayısal dağılım yukarıda güncel.</p>
+        <p className="dashboard__empty">Yapay zeka yorumu üretilemedi.</p>
       )}
     </div>
   )
