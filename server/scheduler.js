@@ -3,6 +3,9 @@ import { getEnrichedVisibility } from './data-pipeline.js'
 import { rollupMonthlyIfNeeded } from './period-history.js'
 import { rollupSeriesMonthlyIfNeeded } from './series-period-history.js'
 import { syncTourismDataIfNeeded } from './services/tourismData.js'
+import { runAutoNewsScanIfNeeded } from './services/autoNewsScheduler.js'
+import { runTourismTrendsCollectionIfNeeded } from './services/tourismTrendsCollector.js'
+import { runSocialEnrichmentIfNeeded } from './services/socialEnricher.js'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000 // her 30 dakikada bir "sırası geldi mi" kontrolü
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000 // hedef: günde 1 kez
@@ -36,6 +39,27 @@ async function runScheduledRefresh() {
   } catch (err) {
     console.error('[scheduler] turizm verisi senkronizasyonu başarısız:', err.message)
   }
+
+  // SerpAPI'ye dayalı 3 haftalık toplu zenginleştirme (basın taraması, öncü turizm sinyali,
+  // sosyal/YouTube) — sırayla (paralel DEĞİL) çalıştırılır ki paylaşılan aylık kota bütçesi
+  // (bkz. serpApiCache.js SERPAPI_MONTHLY_BUDGET) üç işin arasında öngörülebilir şekilde
+  // bölüşülsün. Her biri kendi 7 günlük meta-kapısını kontrol eder, hazır değilse anında döner;
+  // biri başarısız olursa (kota, ağ) diğer ikisi etkilenmez.
+  try {
+    await runAutoNewsScanIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] otomatik basın taraması başarısız:', err.message)
+  }
+  try {
+    await runTourismTrendsCollectionIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] öncü turizm sinyali taraması başarısız:', err.message)
+  }
+  try {
+    await runSocialEnrichmentIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] sosyal zenginleştirme başarısız:', err.message)
+  }
 }
 
 // Proje raporunun §4.7'sinde önerilen n8n tabanlı "zamanlanmış tetikleme"
@@ -45,10 +69,14 @@ async function runScheduledRefresh() {
 // (visibility_history) kesintiye uğramaz ve veri her zaman en fazla ~24
 // saatlik.
 //
-// SerpAPI/IMDb (OMDb) bilerek bu döngüye DAHİL EDİLMEDİ: onlar talep-üzerine ve
-// aylık kotalı (bkz. bütçe raporu, SerpAPI free tier 250 sorgu/ay) — 200
-// diziyi otomatik taramak kotayı anında tüketir. TMDB ve dahili LLM
-// sunucusunun böyle bir kısıtı yok.
+// IMDb (OMDb) bilerek bu döngüye DAHİL EDİLMEDİ: talep-üzerine ve kendi kotası var, 200 diziyi
+// otomatik taramak o kotayı anında tüketir. TMDB ve dahili LLM sunucusunun böyle bir kısıtı yok.
+//
+// SerpAPI ise ARTIK dahil — plan 5.000 sorgu/ay'a yükseltildi (2026-08-26, kullanıcı teyidi; bu
+// yorumun önceki "250 sorgu/ay" hâli GÜNCEL DEĞİLDİ). Yine de tüm SerpAPI çağrıları TEK bir
+// merkezi aylık bütçe sayacından geçiyor (bkz. serpApiCache.js SERPAPI_MONTHLY_BUDGET) — bu
+// üç haftalık toplu iş (aşağıda) o bütçeyi kullanıcı tetiklemeli aramalarla (trend/sosyal/basın
+// tıklamaları) PAYLAŞIR, aşarsa dürüstçe kalanı bir sonraki haftaya bırakır, uygulamayı çökertmez.
 export function startScheduler() {
   setInterval(() => {
     const row = getMetaStmt.get(META_KEY)

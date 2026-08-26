@@ -1,91 +1,18 @@
 import { suggestControlCountry } from './control-matching.js'
-import { getVisitorSeries, getTrackedIso2s, pickBeforeAfterPair } from './services/tourismData.js'
+import { getMediaSentimentSummary, getMediaSentimentByCountry } from './services/newsSentiment.js'
+import { getSocialEnrichmentSummary } from './services/socialEnricher.js'
+import { getTourismLeadingSignalSummary } from './services/tourismTrendsCollector.js'
+import { getPipelineDb } from './services/pipelineDb.js'
+import { computeTourismCorrelation, PENDING_ANALYSIS } from './services/tourismCorrelation.js'
+import { getCached, setCached } from './cache.js'
 
-// "Yükselen Ülkeler" kartında gösterilen top-5, dünyadaki en çok yükselen 5 ülkeyi gösterir —
-// bunlar genelde çok küçük/az turistli ülkeler oluyor (ör. Ekvator Ginesi, Monako), YİGM bülteninde
-// ayrı satırları yok. Turizm korelasyonu bu yüzden top-5'e değil, bültende ayrı satırı OLAN
-// (getTrackedIso2s) tüm yükselen ülkelere bakar — World Bank kontrol-ülkesi aramasını sınırsız
-// büyütmemek için makul bir tavana (bkz. buildImpactReport) kesilir.
-const TOURISM_CANDIDATE_CAP = 15
-
-function mean(arr) {
-  return arr.reduce((a, b) => a + b, 0) / arr.length
-}
-
-// Hazır ve doğruluğu doğrulanmış istatistik yöntemleri — server/services/tourismData.js
-// TÜİK/Kültür ve Turizm Bakanlığı'nın (YİGM) aylık sınır bültenini otomatik çektiği için artık
-// gerçek girdiyle çalışabiliyor (bkz. computeTourismCorrelation). Veri henüz yoksa (ilk
-// senkronizasyondan önce, ya da o ülke bültende hiç geçmiyorsa) PENDING_ANALYSIS'a düşülür —
-// hiçbir zaman sahte/örnek girdiyle çağrılmaz.
-export function pearsonCorrelation(xs, ys) {
-  const n = xs.length
-  const mx = mean(xs)
-  const my = mean(ys)
-  let num = 0
-  let dx2 = 0
-  let dy2 = 0
-  for (let i = 0; i < n; i++) {
-    const dx = xs[i] - mx
-    const dy = ys[i] - my
-    num += dx * dy
-    dx2 += dx * dx
-    dy2 += dy * dy
-  }
-  const denom = Math.sqrt(dx2 * dy2)
-  return denom === 0 ? 0 : num / denom
-}
-
-export function confidenceInterval95(r, n) {
-  if (n < 4) return null
-  const clamped = Math.max(-0.9999, Math.min(0.9999, r))
-  const z = 0.5 * Math.log((1 + clamped) / (1 - clamped))
-  const se = 1 / Math.sqrt(n - 3)
-  const zLo = z - 1.96 * se
-  const zHi = z + 1.96 * se
-  const toR = (zVal) => (Math.exp(2 * zVal) - 1) / (Math.exp(2 * zVal) + 1)
-  return { low: round2(toR(zLo)), high: round2(toR(zHi)) }
-}
-
-// Kontrol ülkeli Difference-in-Differences (DiD) tahmincisi. Hedef ülkenin
-// (dizi trendi yaşayan, ör. İspanya) turizm/ihracat değişimini, benzer
-// makro-ekonomik dinamiklere sahip ama AYNI DÖNEMDE dizi trendi yaşamamış bir
-// kontrol ülkeyle (ör. İtalya) kıyaslar. İki ülkenin ortak etkilendiği kur
-// dalgalanması/mevsimsellik gibi dışsal etkiler matematiksel olarak
-// birbirinden çıkarılır; geriye sadece dizi trendine atfedilebilecek fark
-// (didEstimate) kalır. `before`/`after` aynı birimde (ör. turist sayısı veya
-// ihracat tutarı) ve aynı ölçüm penceresine (lag window) ait olmalıdır.
-export function differenceInDifferences({ treatmentBefore, treatmentAfter, controlBefore, controlAfter }) {
-  const treatmentChange = treatmentAfter - treatmentBefore
-  const controlChange = controlAfter - controlBefore
-  return {
-    didEstimate: round2(treatmentChange - controlChange),
-    treatmentChangePct: treatmentBefore === 0 ? null : round2((treatmentChange / treatmentBefore) * 100),
-    controlChangePct: controlBefore === 0 ? null : round2((controlChange / controlBefore) * 100),
-  }
-}
+// Ekonometrik çekirdek (pearsonCorrelation, confidenceInterval95, differenceInDifferences,
+// pValueForPearsonR, computeTourismCorrelation) artık server/services/tourismCorrelation.js'te
+// — server/impact.test.js'in mevcut importları kırılmasın diye buradan re-export ediliyor.
+export { pearsonCorrelation, confidenceInterval95, differenceInDifferences } from './services/tourismCorrelation.js'
 
 function round1(n) {
   return Math.round(n * 10) / 10
-}
-
-function round2(n) {
-  return Math.round(n * 100) / 100
-}
-
-// Turist giriş verisi artık otomatik çekiliyor (bkz. server/services/tourismData.js, YİGM'in
-// aylık sınır bültenini indirip parse ediyor) — ama şu anki "yükselen" ülkeler (rising()) bültende
-// ayrı satırı olmayan küçük/az turistli ülkeler olabilir, ya da senkronizasyon henüz hiç
-// çalışmamış olabilir. Böyle durumlarda bu sabit metne düşülür. Dizi ihracatı (ülke bazlı $)
-// verisi ise hâlâ kamuya açık değil (araştırıldı — sadece toplam ulusal rakam kamuya açık),
-// o kısım gerçekten kurumsal talep bekliyor.
-const PENDING_ANALYSIS = {
-  title: 'Turizm ve İhracat Korelasyonu',
-  status: 'gerçek-veri-bekleniyor',
-  description: 'Yükselen ülkeler için turist/ihracat verisi henüz eşleşmedi.',
-  requiredSources: [
-    'YİGM turist giriş istatistikleri — otomatik çekiliyor, eşleşen veri yok',
-    'Dizi ihracatı (ülke bazlı) — kamuya açık değil',
-  ],
 }
 
 // Toplam içindeki en öndeki n taneyi + geri kalan her şeyin "Diğer" toplamını döner —
@@ -119,17 +46,6 @@ function rising(countries, n) {
     .map((c) => ({ iso2: c.iso2, changePct: c.trend.changePct, windowDays: c.trend.windowDays }))
 }
 
-// rising()'in aksine, sadece YİGM bülteninde ayrı satırı olan (trackedIso2s) ülkeleri filtreler
-// — turizm korelasyonu böylece "en hızlı yükselen 5" değil "yükselen VE gerçek turist verisi
-// olan" ülkelere bakar, bu yüzden neredeyse her zaman bir sonuç üretebilir.
-function risingWithTourismData(countries, trackedIso2s, n) {
-  return countries
-    .filter((c) => c.trend?.direction === 'yükseliyor' && trackedIso2s.has(c.iso2))
-    .sort((a, b) => b.trend.changePct - a.trend.changePct)
-    .slice(0, n)
-    .map((c) => ({ iso2: c.iso2, changePct: c.trend.changePct, windowDays: c.trend.windowDays }))
-}
-
 // Yükselen her ülke için otomatik bir DiD kontrol ülkesi önerir (bkz.
 // control-matching.js) — kendi dizi trendi yaşayan ülkeler (risingIso2Set)
 // geçerli bir kontrol olamayacağı için eleniyor. World Bank isteği
@@ -149,85 +65,142 @@ async function withSuggestedControls(risingList, risingIso2Set) {
   )
 }
 
-// Yükselen her ülke için: kendi turist verisi + otomatik kontrol ülkesinin (suggestControlCountry)
-// turist verisi AYNI ay/yıl çiftinde örtüşüyorsa gerçek bir Difference-in-Differences tahmini
-// üretir (bkz. differenceInDifferences). Yeterli ülke (≥3) varsa, dizi görünürlük değişimi (%)
-// ile DiD-düzeltmeli turist değişimi (%) arasında Pearson korelasyonu + %95 güven aralığı
-// hesaplanır. Hiçbir aşamada uydurma veri yok — veri örtüşmüyorsa o ülke listeden düşer.
-async function computeTourismCorrelation(risingCountries) {
-  const withData = []
-  for (const c of risingCountries) {
-    if (!c.suggestedControl) continue
-    const targetPair = pickBeforeAfterPair(getVisitorSeries(c.iso2))
-    const controlPair = pickBeforeAfterPair(getVisitorSeries(c.suggestedControl.iso2))
-    if (!targetPair || !controlPair) continue
-    if (
-      targetPair.month !== controlPair.month ||
-      targetPair.beforeYear !== controlPair.beforeYear ||
-      targetPair.afterYear !== controlPair.afterYear
-    ) {
-      continue
-    }
+// "İhracat & Ticari Etki" sekmesindeki "Yükselen Pazarlar" tablosu için — World Bank'a gerçek
+// bir HTTP isteği attığı için (suggestControlCountry), sekmeler arası hızlı geçişte gereksiz
+// tekrar istek atılmasın diye kısa süreli (15 dk) cache'leniyor. Turizm korelasyonunun KENDİ,
+// çok daha geniş aday listesi ve kendi ekonometrik hesaplaması artık
+// server/services/tourismCorrelation.js'te — burasıyla karıştırılmıyor.
+const RISING_CONTROLS_CACHE_KEY = 'impact:rising-with-controls'
+const RISING_CONTROLS_TTL_MS = 15 * 60 * 1000
 
-    const did = differenceInDifferences({
-      treatmentBefore: targetPair.before,
-      treatmentAfter: targetPair.after,
-      controlBefore: controlPair.before,
-      controlAfter: controlPair.after,
-    })
+async function getRisingCountriesWithControls(countries, n = 5) {
+  const cached = getCached(RISING_CONTROLS_CACHE_KEY)
+  if (cached) return cached
+  const risingList = rising(countries, n)
+  const risingIso2Set = new Set(countries.filter((c) => c.trend?.direction === 'yükseliyor').map((c) => c.iso2))
+  const result = await withSuggestedControls(risingList, risingIso2Set)
+  setCached(RISING_CONTROLS_CACHE_KEY, result, RISING_CONTROLS_TTL_MS)
+  return result
+}
 
-    withData.push({
-      iso2: c.iso2,
-      visibilityChangePct: c.changePct,
-      control: c.suggestedControl,
-      period: { month: targetPair.month, beforeYear: targetPair.beforeYear, afterYear: targetPair.afterYear },
-      didEstimate: did.didEstimate,
-      treatmentChangePct: did.treatmentChangePct,
-      controlChangePct: did.controlChangePct,
-    })
-  }
-
-  if (withData.length === 0) return null
-
-  const pairs = withData.filter((w) => w.treatmentChangePct != null)
-  const hasEnoughForCorrelation = pairs.length >= 3
-  const correlation = hasEnoughForCorrelation
-    ? round2(pearsonCorrelation(pairs.map((p) => p.visibilityChangePct), pairs.map((p) => p.treatmentChangePct)))
-    : null
-  const hasEnoughForConfidenceInterval = pairs.length >= 4
-  const confInterval = hasEnoughForConfidenceInterval ? confidenceInterval95(correlation, pairs.length) : null
-
-  return {
-    title: 'Turizm ve İhracat Korelasyonu',
-    status: 'gerçek-veri-mevcut',
-    dataSource: 'YİGM Sınır İstatistikleri Bülteni (otomatik)',
-    sampleSize: withData.length,
-    correlation,
-    confidenceInterval: confInterval,
-    hasEnoughForCorrelation,
-    hasEnoughForConfidenceInterval,
-    countries: withData,
+async function getTourismCorrelation(countries) {
+  try {
+    return await computeTourismCorrelation(countries)
+  } catch (err) {
+    console.error('[impact] turizm korelasyonu hesaplanamadı:', err.message)
+    return null
   }
 }
 
+// Bir tek destinasyonun toplam skorun çoğunu taşıması (ör. İstanbul'un neredeyse her dizide
+// doğal olarak geçmesi) uydurma bir "eşitsizlik" değil, gerçek ve beklenen bir yoğunlaşma —
+// ama analiste ham sayı yerine bunun FARKINDA olduğunu açıkça göstermek için bir eşik üstünde
+// otomatik bir not üretiliyor. Eşik (%50) keyfi ama makul: tek destinasyonun payı bunu
+// aşıyorsa "geri kalan her şey küçük" demektir, bu okuyucuya söylenmeye değer.
+const CONCENTRATION_WARNING_THRESHOLD_PCT = 50
+
+function buildConcentrationWarning(top, otherScore) {
+  if (top.length === 0) return null
+  const totalScore = top.reduce((sum, d) => sum + d.totalScore, 0) + otherScore
+  if (totalScore === 0) return null
+  const leader = top[0]
+  const leaderSharePct = round1((leader.totalScore / totalScore) * 100)
+  if (leaderSharePct < CONCENTRATION_WARNING_THRESHOLD_PCT) return null
+  return {
+    destinationId: leader.id,
+    destinationName: leader.name,
+    sharePct: leaderSharePct,
+    note: `${leader.name}, destinasyon görünürlüğünün %${leaderSharePct}'ini tek başına taşıyor — bu, ${leader.name}'ın ${leader.seriesCount} dizide sahne olarak geçmesinden kaynaklanan doğal bir yoğunlaşma, uydurma bir ağırlıklandırma değil.`,
+  }
+}
+
+// netflix_country_rankings pipeline.db'de (bkz. server/services/pipelineDb.js) — burada sadece
+// "bu ülke için EN AZ BİR resmi platform Top 10 kaydı var mı" sorusuna bakılıyor (belirli bir
+// diziyle eşleşme değil, "Yükselen Pazarlar" tablosu ülke bazlı olduğu için). Tablo/dosya henüz
+// yoksa (netflix_pipeline.py hiç çalıştırılmadıysa) boş Set döner, hiçbir rozet uydurulmaz.
+function getNetflixCoveredIso2s() {
+  const conn = getPipelineDb()
+  if (!conn) return new Set()
+  try {
+    const rows = conn.prepare('SELECT DISTINCT country_iso2 FROM netflix_country_rankings').all()
+    return new Set(rows.map((r) => r.country_iso2))
+  } catch {
+    return new Set()
+  }
+}
+
+// Sekme 1 — Kültürel Etki & Kamu Diplomasisi. Tema dağılımı (/api/theme-insight), küresel
+// kıyaslama (/api/benchmark) ve Türkçe öğrenme endeksi (/api/duolingo-stats,
+// /api/turkish-learning-index) ZATEN kendi bağımsız uçları — burada TEKRAR hesaplanmıyor,
+// sadece bu sekme için GERÇEKTEN yeni olan parçalar (medya/basın algısı özeti + ülke kırılımı)
+// döner.
+export function buildCulturalImpact() {
+  return {
+    generatedAt: new Date().toISOString(),
+    mediaSentimentSummary: getMediaSentimentSummary(),
+    mediaSentimentByCountry: getMediaSentimentByCountry(),
+    // server/services/socialEnricher.js'in haftalık zenginleştirmesi — hedef ülkeye özel yayın
+    // platformu/puan/fragman taraması kaç dizi/ülke çiftinde tamamlandı, dürüst bir sayım.
+    socialEnrichmentSummary: getSocialEnrichmentSummary(),
+  }
+}
+
+const TOURISM_IMPACT_CACHE_KEY = 'impact:tourism-tab'
+const TOURISM_IMPACT_TTL_MS = 10 * 60 * 1000 // ImpactStats.jsx VE TourismImpactTab.jsx aynı ucu
+// çağırıyor (bkz. ImpactStats'ın İstanbul payı göstergesi) — turizm korelasyonu World Bank'a
+// gerçek istek attığı için (getTourismCorrelation) ikisi art arda çağrılınca iki kat hesaplanmasın.
+
+// Sekme 2 — Turizm & Destinasyon Etkisi.
+export async function buildTourismImpact(countries, destinationRanking = []) {
+  const cached = getCached(TOURISM_IMPACT_CACHE_KEY)
+  if (cached) return cached
+
+  const destinationBreakdown = topDestinationsWithRemainder(destinationRanking, 5)
+  const tourismCorrelation = await getTourismCorrelation(countries)
+
+  const result = {
+    generatedAt: new Date().toISOString(),
+    topDestinations: destinationBreakdown.top,
+    otherDestinationsScore: destinationBreakdown.otherScore,
+    concentrationWarning: buildConcentrationWarning(destinationBreakdown.top, destinationBreakdown.otherScore),
+    pendingAnalysis: tourismCorrelation || PENDING_ANALYSIS,
+    // server/services/tourismTrendsCollector.js'in haftalık taraması — "3-6 Aylık Öncü Turizm
+    // Sinyali" (YİGM'e eşleşen ilk 15 ülke × 3 seyahat sorgusu, senkron SQLite okuması, ekstra
+    // SerpAPI çağrısı YOK burada).
+    leadingSignal: getTourismLeadingSignalSummary(),
+  }
+  setCached(TOURISM_IMPACT_CACHE_KEY, result, TOURISM_IMPACT_TTL_MS)
+  return result
+}
+
+// Sekme 3 — İhracat & Ticari Etki. Türkiye'nin küresel pazar payı (%X) kasıtlı olarak burada
+// YOK — o zaten /api/benchmark'ın (Türkiye vs ABD/Kore/İspanya) bir alanı, burada tekrarlamak
+// yerine ExportImpactTab.jsx kendi ayrıca fetchBenchmark() çağırıp TR satırını okur.
+export async function buildExportImpact(countries) {
+  const countryBreakdown = topByScoreWithRemainder(countries, 5)
+  const risingCountriesRaw = await getRisingCountriesWithControls(countries, 5)
+  const netflixCovered = getNetflixCoveredIso2s()
+  const risingCountries = risingCountriesRaw.map((c) => ({ ...c, hasOfficialPlatformData: netflixCovered.has(c.iso2) }))
+
+  return {
+    generatedAt: new Date().toISOString(),
+    totalCountries: countries.length,
+    topCountriesByVisibility: countryBreakdown.top,
+    otherCountriesScore: countryBreakdown.otherScore,
+    risingCountries,
+  }
+}
+
+// Eski, tek parça uç (/api/impact) — GERİYE DÖNÜK UYUMLULUK için birebir aynı yanıt şeklini
+// korur, ama artık içeride yukarıdaki 3 odaklı fonksiyonun (ve paylaşılan
+// getRisingCountriesWithControls cache'inin) bileşimi olarak çalışır — mantık TEKRARLANMIYOR.
 export async function buildImpactReport(countries, destinationRanking = []) {
   const hasEnoughHistoryForTrends = countries.some((c) => c.trend?.direction !== 'yetersiz-veri')
   const countryBreakdown = topByScoreWithRemainder(countries, 5)
   const destinationBreakdown = topDestinationsWithRemainder(destinationRanking, 5)
 
-  const risingList = rising(countries, 5)
-  const risingIso2Set = new Set(countries.filter((c) => c.trend?.direction === 'yükseliyor').map((c) => c.iso2))
-  const risingCountries = await withSuggestedControls(risingList, risingIso2Set)
-
-  let tourismCorrelation = null
-  try {
-    const trackedIso2s = getTrackedIso2s()
-    const tourismCandidates = risingWithTourismData(countries, trackedIso2s, TOURISM_CANDIDATE_CAP)
-    const tourismCandidatesWithControls = await withSuggestedControls(tourismCandidates, risingIso2Set)
-    tourismCorrelation = await computeTourismCorrelation(tourismCandidatesWithControls)
-  } catch (err) {
-    console.error('[impact] turizm korelasyonu hesaplanamadı:', err.message)
-  }
+  const risingCountries = await getRisingCountriesWithControls(countries, 5)
+  const tourismCorrelation = await getTourismCorrelation(countries)
 
   return {
     generatedAt: new Date().toISOString(),

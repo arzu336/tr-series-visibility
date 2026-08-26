@@ -71,6 +71,6 @@ export async function buildBenchmark() {
   return {
     generatedAt: new Date().toISOString(),
     countries,
-    methodology: 'TMDB verisine dayalı proxy gösterge — resmi istatistik değildir.',
+    methodology: 'Popülerlik verisine dayalı proxy gösterge.',
   }
 }

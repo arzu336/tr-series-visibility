@@ -36,7 +36,7 @@ import {
 } from './destinations.js'
 import { queryTrends } from './serpapi.js'
 import { querySocialListening } from './social-listening.js'
-import { buildImpactReport } from './impact.js'
+import { buildImpactReport, buildCulturalImpact, buildTourismImpact, buildExportImpact } from './impact.js'
 import { getImdbDataForTmdbSeries } from './imdb.js'
 import { buildPersonImpact } from './cast.js'
 import { buildBenchmark } from './benchmark.js'
@@ -45,6 +45,11 @@ import { getRegionalInterest } from './regional-interest.js'
 import { getDuolingoTurkishStats } from './duolingo.js'
 import { fetchAndAnalyzeSentiment } from './services/newsSentiment.js'
 import { calculateCountryCompositeScore } from './services/countryScoringEngine.js'
+import { calculateShareOfSearch } from './services/trendsShareOfSearch.js'
+import { cacheFirstSerpApi, fetchTrendsTimeSeriesRaw, timeSeriesCacheKey, TIMESERIES_TTL_MS } from './services/serpApiCache.js'
+import { getEnrichmentTargets } from './services/enrichmentTargets.js'
+import { enrichSeriesNewsNow } from './services/autoNewsScheduler.js'
+import { enrichSeriesSocialNow } from './services/socialEnricher.js'
 import { getCached } from './cache.js'
 import { COOKIE_NAME, createSession, getSessionUserId, isValidSession, deleteSession, parseCookies, sessionCookieHeader } from './auth.js'
 import {
@@ -464,6 +469,64 @@ app.get('/api/social/:seriesName', async (req, res) => {
   }
 })
 
+// TrendsExplorer.jsx — Kıyaslama Modu. En fazla 5 (arayüz 3'e sınırlıyor) dizinin göreceli
+// arama payı, KÜRESEL (geo verilmez — bkz. trendsShareOfSearch.js'teki iso2 genellemesi).
+app.get('/api/trends/share-of-search', async (req, res) => {
+  try {
+    const titles = String(req.query.titles || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+    const data = await calculateShareOfSearch(null, titles)
+    res.json(data)
+  } catch (err) {
+    console.error('[trends/share-of-search] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+// TrendsExplorer.jsx — Küresel 12 Aylık Trend Çizgisi. Tek dizi, geo verilmez (dünya geneli
+// haftalık arama hacmi) — bkz. serpApiCache.js'teki fetchTrendsTimeSeriesRaw'ın iso2-opsiyonel hâli.
+app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
+  try {
+    const key = timeSeriesCacheKey(req.params.seriesName, null, 'today 12-m')
+    const data = await cacheFirstSerpApi(key, TIMESERIES_TTL_MS, () =>
+      fetchTrendsTimeSeriesRaw(req.params.seriesName, null, 'today 12-m')
+    )
+    res.json(data)
+  } catch (err) {
+    console.error('[trends/timeseries] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+// TrendsExplorer.jsx — "Gelişmiş Medya & Sosyal Taramayı Çalıştır". Mevcut haftalık toplu işlerin
+// (autoNewsScheduler/socialEnricher) TEK bir dizi + en görünür 15 ülke için anlık, kullanıcı
+// tetiklemeli versiyonu — aynı fetch/cache fonksiyonlarını çağırır, yeni bir mantık YOK. SerpAPI
+// kotası harcadığı için (en fazla 15×3 = 45 gerçek çağrı) yöneticiyle sınırlı.
+app.post('/api/series/enrich-now/:id', requireAdmin, async (req, res) => {
+  try {
+    const seriesId = Number(req.params.id)
+    const rawSeries = getCached('raw-series-providers')
+    const series = rawSeries?.series?.find((s) => s.id === seriesId)
+    if (!series) {
+      res.status(404).json({ error: `${seriesId} kimlikli dizi için canlı veri bulunamadı` })
+      return
+    }
+    const { topCountries } = await getEnrichmentTargets()
+    // Sıralı (paralel DEĞİL) — ikisi de aynı paylaşılan aylık SerpAPI bütçe sayacını kontrol
+    // edip artırıyor (bkz. serpApiCache.js), paralel çalıştırılırsa iki döngü birbirinin
+    // kontrolünü geçersiz kılıp bütçeyi hafifçe aşabilir (aynı sebep scheduler.js'in 3 haftalık
+    // işi de sıralı çalıştırmasının nedeni).
+    const news = await enrichSeriesNewsNow(seriesId, series.name, topCountries)
+    const social = await enrichSeriesSocialNow(series.name, topCountries)
+    res.json({ ok: true, seriesId, seriesName: series.name, countriesTargeted: topCountries.length, news, social })
+  } catch (err) {
+    console.error('[series/enrich-now] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
 app.get('/api/imdb/:tmdbId', async (req, res) => {
   try {
     const data = await getImdbDataForTmdbSeries(req.params.tmdbId)
@@ -522,7 +585,7 @@ app.get('/api/media-sentiment/:seriesId/:iso2', async (req, res) => {
     const rawSeries = getCached('raw-series-providers')
     const series = rawSeries?.series?.find((s) => s.id === seriesId)
     if (!series) {
-      res.status(404).json({ error: `TMDB id ${seriesId} için canlı dizi verisi bulunamadı` })
+      res.status(404).json({ error: `${seriesId} kimlikli dizi için canlı veri bulunamadı` })
       return
     }
     const data = await fetchAndAnalyzeSentiment(seriesId, series.name, null, req.params.iso2)
@@ -565,6 +628,39 @@ app.get('/api/impact', async (req, res) => {
     res.json(await buildImpactReport(data.countries, destinationRanking))
   } catch (err) {
     console.error('[impact] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+// "Etki & İhracat Analizi" ekranının 3 sekmesi (Kültürel/Turizm/İhracat) — /api/impact geriye
+// dönük uyumluluk için aynen duruyor, ama yeni önyüz (ImpactAnalysisTabs.jsx) artık sadece
+// aktif sekmenin ihtiyaç duyduğu veriyi çekiyor.
+app.get('/api/impact/cultural', (req, res) => {
+  try {
+    res.json(buildCulturalImpact())
+  } catch (err) {
+    console.error('[impact/cultural] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/impact/tourism', async (req, res) => {
+  try {
+    const { data, raw, destinationStore } = await getEnrichedVisibility()
+    const destinationRanking = buildDestinationRanking(data.countries, raw.series, destinationStore)
+    res.json(await buildTourismImpact(data.countries, destinationRanking))
+  } catch (err) {
+    console.error('[impact/tourism] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.get('/api/impact/export', async (req, res) => {
+  try {
+    const { data } = await getEnrichedVisibility()
+    res.json(await buildExportImpact(data.countries))
+  } catch (err) {
+    console.error('[impact/export] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })

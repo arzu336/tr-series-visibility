@@ -214,6 +214,7 @@ export default function CountryPanel({
   activeSeriesGlobalId,
   onCloseSeriesGlobal,
   onShowSeriesOnMap,
+  onGoToSeriesAnalysis,
 }) {
   const [expandedId, setExpandedId] = useState(null)
   const [periodRange, setPeriodRange] = useState('monthly')
@@ -477,6 +478,15 @@ export default function CountryPanel({
                           <p className="panel__series-overview">{s.overview || 'Bu dizi için özet bulunmuyor.'}</p>
                           <CastBar cast={s.cast} onSelectActor={onSelectActor} />
                           <HybridScoreTag seriesName={s.name} iso2={country.iso2} />
+                          {onGoToSeriesAnalysis && (
+                            <button
+                              className="dashboard__link-btn"
+                              style={{ marginTop: '0.5rem' }}
+                              onClick={() => onGoToSeriesAnalysis(s.name)}
+                            >
+                              📊 Dizi Analizine Git
+                            </button>
+                          )}
                           <h4 className="panel__series-detail-heading">Basın &amp; Medya Algısı</h4>
                           <MediaSentimentCard seriesId={s.id} iso2={country.iso2} seriesName={s.name} />
                         </div>

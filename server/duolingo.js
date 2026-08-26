@@ -16,7 +16,7 @@ async function fetchCourses() {
 
   const res = await fetch(DUOLINGO_COURSES_URL)
   if (!res.ok) {
-    throw new Error(`Duolingo isteği başarısız (${res.status})`)
+    throw new Error(`Veri isteği başarısız (${res.status})`)
   }
   const courses = await res.json()
   setCached(RAW_CACHE_KEY, courses, RAW_CACHE_TTL_MS)

@@ -27,6 +27,65 @@ const upsertStmt = db.prepare(`
     expires_at = excluded.expires_at
 `)
 
+const getSummaryStmt = db.prepare(`
+  SELECT AVG(positive_score) AS avgPositive, AVG(neutral_score) AS avgNeutral, AVG(negative_score) AS avgNegative,
+         COUNT(*) AS sampleSize, COUNT(DISTINCT series_id) AS seriesCount
+  FROM media_sentiment
+  WHERE dominant_sentiment != 'yetersiz-veri' AND positive_score IS NOT NULL
+`)
+
+// Kültürel Etki sekmesindeki "Medya & Basın Algısı Özeti" — media_sentiment SADECE bir dizi/ülke
+// satırı genişletilip TARANDIĞINDA dolar (bkz. fetchAndAnalyzeSentiment), yani bu özet HER ZAMAN
+// o ana kadar rastgele hangi diziler/ülkeler taranmışsa onların ortalamasıdır — istatistiksel
+// olarak temsili bir örneklem DEĞİLDİR. sampleSize küçükken (örn. <5) çağıran taraf bunu dürüstçe
+// göstermeli; burada sadece HİÇ tarama yoksa (sampleSize=0) 'pending' dönülür.
+export function getMediaSentimentSummary() {
+  const row = getSummaryStmt.get()
+  if (!row || row.sampleSize === 0) {
+    return { status: 'pending', sampleSize: 0 }
+  }
+  return {
+    status: 'ready',
+    sampleSize: row.sampleSize,
+    seriesCount: row.seriesCount,
+    avgPositive: Math.round(row.avgPositive * 1000) / 1000,
+    avgNeutral: Math.round(row.avgNeutral * 1000) / 1000,
+    avgNegative: Math.round(row.avgNegative * 1000) / 1000,
+  }
+}
+
+const getByCountryStmt = db.prepare(`
+  SELECT country_iso2, COUNT(*) AS scannedCount, COUNT(DISTINCT series_id) AS seriesCount,
+         AVG(positive_score) AS avgPositive, AVG(negative_score) AS avgNegative
+  FROM media_sentiment
+  WHERE dominant_sentiment != 'yetersiz-veri' AND positive_score IS NOT NULL
+  GROUP BY country_iso2
+  ORDER BY scannedCount DESC
+`)
+
+// Global özetteki gibi sürekli bir "algı skoru" değil, tabloda TEK bir okunabilir etiket
+// (Baskın Ton) gerekiyor — pozitif/negatif ortalama farkı %15 puanı aşmıyorsa 'neutral' sayılır
+// (küçük örneklemlerde tek bir haberin yönü tüm ülkeyi "kesin olumlu/olumsuz" gibi göstermesin).
+const TONE_MARGIN = 0.15
+function classifyTone(avgPositive, avgNegative) {
+  if (avgPositive - avgNegative > TONE_MARGIN) return 'positive'
+  if (avgNegative - avgPositive > TONE_MARGIN) return 'negative'
+  return 'neutral'
+}
+
+// Kültürel Etki sekmesindeki "Ülke Bazlı Medya Algısı" tablosu — her satır o ülkede TARANMIŞ
+// (bkz. getMediaSentimentSummary'deki aynı örneklem uyarısı) dizilerin ortalamasıdır. Hiç
+// tarama yoksa boş dizi döner, uydurma bir ülke satırı asla eklenmez.
+export function getMediaSentimentByCountry() {
+  return getByCountryStmt.all().map((row) => ({
+    iso2: row.country_iso2,
+    scannedCount: row.scannedCount,
+    seriesCount: row.seriesCount,
+    avgPositivePct: Math.round(row.avgPositive * 1000) / 10,
+    dominantTone: classifyTone(row.avgPositive, row.avgNegative),
+  }))
+}
+
 function rowToResult(row, extra) {
   return {
     seriesId: row.series_id,

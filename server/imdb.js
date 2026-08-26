@@ -75,7 +75,7 @@ async function fetchFromOmdb(imdbId) {
 
   const res = await fetch(url)
   if (!res.ok) {
-    throw new Error(`OMDb isteği başarısız (${res.status})`)
+    throw new Error(`Veri isteği başarısız (${res.status})`)
   }
   const data = await res.json()
   if (data.Response === 'False') {

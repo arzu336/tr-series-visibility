@@ -1,17 +1,7 @@
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { DatabaseSync } from 'node:sqlite'
 import db from '../db.js'
 import { getCached } from '../cache.js'
 import { calculateShareOfSearch } from './trendsShareOfSearch.js'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-// data-pipeline-python KENDİ ayrı SQLite dosyasını tutuyor (bkz. data-pipeline-python/db.py
-// modül docstring'i: "Node.js uygulamasının server/data/app.db'sinden BİLEREK AYRI"). Burada
-// SADECE OKUMA amaçlı ikinci bir bağlantı açılıyor — netflix_pipeline.py'nin yazdığı veriye
-// Node tarafından erişmenin tek yolu bu, iki ayrı process'in aynı dosyaya yazması riskini
-// almıyoruz (Python hiçbir zaman app.db'ye, Node hiçbir zaman pipeline.db'ye YAZMIYOR).
-const PIPELINE_DB_PATH = path.join(__dirname, '..', '..', 'data-pipeline-python', 'data', 'pipeline.db')
+import { getPipelineDb } from './pipelineDb.js'
 
 const TOP_N_CANDIDATES = 5
 
@@ -27,20 +17,6 @@ const WEIGHTS = {
   netflix: 0.3,
   mediaSentiment: 0.15,
   availability: 0.15,
-}
-
-let pipelineDb = null
-function getPipelineDb() {
-  if (pipelineDb) return pipelineDb
-  try {
-    pipelineDb = new DatabaseSync(PIPELINE_DB_PATH, { readOnly: true })
-  } catch (err) {
-    // pipeline.db henüz hiç oluşturulmamış olabilir (netflix_pipeline.py hiç çalıştırılmadıysa)
-    // — bu Modül C'yi çökertmez, Netflix faktörü dürüstçe "veri yok" sayılır.
-    console.error('[countryScoringEngine] pipeline.db açılamadı (Netflix verisi kullanılamayacak):', err.message)
-    pipelineDb = false
-  }
-  return pipelineDb
 }
 
 function getNetflixScore(iso2, tmdbId) {
@@ -131,7 +107,7 @@ export async function calculateCountryCompositeScore(countryIso2) {
   const iso2 = countryIso2.toUpperCase()
   const raw = getCached('raw-series-providers')
   if (!raw) {
-    return { iso2, generatedAt: new Date().toISOString(), entries: [], error: 'TMDB canlı veri önbelleği henüz dolmamış' }
+    return { iso2, generatedAt: new Date().toISOString(), entries: [], error: 'Canlı veri önbelleği henüz dolmamış' }
   }
 
   const candidates = raw.series

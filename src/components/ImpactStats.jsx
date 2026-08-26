@@ -1,0 +1,66 @@
+import { useEffect, useState } from 'react'
+import { fetchCulturalImpact, fetchTourismImpact, fetchExportImpact, fetchBenchmark } from '../lib/api.js'
+
+function round1(n) {
+  return Math.round(n * 10) / 10
+}
+
+// Etki & İhracat Analizi sayfasının üstünde, hangi sekme açık olursa olsun görünen özet
+// sayaçlar. Örneklem BÜYÜKLÜĞÜ göstermek yerine (ör. "9 basın taraması") gerçek bir ORAN/skor
+// gösterir — sayaç kendi başına ne kadar veri toplandığını değil, o verinin ne söylediğini
+// özetler. Veri henüz oluşmamışsa (ör. hiç basın taraması yapılmadıysa) o kart dürüstçe "—"
+// gösterir, sıfır ya da uydurma bir sayı değil.
+export default function ImpactStats() {
+  const [stats, setStats] = useState(null)
+  const [status, setStatus] = useState('loading')
+
+  useEffect(() => {
+    Promise.all([fetchCulturalImpact(), fetchTourismImpact(), fetchExportImpact(), fetchBenchmark().catch(() => null)])
+      .then(([cultural, tourism, exportData, benchmark]) => {
+        const topDestination = tourism.topDestinations[0]
+        const totalDestScore = tourism.topDestinations.reduce((sum, d) => sum + d.totalScore, 0) + tourism.otherDestinationsScore
+        const tr = benchmark?.countries?.find((c) => c.code === 'TR')
+
+        setStats({
+          totalCountries: exportData.totalCountries,
+          marketSharePct: tr?.marketSharePct ?? null,
+          mediaTonePct:
+            cultural.mediaSentimentSummary.status === 'ready'
+              ? Math.round(cultural.mediaSentimentSummary.avgPositive * 100)
+              : null,
+          topDestinationSharePct:
+            topDestination && totalDestScore > 0 ? round1((topDestination.totalScore / totalDestScore) * 100) : null,
+          topDestinationName: topDestination?.name ?? null,
+        })
+        setStatus('ready')
+      })
+      .catch(() => setStatus('error'))
+  }, [])
+
+  if (status !== 'ready' || !stats) return null
+
+  return (
+    <div className="impact-stats">
+      <div className="impact-stats__card">
+        <div className="impact-stats__num">{stats.totalCountries}</div>
+        <div className="impact-stats__label">Takip Edilen Ülke</div>
+      </div>
+      <div className="impact-stats__card">
+        <div className="impact-stats__num">{stats.marketSharePct != null ? `%${stats.marketSharePct}` : '—'}</div>
+        <div className="impact-stats__label">TR Küresel Pazar Payı</div>
+      </div>
+      <div className="impact-stats__card">
+        <div className="impact-stats__num">{stats.mediaTonePct != null ? `%${stats.mediaTonePct}` : '—'}</div>
+        <div className="impact-stats__label">Olumlu Medya Tonu</div>
+      </div>
+      <div className="impact-stats__card">
+        <div className="impact-stats__num">
+          {stats.topDestinationSharePct != null ? `%${stats.topDestinationSharePct}` : '—'}
+        </div>
+        <div className="impact-stats__label">
+          {stats.topDestinationName || 'Öncü Destinasyon'} Destinasyon Payı
+        </div>
+      </div>
+    </div>
+  )
+}

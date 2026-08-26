@@ -10,7 +10,7 @@ const Globe3D = lazy(() => import('./components/Globe3D.jsx'))
 const Map2D = lazy(() => import('./components/Map2D.jsx'))
 const AnalystDashboard = lazy(() => import('./components/AnalystDashboard.jsx'))
 const TrendsExplorer = lazy(() => import('./components/TrendsExplorer.jsx'))
-const ImpactReport = lazy(() => import('./components/ImpactReport.jsx'))
+const ImpactAnalysisTabs = lazy(() => import('./components/ImpactAnalysisTabs.jsx'))
 const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
 const PENDING_APPROVALS_POLL_MS = 60000
 const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
@@ -333,6 +333,15 @@ export default function App() {
     setView('map')
   }, [])
 
+  // CountryPanel'deki "Dizi Analizine Git" — TrendsExplorer'a (Arama İlgisi) geçer ve o dizinin
+  // adını ?series= URL parametresiyle taşır (TrendsExplorer kendi mount effect'inde bunu okuyup
+  // otomatik seçip sorgular, bkz. TrendsExplorer.jsx). react-router yok, bu yüzden pushState
+  // yeterli — sayfa yenilenmeden geri/ileri gezinme ve doğrudan link paylaşımı da çalışır.
+  const handleGoToSeriesAnalysis = useCallback((seriesName) => {
+    window.history.pushState(null, '', `?series=${encodeURIComponent(seriesName)}`)
+    setView('trends')
+  }, [])
+
   const clearSeriesFilter = useCallback(() => {
     setSeriesFilter(null)
   }, [])
@@ -479,7 +488,7 @@ export default function App() {
           )}
           {view === 'trends' && <TrendsExplorer onShowOnMap={handleShowSeriesOnMap} />}
           {view === 'impact' && (
-            <ImpactReport onSelectCountry={handleSelectCountryFromReport} />
+            <ImpactAnalysisTabs onSelectCountry={handleSelectCountryFromReport} />
           )}
           {view === 'admin' && user?.isAdmin && <AdminUsersPanel />}
           {view === 'map' && (
@@ -576,6 +585,7 @@ export default function App() {
                       activeSeriesGlobalId={searchedSeriesId}
                       onCloseSeriesGlobal={() => setSearchedSeriesId(null)}
                       onShowSeriesOnMap={handleShowSeriesAvailability}
+                      onGoToSeriesAnalysis={handleGoToSeriesAnalysis}
                     />
                   </div>
                 </div>

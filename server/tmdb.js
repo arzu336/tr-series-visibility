@@ -50,7 +50,7 @@ async function tmdbGet(path, params = {}) {
     const res = await fetch(url)
     if (res.ok) return res.json()
 
-    lastError = new Error(`TMDB isteği başarısız: ${path} (${res.status})`)
+    lastError = new Error(`Veri isteği başarısız: ${path} (${res.status})`)
     const canRetry = RETRYABLE_STATUSES.includes(res.status) && attempt < RETRY_DELAYS_MS.length
     if (!canRetry) throw lastError
     await sleep(RETRY_DELAYS_MS[attempt])

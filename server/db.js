@@ -209,6 +209,22 @@ db.exec(`
   );
   CREATE UNIQUE INDEX IF NOT EXISTS idx_media_sentiment_series_country
     ON media_sentiment(series_id, country_iso2);
+
+  -- bkz. server/services/tourismTrendsCollector.js — "3-6 Aylık Öncü Turizm Sinyali". Ham
+  -- SerpAPI TIMESERIES yanıtı zaten cache_entries'te (fetchTrendsTimeSeriesRaw, TTL'li); burada
+  -- tutulan onun TÜRETİLMİŞ sonucu (gecikmeli korelasyon + örneklem) — media_sentiment ile aynı
+  -- gerekçe: /api/impact/tourism'in SQL ile doğrudan özetleyebileceği gerçek sütunlar.
+  CREATE TABLE IF NOT EXISTS tourism_leading_signal (
+    country_iso2 TEXT NOT NULL,
+    travel_query TEXT NOT NULL,
+    top_series_name TEXT,
+    lag_weeks INTEGER,
+    correlation REAL,
+    sample_size INTEGER,
+    computed_at TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    PRIMARY KEY (country_iso2, travel_query)
+  );
 `)
 
 // Rastgele Denetim özelliği kaldırıldı — sadece test verisi biriktirmişti,

@@ -44,6 +44,18 @@ export async function fetchSocialListening(seriesName) {
   return handle(await fetch(`/api/social/${encodeURIComponent(seriesName)}`))
 }
 
+export async function fetchShareOfSearch(titles) {
+  return handle(await fetch(`/api/trends/share-of-search?titles=${encodeURIComponent(titles.join(','))}`))
+}
+
+export async function fetchTrendsTimeSeries(seriesName) {
+  return handle(await fetch(`/api/trends/timeseries/${encodeURIComponent(seriesName)}`))
+}
+
+export async function enrichSeriesNow(seriesId) {
+  return handle(await fetch(`/api/series/enrich-now/${seriesId}`, { method: 'POST' }))
+}
+
 export async function fetchImdbData(tmdbSeriesId) {
   return handle(await fetch(`/api/imdb/${tmdbSeriesId}`))
 }
@@ -58,6 +70,18 @@ export async function fetchPersonImpact(personId) {
 
 export async function fetchImpactReport() {
   return handle(await fetch('/api/impact'))
+}
+
+export async function fetchCulturalImpact() {
+  return handle(await fetch('/api/impact/cultural'))
+}
+
+export async function fetchTourismImpact() {
+  return handle(await fetch('/api/impact/tourism'))
+}
+
+export async function fetchExportImpact() {
+  return handle(await fetch('/api/impact/export'))
 }
 
 export async function fetchBenchmark() {

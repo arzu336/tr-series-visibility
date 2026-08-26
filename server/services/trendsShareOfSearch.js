@@ -19,20 +19,17 @@ function normalizeTitle(title) {
   return title.trim().toLocaleLowerCase('tr')
 }
 
+// iso2 opsiyonel — TrendsExplorer.jsx'in Kıyaslama Modu KÜRESEL (geo verilmez) çalışır; ülke
+// bazlı çağıran countryScoringEngine.js davranışı DEĞİŞMEDEN aynı kalır.
 function shareOfSearchCacheKey(iso2, titles) {
   const sorted = titles.map(normalizeTitle).sort()
-  return `serp:sos:${iso2.toUpperCase()}:${sorted.join('|')}`
+  return `serp:sos:${iso2 ? iso2.toUpperCase() : 'WW'}:${sorted.join('|')}`
 }
 
 async function fetchShareOfSearchRaw(titles, iso2, timeframe) {
-  const data = await serpapiGet({
-    engine: 'google_trends',
-    q: titles.join(','),
-    geo: iso2.toUpperCase(),
-    date: timeframe,
-    data_type: 'TIMESERIES',
-    hl: 'tr',
-  })
+  const params = { engine: 'google_trends', q: titles.join(','), date: timeframe, data_type: 'TIMESERIES', hl: 'tr' }
+  if (iso2) params.geo = iso2.toUpperCase()
+  const data = await serpapiGet(params)
 
   const averages = data.interest_over_time?.averages || []
   const rawByTitle = new Map(averages.map((a) => [a.query, a.value]))
@@ -49,7 +46,7 @@ async function fetchShareOfSearchRaw(titles, iso2, timeframe) {
     }
   })
 
-  return { iso2: iso2.toUpperCase(), titles, timeframe, queriedAt: new Date().toISOString(), items }
+  return { iso2: iso2 ? iso2.toUpperCase() : null, titles, timeframe, queriedAt: new Date().toISOString(), items }
 }
 
 /**

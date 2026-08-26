@@ -23,13 +23,13 @@ async function fetchRegionInterest(term, apiKey) {
   const res = await fetch(url)
   if (!res.ok) {
     if (res.status === 429) {
-      throw new Error('SerpAPI aylık ücretsiz kota dolmuş görünüyor (429).')
+      throw new Error('Aylık ücretsiz kota dolmuş görünüyor (429).')
     }
-    throw new Error(`SerpAPI isteği başarısız (${res.status})`)
+    throw new Error(`İstek başarısız (${res.status})`)
   }
   const data = await res.json()
   if (data.error) {
-    throw new Error(`SerpAPI hatası: ${data.error}`)
+    throw new Error(`İstek hatası: ${data.error}`)
   }
 
   const byCountry = new Map()
