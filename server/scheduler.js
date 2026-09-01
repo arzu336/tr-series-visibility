@@ -6,6 +6,7 @@ import { syncTourismDataIfNeeded } from './services/tourismData.js'
 import { runAutoNewsScanIfNeeded } from './services/autoNewsScheduler.js'
 import { runTourismTrendsCollectionIfNeeded } from './services/tourismTrendsCollector.js'
 import { runSocialEnrichmentIfNeeded } from './services/socialEnricher.js'
+import { runActorTrendsCollectionIfNeeded } from './services/actorTrendsCollector.js'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000 // her 30 dakikada bir "sırası geldi mi" kontrolü
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000 // hedef: günde 1 kez
@@ -40,11 +41,13 @@ async function runScheduledRefresh() {
     console.error('[scheduler] turizm verisi senkronizasyonu başarısız:', err.message)
   }
 
-  // SerpAPI'ye dayalı 3 haftalık toplu zenginleştirme (basın taraması, öncü turizm sinyali,
-  // sosyal/YouTube) — sırayla (paralel DEĞİL) çalıştırılır ki paylaşılan aylık kota bütçesi
-  // (bkz. serpApiCache.js SERPAPI_MONTHLY_BUDGET) üç işin arasında öngörülebilir şekilde
-  // bölüşülsün. Her biri kendi 7 günlük meta-kapısını kontrol eder, hazır değilse anında döner;
-  // biri başarısız olursa (kota, ağ) diğer ikisi etkilenmez.
+  // SerpAPI'ye dayalı 4 haftalık toplu zenginleştirme (basın taraması, öncü turizm sinyali,
+  // sosyal/YouTube, oyuncu arama ilgisi) — sırayla (paralel DEĞİL) çalıştırılır ki paylaşılan
+  // aylık kota bütçesi (bkz. serpApiCache.js SERPAPI_MONTHLY_BUDGET) dördü arasında öngörülebilir
+  // şekilde bölüşülsün. Her biri kendi 7 günlük meta-kapısını kontrol eder, hazır değilse anında
+  // döner; biri başarısız olursa (kota, ağ) diğerleri etkilenmez. Sıra bilerek en pahalıdan en
+  // ucuza değil, mevcut 3'ün ardına en ucuz/en yeni işin (oyuncu, ~30 çağrı/tur) eklenmesi
+  // şeklinde — böylece bütçe daralırsa önce daha büyük/öncelikli kalemler (basın/sosyal) payını alır.
   try {
     await runAutoNewsScanIfNeeded()
   } catch (err) {
@@ -59,6 +62,11 @@ async function runScheduledRefresh() {
     await runSocialEnrichmentIfNeeded()
   } catch (err) {
     console.error('[scheduler] sosyal zenginleştirme başarısız:', err.message)
+  }
+  try {
+    await runActorTrendsCollectionIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] oyuncu trend taraması başarısız:', err.message)
   }
 }
 

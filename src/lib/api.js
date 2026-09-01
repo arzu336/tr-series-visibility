@@ -48,8 +48,16 @@ export async function fetchShareOfSearch(titles) {
   return handle(await fetch(`/api/trends/share-of-search?titles=${encodeURIComponent(titles.join(','))}`))
 }
 
+export async function fetchRegionalBreakdown(titles) {
+  return handle(await fetch(`/api/trends/regional-breakdown?titles=${encodeURIComponent(titles.join(','))}`))
+}
+
 export async function fetchTrendsTimeSeries(seriesName) {
   return handle(await fetch(`/api/trends/timeseries/${encodeURIComponent(seriesName)}`))
+}
+
+export async function fetchTrendsInsight(seriesName) {
+  return handle(await fetch(`/api/trends/insight/${encodeURIComponent(seriesName)}`))
 }
 
 export async function enrichSeriesNow(seriesId) {
@@ -106,6 +114,14 @@ export async function fetchSeriesPopularity(range = 'monthly') {
 
 export async function fetchMediaSentiment(seriesId, iso2) {
   return handle(await fetch(`/api/media-sentiment/${seriesId}/${iso2}`))
+}
+
+export async function fetchMediaSentimentSummary(seriesId) {
+  return handle(await fetch(`/api/media-sentiment-summary/${seriesId}`))
+}
+
+export async function fetchSeriesMeta(tmdbId) {
+  return handle(await fetch(`/api/series/${tmdbId}`))
 }
 
 export async function fetchCountryLeaderboard(iso2) {

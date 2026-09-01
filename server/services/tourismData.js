@@ -29,9 +29,6 @@ const upsertArrivalStmt = db.prepare(`
 const selectSeriesStmt = db.prepare(
   'SELECT year, month, visitor_count FROM tourist_arrivals WHERE iso2 = ? ORDER BY year, month'
 )
-const selectOneStmt = db.prepare(
-  'SELECT visitor_count FROM tourist_arrivals WHERE iso2 = ? AND year = ? AND month = ?'
-)
 const selectTrackedIso2Stmt = db.prepare('SELECT DISTINCT iso2 FROM tourist_arrivals')
 
 // yigm.ktb.gov.tr/TR-249702/sinir-istatistikleri.html her ay milliyet bazında bir .xls bülteni
@@ -40,6 +37,12 @@ const selectTrackedIso2Stmt = db.prepare('SELECT DISTINCT iso2 FROM tourist_arri
 // sayfada eski bir "flipbook" widget'ının içinde METİNSİZ, boş bir <a> de var (bir önceki
 // bültene ait kalıntı) — bu yüzden sadece HREF'e değil, görünür metne "HABER BÜLTENİ" geçen
 // linke bakıyoruz, karışmasın diye.
+//
+// Sadece EN GÜNCEL bülten çekiliyor, geriye dönük arşiv YOK: TR-249703/onceki-donemlere-ait-
+// istatistikler.html (arşiv sayfası) geçmiş ayların listesini bir Telerik RadComboBox (AJAX)
+// bileşeniyle dolduruyor — düz `fetch` + HTML ile taranamıyor (JS çalıştırmadan içerik gelmiyor).
+// Bunun yerine her bülten zaten SON 3 YILIN aynı ayını içeriyor (bkz. parseBulletin) — bu, en
+// azından yıl-yıl aynı ay kıyaslaması için anında geçmiş veri sağlıyor.
 export async function findLatestBulletin() {
   const res = await fetch(INDEX_URL)
   if (!res.ok) throw new Error(`Sınır istatistikleri sayfası alınamadı (${res.status})`)
@@ -63,16 +66,6 @@ export async function findLatestBulletin() {
     }
   }
   throw new Error('Güncel sınır bülteni linki sayfada bulunamadı (site yapısı değişmiş olabilir)')
-}
-
-// Not: TR-249703/onceki-donemlere-ait-istatistikler.html (arşiv sayfası) geçmiş ayların
-// listesini bir Telerik RadComboBox (AJAX) bileşeniyle dolduruyor — düz `fetch` + HTML ile
-// taranamıyor (JS çalıştırmadan içerik gelmiyor). Bu yüzden geriye dönük otomatik toplu alım
-// YAPILMIYOR; bunun yerine her bülten zaten SON 3 YILIN aynı ayını içeriyor (bkz.
-// parseBulletin) — bu, en azından yıl-yıl aynı ay kıyaslaması için anında geçmiş veri sağlıyor.
-// İleri dönük her senkronizasyon yeni bir ay ekler.
-export async function findArchivedBulletins() {
-  return []
 }
 
 // "Milliyet" sayfası: satır 2 başlık (MİLLİYET | YIL1 | YIL2 | YIL3 | ...), sonraki satırlar
@@ -163,11 +156,6 @@ export async function syncTourismDataIfNeeded() {
 
 export function getVisitorSeries(iso2) {
   return selectSeriesStmt.all(iso2).map((r) => ({ year: r.year, month: r.month, visitorCount: r.visitor_count }))
-}
-
-export function getVisitorCount(iso2, year, month) {
-  const row = selectOneStmt.get(iso2, year, month)
-  return row ? row.visitor_count : null
 }
 
 // impact.js'in korelasyon adayı ülkeleri seçerken kullanır: bültende ayrı satırı olmayan

@@ -1,25 +1,8 @@
 import db from './db.js'
 import { classifyWithLLM } from './llm.js'
+import { mapWithConcurrency } from './utils/concurrency.js'
 
 const CLASSIFY_CONCURRENCY = 5
-
-// items'ı en fazla `limit` kadar eşzamanlı worker ile işler. Array.map(async..)
-// + Promise.all yerine bunu kullanıyoruz çünkü sınırsız paralellik dahili LLM
-// sunucusunu (tek istekte 200'e kadar dizi olabiliyor) aynı anda boğabilir;
-// sıralı for-await ise (önceki hali) her istek birbirini bekleyip toplam
-// süreyi dizi sayısıyla orantılı şekilde uzatıyordu.
-async function mapWithConcurrency(items, limit, worker) {
-  const results = new Array(items.length)
-  let nextIndex = 0
-  async function runNext() {
-    while (nextIndex < items.length) {
-      const i = nextIndex++
-      results[i] = await worker(items[i], i)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runNext))
-  return results
-}
 
 export const THEMES = [
   'aile',
@@ -98,21 +81,6 @@ export async function ensureClassified(series) {
   })
 
   return getThemeStore()
-}
-
-export function getClassificationHealth(series) {
-  const liveIds = new Set(series.map((s) => s.id))
-  const classified = selectAllStmt.all().filter((row) => liveIds.has(row.id)).length
-  const failures = db.prepare('SELECT * FROM classification_failures').all().filter((row) => liveIds.has(row.id))
-  const retryReady = failures.filter((row) => !row.next_retry_at || row.next_retry_at <= Date.now()).length
-  return {
-    total: series.length,
-    classified,
-    pending: Math.max(0, series.length - classified),
-    delayedRetries: Math.max(0, failures.length - retryReady),
-    retryReady,
-    lastFailureAt: failures.reduce((latest, row) => Math.max(latest, row.last_failed_at || 0), 0) || null,
-  }
 }
 
 export function getThemeStore() {

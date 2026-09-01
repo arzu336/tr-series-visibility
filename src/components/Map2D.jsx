@@ -106,6 +106,12 @@ export default function Map2D({
     if (!seriesFilter) return null
     const map = new Map()
     for (const entry of seriesFilter.byCountry || []) {
+      // Google Trends dünya genelinde ölçülebilir en ufak bir iz bırakan hemen her ülkeyi
+      // döndürüyor (çoğu 0-1 arası) — bunları da gradyanın en koyu durağıyla boyamak haritayı
+      // "gerçek ilgi olan yer" ile "hiç ilgi olmayan yer"i ayırt edilemez hâle getirip
+      // bulanıklaştırıyordu. Gerçek bir ilgi ölçülmemiş (value<=0) ülkeler NO_DATA_COLOR'a
+      // düşsün diye haritaya hiç eklenmiyor — kullanıcı geri bildirimi: "böyle hoş gözükmüyor".
+      if (!entry.value || entry.value <= 0) continue
       const iso2 = resolveIso2FromLabel(entry.country)
       if (iso2) map.set(iso2, entry.value)
     }

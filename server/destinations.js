@@ -1,22 +1,8 @@
 import db from './db.js'
 import { classifyDestinationsWithLLM } from './llm.js'
+import { mapWithConcurrency } from './utils/concurrency.js'
 
 const CLASSIFY_CONCURRENCY = 5
-
-// tmdb.js/themes.js'teki aynı desen — sınırlı eşzamanlı istekle dahili LLM sunucusunu
-// boğmadan 200 diziyi işler.
-async function mapWithConcurrency(items, limit, worker) {
-  const results = new Array(items.length)
-  let nextIndex = 0
-  async function runNext() {
-    while (nextIndex < items.length) {
-      const i = nextIndex++
-      results[i] = await worker(items[i], i)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, runNext))
-  return results
-}
 
 // Turizm açısından öne çıkan destinasyon/bölge listesi. Anahtar kelimeler,
 // TMDB dizi özetinde (sinopsis) geçen yer adlarını yakalamak için — bu bir

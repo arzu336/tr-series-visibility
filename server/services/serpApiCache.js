@@ -8,8 +8,16 @@ import { resolveIso2FromLabel } from './countryLookup.js'
 // not) — "her dizi sadece ilk sorguda kota harcar" güvenliydi ama veri asla tazelenmiyordu.
 // Burada onun yerine server/cache.js'in zaten kullandığı genel amaçlı, TTL'li cache_entries
 // tablosu paylaşılıyor: aynı "süresi dolmuş mu" mantığı, tek yerde.
-export const TRENDS_TTL_MS = 15 * 24 * 60 * 60 * 1000 // Google Trends ilgi verisi ~15 günde bir anlamlı değişir
-export const SOCIAL_TTL_MS = 30 * 24 * 60 * 60 * 1000 // Bilgi Grafiği/YouTube fragman verisi daha yavaş değişir
+// 15 günden 7 güne indirildi (kullanıcı talebi) — bu TTL sadece TALEP ÜZERİNE (kullanıcı bir
+// diziyi/oyuncuyu sorguladığında) tetiklendiği için kısaltmak sistemik bir kota çarpanı YARATMAZ,
+// sadece gerçek kullanım kadar tazeler (bkz. enrichmentTargets.js'teki kapasite notu — asıl kota
+// riski haftalık TOPLU taramalarda, onlar ayrıca dengelendi).
+export const TRENDS_TTL_MS = 7 * 24 * 60 * 60 * 1000
+// BİLEREK 30 günde kaldı (kullanıcı 7 gün istedi) — Bilgi Grafiği/YouTube fragman verisi haftalık
+// değişmiyor VE bu, haftalık toplu taramanın (socialEnricher.js) çift-maliyetli kalemidir (dizi/
+// ülke çifti başına 2 çağrı) — burada kısaltmak enrichmentTargets.js'teki 875 kombinasyonluk
+// havuzu bütçe dışına iterdi. Kısaltılmayan payı havuz büyümesine (35×25) aktarıldı.
+export const SOCIAL_TTL_MS = 30 * 24 * 60 * 60 * 1000
 export const TIMESERIES_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 12 aylık geçmiş seri — ertesi gün tekrar çekmenin anlamı yok
 
 function normalizeSeriesKey(seriesName) {
@@ -18,6 +26,13 @@ function normalizeSeriesKey(seriesName) {
 
 export function trendsCacheKey(seriesName) {
   return `serp:trends:${normalizeSeriesKey(seriesName)}`
+}
+// actorTrendsCollector.js — AYNI fetchTrendsByCountryRaw'ı (GEO_MAP_0, geo parametresiz — TEK
+// çağrıda tüm ülkeler) oyuncu adıyla çağırır. Ayrı bir ad alanı (serp:trends: değil serp:actor-
+// trends:) bilerek kullanılıyor — bir oyuncu adı bir dizi adıyla aynı normalize edilmiş metne
+// düşerse (nadiren ama imkansız değil) iki farklı özelliğin önbelleği çakışmasın diye.
+export function actorTrendsCacheKey(actorName) {
+  return `serp:actor-trends:${normalizeSeriesKey(actorName)}`
 }
 export function regionalCacheKey(seriesName, iso2) {
   return `serp:regional:${normalizeSeriesKey(seriesName)}::${iso2.toUpperCase()}`
@@ -84,12 +99,6 @@ export async function cacheFirstSerpApi(key, ttlMs, fetchFn) {
   }
 }
 
-export function getCacheEntryMeta(key) {
-  const cached = readRaw(key)
-  if (!cached) return null
-  return { updatedAt: cached.updatedAt, expiresAt: cached.expiresAt, isFresh: cached.isFresh }
-}
-
 // --- Aylık kota bütçesi ----------------------------------------------------------------------
 // Onaylanan plan 5.000 sorgu/ay (2026-08-26, kullanıcı teyidi — server/scheduler.js'teki eski
 // "250 sorgu/ay" notu artık GÜNCEL DEĞİL). autoNewsScheduler/tourismTrendsCollector/
@@ -113,21 +122,26 @@ function currentUsageMonthKey(now = new Date()) {
 }
 
 const getMetaStmt = db.prepare('SELECT value FROM meta WHERE key = ?')
-const setMetaStmt = db.prepare(`
-  INSERT INTO meta (key, value) VALUES (?, ?)
-  ON CONFLICT(key) DO UPDATE SET value = excluded.value
+
+// Eskiden "SELECT mevcut değer → JS'te +1 → UPDATE" iki ayrı adımdı — serpapiGet() bir `await
+// fetch(...)`nin (asenkron, event loop'a devrediyor) ETRAFINDA çalıştığı için, iki eşzamanlı
+// çağrı aynı eski değeri okuyup ikisi de aynı yeni değere yazabiliyordu (kayıp güncelleme/TOCTOU
+// — ComparisonView.jsx'in tek "Karşılaştır" tıklamasında bile art arda birden fazla SerpAPI
+// çağrısı tetiklediği düşünülürse gerçek bir risk). Aşağıdaki TEK SQL ifadesi (INSERT ... ON
+// CONFLICT ... RETURNING) hem artırıyor hem yeni değeri aynı anda döndürüyor — node:sqlite'ın
+// DatabaseSync'i senkron/bloklayıcı olduğu için bu tek çağrı sırasında başka hiçbir JS kodu
+// araya giremez, yarış durumu yapısal olarak imkânsız hâle gelir (gerçek testle doğrulandı).
+const reserveUsageStmt = db.prepare(`
+  INSERT INTO meta (key, value) VALUES (?, '1')
+  ON CONFLICT(key) DO UPDATE SET value = CAST(value AS INTEGER) + 1
+  RETURNING CAST(value AS INTEGER) AS value
 `)
+const releaseUsageStmt = db.prepare(`UPDATE meta SET value = CAST(value AS INTEGER) - 1 WHERE key = ?`)
 
 export function getSerpApiUsageThisMonth(now = new Date()) {
   const monthKey = currentUsageMonthKey(now)
   const row = getMetaStmt.get(monthKey)
   return { used: row ? Number(row.value) : 0, budget: getSerpApiMonthlyBudget() }
-}
-
-function incrementSerpApiUsage(now = new Date()) {
-  const monthKey = currentUsageMonthKey(now)
-  const row = getMetaStmt.get(monthKey)
-  setMetaStmt.run(monthKey, String((row ? Number(row.value) : 0) + 1))
 }
 
 // --- SerpAPI düşük seviye istek yardımcıları -----------------------------------------------
@@ -138,27 +152,40 @@ export async function serpapiGet(params) {
   if (!apiKey) {
     throw new Error('SERPAPI_API_KEY tanımlı değil (.env dosyasını kontrol et)')
   }
-  const usage = getSerpApiUsageThisMonth()
-  if (usage.used >= usage.budget) {
-    throw new Error(`Aylık kota dolmuş görünüyor (429). (${usage.used}/${usage.budget})`)
-  }
-  const url = new URL('https://serpapi.com/search.json')
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
-  url.searchParams.set('api_key', apiKey)
 
-  const res = await fetch(url)
-  if (!res.ok) {
-    if (res.status === 429) {
-      throw new Error('Aylık kota dolmuş görünüyor (429).')
+  // Rezervasyon, gerçek isteği atmadan (async fetch'ten) ÖNCE ve atomik olarak yapılır — "önce
+  // kontrol et, sonra artır" sırası TERSİNE çevrildi (artık "önce artır, sonucu kontrol et").
+  // Bütçe aşılırsa VEYA istek herhangi bir sebeple başarısız olursa rezervasyon geri alınır
+  // (releaseUsageStmt) — başarısız/atılmamış bir çağrı kotadan düşmez, önceki davranışla aynı.
+  const monthKey = currentUsageMonthKey()
+  const budget = getSerpApiMonthlyBudget()
+  const reserved = reserveUsageStmt.get(monthKey).value
+  if (reserved > budget) {
+    releaseUsageStmt.run(monthKey)
+    throw new Error(`Aylık kota dolmuş görünüyor (429). (${reserved - 1}/${budget})`)
+  }
+
+  try {
+    const url = new URL('https://serpapi.com/search.json')
+    for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
+    url.searchParams.set('api_key', apiKey)
+
+    const res = await fetch(url)
+    if (!res.ok) {
+      if (res.status === 429) {
+        throw new Error('Aylık kota dolmuş görünüyor (429).')
+      }
+      throw new Error(`İstek başarısız (${res.status})`)
     }
-    throw new Error(`İstek başarısız (${res.status})`)
+    const data = await res.json()
+    if (data.error) {
+      throw new Error(`İstek hatası: ${data.error}`)
+    }
+    return data
+  } catch (err) {
+    releaseUsageStmt.run(monthKey)
+    throw err
   }
-  const data = await res.json()
-  if (data.error) {
-    throw new Error(`İstek hatası: ${data.error}`)
-  }
-  incrementSerpApiUsage()
-  return data
 }
 
 // Ham (cache'siz) Google Trends çağrısı — queryTrends (serpapi.js) VE calculateRegionalScore
@@ -249,8 +276,11 @@ async function fetchKnowledgeGraphRaw(seriesName) {
   const kg = data.knowledge_graph
   if (!kg) return null
   const ratings = extractRatingsFromKg(kg)
-  if (ratings.length === 0) return null
-  return { title: kg.title || seriesName, ratings }
+  const userReviewsPct = kg.user_reviews?.percentage ?? null
+  // Eskiden SADECE puan varsa nesne dönülüyordu — user_reviews puanlardan bağımsız gelebiliyor
+  // (gerçek testte ikisi de nadiren aynı anda dolu), o yüzden ikisi de boşsa dürüstçe null.
+  if (ratings.length === 0 && userReviewsPct == null) return null
+  return { title: kg.title || seriesName, ratings, userReviewsPct }
 }
 
 // Feature 3 (server/services/socialEnricher.js) — fetchKnowledgeGraphRaw'ın aksine hedef ÜLKEYE
@@ -301,9 +331,20 @@ export async function fetchLocalizedSocialListeningRaw(seriesName, iso2) {
   return { seriesName, iso2: iso2.toUpperCase(), queriedAt: new Date().toISOString(), knowledgeGraph, youtube }
 }
 
+// "fragman" sorgusu genelde en yüksek izlenmeli sonuç olarak "1. Bölüm Fragmanı" (tek bölümlük,
+// eski bir teaser) döndürüyor — gerçek testte doğrulandı (Esaret, 2026-09-01). Kullanıcı talebi:
+// dizinin GENEL tanıtımı, tek bir bölümün fragmanı değil. Sorgu "dizi tanıtım"a çevrildi VE
+// başlığı "N. Bölüm" ile eşleşen (bölüme özel) sonuçlar elenip ilk KALAN sonuç alınıyor — YouTube/
+// SerpAPI'nin kendi alaka sıralaması korunuyor, sadece bölüm-özel teaser'lar geriye itiliyor.
+// Gerçek testte doğrulandı: bu, "1. Bölüm Fragmanı" yerine "3. Sezon İlk Fragman" gibi genel bir
+// sezon/dizi tanıtımına düşüyor. Hepsi bölüme özelse (nadiren), dürüstçe ilk sonuca düşülür —
+// hiç video göstermemek yerine.
+const EPISODE_SPECIFIC_TITLE_RE = /\d+\.\s*bölüm/i
+
 async function fetchYouTubeRaw(seriesName) {
-  const data = await serpapiGet({ engine: 'youtube', search_query: `${seriesName} fragman` })
-  const top = (data.video_results || [])[0]
+  const data = await serpapiGet({ engine: 'youtube', search_query: `${seriesName} dizi tanıtım` })
+  const results = data.video_results || []
+  const top = results.find((v) => !EPISODE_SPECIFIC_TITLE_RE.test(v.title || '')) || results[0]
   if (!top) return null
   return {
     title: top.title,

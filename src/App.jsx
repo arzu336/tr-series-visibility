@@ -326,11 +326,20 @@ export default function App() {
   // TrendsExplorer'da zaten sorgulanmış sonucu tekrar fetch etmeden doğrudan kullanır —
   // bu, Google Trends ARAMA İLGİSİ gradyanını gösteren ayrı/farklı bir özellik
   // (handleShowSeriesAvailability'nin gerçek yayın verisiyle karıştırılmamalı).
+  // result.seriesId varsa (TrendsExplorer'ın Tekli Analiz'i geçiyor, kullanıcı geri bildirimi) —
+  // haritayı boyamakla YETİNMEZ, sağ paneli de handleSelectSeriesGlobal ile AYNI mekanizmayla
+  // (searchedSeriesId) açar: kullanıcı "haritada göster"e bastığında hangi diziye baktığını sağ
+  // panelde (kadro + gerçek yayın ülkeleri) de görsün ister.
   const handleShowSeriesOnMap = useCallback((result) => {
     setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
     setHighlightFilter(null)
     setActorHighlight(null)
     setView('map')
+    if (result.seriesId != null) {
+      setSearchedSeriesId(result.seriesId)
+      setSelectedActorId(null)
+      setPanelCollapsed(false)
+    }
   }, [])
 
   // CountryPanel'deki "Dizi Analizine Git" — TrendsExplorer'a (Arama İlgisi) geçer ve o dizinin

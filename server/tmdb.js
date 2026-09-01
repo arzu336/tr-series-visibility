@@ -1,3 +1,5 @@
+import { mapWithConcurrency } from './utils/concurrency.js'
+
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const TOP_N_SERIES = 400
 const PAGE_SIZE = 20
@@ -14,24 +16,6 @@ const RETRY_DELAYS_MS = [500, 1500]
 
 function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
-}
-
-// 200 dizi için tek seferde 200 eşzamanlı istek atmak (özellikle watch-providers +
-// credits birlikte 400'e çıkınca) TMDB'yi rate-limit'e (429) sokuyor ve isteklerin büyük
-// kısmı sessizce boş dönüyor — gerçek veriyle doğruladım (ölçüm: 400 eşzamanlı istekte
-// credits'in %94'ü 429/hata döndü). Bunun yerine sınırlı sayıda (CONCURRENCY) istek aynı
-// anda uçuşur, biri bitince sıradaki başlar.
-async function mapWithConcurrency(items, limit, fn) {
-  const results = new Array(items.length)
-  let nextIndex = 0
-  async function worker() {
-    while (nextIndex < items.length) {
-      const current = nextIndex++
-      results[current] = await fn(items[current], current)
-    }
-  }
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker))
-  return results
 }
 
 async function tmdbGet(path, params = {}) {

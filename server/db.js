@@ -225,6 +225,20 @@ db.exec(`
     expires_at INTEGER NOT NULL,
     PRIMARY KEY (country_iso2, travel_query)
   );
+
+  -- bkz. server/services/actorTrendsCollector.js — en popüler 30 oyuncunun hedef ülkelerdeki
+  -- Google Trends ilgisi. Ham SerpAPI GEO_MAP_0 yanıtı zaten cache_entries'te (aynı
+  -- fetchTrendsByCountryRaw, actorTrendsCacheKey ile); burada tutulan hedef ülke havuzuna göre
+  -- FİLTRELENMİŞ, sorgulanabilir hâli — media_sentiment/tourism_leading_signal ile aynı gerekçe.
+  CREATE TABLE IF NOT EXISTS actor_country_interest (
+    actor_id INTEGER NOT NULL,
+    actor_name TEXT NOT NULL,
+    country_iso2 TEXT NOT NULL,
+    interest_value REAL,
+    computed_at TEXT NOT NULL,
+    expires_at INTEGER NOT NULL,
+    PRIMARY KEY (actor_id, country_iso2)
+  );
 `)
 
 // Rastgele Denetim özelliği kaldırıldı — sadece test verisi biriktirmişti,

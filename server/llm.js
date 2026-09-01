@@ -175,6 +175,38 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
   return parsed.insight.trim()
 }
 
+// TrendsExplorer.jsx'in "Küresel Zaman Serisi" grafiğinin altındaki AI yorumu (generateThemeInsight
+// ile aynı disiplin: SADECE verilen sayılarla konuş, yeni istatistik/sebep UYDURMA — "neden arttı"
+// gibi bir nedensellik iddiası özellikle yasaklı, çünkü elimizde bunu destekleyecek bir olay verisi
+// yok, sadece arama hacmi sayıları var).
+export async function generateSeriesTrendInsight(seriesName, stats) {
+  const prompt = `Aşağıda "${seriesName}" adlı Türk dizisinin son 12 aydaki KÜRESEL Google Trends arama
+ilgisi (0-100 bağıl ölçek) özet istatistikleri var. Bu sayılara dayanarak, TEK CÜMLELİK ya da EN
+FAZLA İKİ CÜMLELİK, kısa bir Türkçe yorum yaz.
+
+KURALLAR:
+- SADECE aşağıda verilen sayılarla konuş, yeni bir istatistik veya olay UYDURMA.
+- Artış/azalışın "NEDENİNİ" uydurma (ör. "yeni bölüm çıktığı için" gibi) — sadece TREND'i tarif et,
+  sebep iddia etme, çünkü elinde bunu destekleyecek bir veri yok.
+- Kesin/iddialı ifadelerden kaçın (bu bir gözlem, kesin bulgu değil).
+
+İstatistikler:
+- Zirve: Hafta ${stats.peakWeek} (${stats.peakValue} puan)
+- Dönem başı değeri: ${stats.startValue}
+- Dönem sonu (en güncel) değeri: ${stats.endValue}
+- 12 aylık ortalama: ${stats.average}
+- Genel yön: ${stats.direction}
+
+Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce metni yazma:
+{"insight": "..."}`
+
+  const parsed = await callLLMForJson(prompt, 300)
+  if (!parsed.insight || typeof parsed.insight !== 'string') {
+    throw new Error('LLM geçerli bir insight metni döndürmedi')
+  }
+  return parsed.insight.trim()
+}
+
 // Proje raporu §4.6 "Basın/Haber Duygu Analizi" — bkz. server/services/newsSentiment.js.
 // Girdi (haber başlığı/özeti) Google News'ten gelen DIŞ/GÜVENİLMEYEN metin — prompt bunu açıkça
 // "SADECE sınıflandırılacak veri" olarak çerçeveler ve içindeki olası talimatları uygulamamasını

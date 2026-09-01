@@ -244,9 +244,13 @@ export default function Globe3D({
     // Madde 1 — dizi bazlı harita filtresi: gerçek, ülke bazlı Google Trends arama ilgisi
     // (bkz. src/App.jsx seriesFilter state'i). Dolgu/tooltip bunu kullanır; tıklama her
     // zaman aggregate byIso2'yi kullanmaya devam eder (CountryPanel bunu bekliyor).
+    // Map2D.jsx'teki aynı düzeltme: gerçek bir ilgi ölçülmemiş (value<=0) ülkeler haritaya hiç
+    // eklenmiyor, aksi halde Google Trends'in döndürdüğü onlarca 0-1 aralıklı "iz" gradyanın en
+    // koyu durağıyla boyanıp haritayı bulanıklaştırıyordu.
     const seriesByIso2 = seriesFilter
       ? new Map(
           (seriesFilter.byCountry || [])
+            .filter((entry) => entry.value > 0)
             .map((entry) => [resolveIso2FromLabel(entry.country), entry.value])
             .filter(([iso2]) => iso2)
         )

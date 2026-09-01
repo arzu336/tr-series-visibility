@@ -43,11 +43,12 @@ import { buildBenchmark } from './benchmark.js'
 import { getTurkishLearningIndex } from './turkish-learning-interest.js'
 import { getRegionalInterest } from './regional-interest.js'
 import { getDuolingoTurkishStats } from './duolingo.js'
-import { fetchAndAnalyzeSentiment } from './services/newsSentiment.js'
+import { fetchAndAnalyzeSentiment, getMediaSentimentForSeries } from './services/newsSentiment.js'
 import { calculateCountryCompositeScore } from './services/countryScoringEngine.js'
-import { calculateShareOfSearch } from './services/trendsShareOfSearch.js'
+import { calculateShareOfSearch, getRegionalBreakdown } from './services/trendsShareOfSearch.js'
 import { cacheFirstSerpApi, fetchTrendsTimeSeriesRaw, timeSeriesCacheKey, TIMESERIES_TTL_MS } from './services/serpApiCache.js'
 import { getEnrichmentTargets } from './services/enrichmentTargets.js'
+import { getSeriesTrendInsight } from './services/seriesTrendInsight.js'
 import { enrichSeriesNewsNow } from './services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from './services/socialEnricher.js'
 import { getCached } from './cache.js'
@@ -103,6 +104,22 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar deneyin.' },
 })
+
+// Genel /api/* koruması — önceden SADECE giriş/kayıt sınırlıydı, geri kalan onlarca uç
+// (görünürlük verisi, SerpAPI'ye dayalı sorgular, admin işlemleri...) hiç sınırsızdı. Bu limit
+// loginLimiter/registerLimiter'ın YERİNE değil, ÜSTÜNE gelir (express-rate-limit middleware'leri
+// aynı rotada üst üste yığılabilir) — /api/auth/login hem bu genel limite hem kendi çok daha sıkı
+// limitine tabi olur, ikisi çakışmaz. Eşik gerçek kullanımı (ör. ComparisonView.jsx'in "Karşılaştır"
+// tıklamasında art arda ~8-10 istek atması) sıkıştırmayacak kadar geniş tutuldu — amaç normal
+// yoğun kullanımı değil, otomatik/kötüye kullanım trafiğini frenlemek.
+const generalApiLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  limit: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: { error: 'Çok fazla istek yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.' },
+})
+app.use('/api', generalApiLimiter)
 
 // Kimlik doğrulama uçları her zaman erişilebilir; geri kalan tüm /api rotaları
 // geçerli bir oturum ister. İsme bağlı hesaplar: kayıt olan biri admin onaylayana kadar
@@ -470,6 +487,22 @@ app.get('/api/trends/share-of-search', async (req, res) => {
   }
 })
 
+// ComparisonView.jsx — "Bölgesel Üstünlük". Aynı sebeple (yukarıdaki not) /api/trends/:seriesName'
+// den ÖNCE tanımlı.
+app.get('/api/trends/regional-breakdown', async (req, res) => {
+  try {
+    const titles = String(req.query.titles || '')
+      .split(',')
+      .map((t) => t.trim())
+      .filter(Boolean)
+    const data = await getRegionalBreakdown(titles)
+    res.json(data)
+  } catch (err) {
+    console.error('[trends/regional-breakdown] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
 // TrendsExplorer.jsx — Küresel 12 Aylık Trend Çizgisi. Tek dizi, geo verilmez (dünya geneli
 // haftalık arama hacmi) — bkz. serpApiCache.js'teki fetchTrendsTimeSeriesRaw'ın iso2-opsiyonel hâli.
 // Aynı gerekçeyle (yukarıdaki not) /api/trends/:seriesName'den ÖNCE tanımlı.
@@ -482,6 +515,25 @@ app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/timeseries] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+// TrendsExplorer.jsx — zaman serisi grafiğinin altındaki AI yorumu. Yukarıdaki /api/trends/
+// timeseries/:seriesName ile AYNI cache anahtarını (timeSeriesCacheKey) kullanır — o rota zaten
+// çağrılmışsa burada YENİDEN bir SerpAPI isteği atılmaz, sadece LLM katmanı eklenir. Aynı
+// gerekçeyle (yukarıdaki not) /api/trends/:seriesName'den ÖNCE tanımlı.
+app.get('/api/trends/insight/:seriesName', async (req, res) => {
+  try {
+    const seriesName = req.params.seriesName
+    const key = timeSeriesCacheKey(seriesName, null, 'today 12-m')
+    const timeseries = await cacheFirstSerpApi(key, TIMESERIES_TTL_MS, () =>
+      fetchTrendsTimeSeriesRaw(seriesName, null, 'today 12-m')
+    )
+    const data = await getSeriesTrendInsight(seriesName, timeseries.timeline)
+    res.json(data)
+  } catch (err) {
+    console.error('[trends/insight] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })
@@ -598,6 +650,51 @@ app.get('/api/media-sentiment/:seriesId/:iso2', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[media-sentiment] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+// TrendsExplorer.jsx — Tekli Analiz'in "Küresel Ayak İzi & Medya Algısı" bloğu. Yukarıdaki
+// /api/media-sentiment/:seriesId/:iso2 TEK bir ülke içindir (tetiklemeli) — burası o ana kadar
+// taranmış TÜM ülkelerin bu dizi için özetidir, senkron SQLite okuması (yeni bir SerpAPI çağrısı
+// YAPMAZ, sadece var olan kayıtları özetler).
+app.get('/api/media-sentiment-summary/:seriesId', (req, res) => {
+  try {
+    const data = getMediaSentimentForSeries(Number(req.params.seriesId))
+    res.json(data)
+  } catch (err) {
+    console.error('[media-sentiment-summary] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
+})
+
+// TrendsExplorer.jsx — Tekli Analiz'in "Dizi Başlık & Tema Bloğu". Poster/yayın tarihi/özet
+// raw-series-providers önbelleğinden (ülkeden bağımsız, bkz. /api/media-sentiment üstündeki aynı
+// desen), tema getThemeStore'dan, bölüm sayısı (varsa) offline pipeline'dan (getSeriesEnrichment) —
+// pipeline hiç çalıştırılmamışsa dürüstçe null, uydurma bir sayı üretilmez.
+app.get('/api/series/:tmdbId', (req, res) => {
+  try {
+    const seriesId = Number(req.params.tmdbId)
+    const rawSeries = getCached('raw-series-providers')
+    const series = rawSeries?.series?.find((s) => s.id === seriesId)
+    if (!series) {
+      res.status(404).json({ error: `${seriesId} kimlikli dizi için canlı veri bulunamadı` })
+      return
+    }
+    const themeEntry = getThemeStore()[String(seriesId)]
+    const enrichment = getSeriesEnrichment(seriesId)
+    res.json({
+      id: series.id,
+      name: series.name,
+      posterPath: series.posterPath || null,
+      firstAirDate: series.firstAirDate || null,
+      overview: series.overview || '',
+      theme: themeEntry ? effectiveTheme(themeEntry) : null,
+      totalEpisodes: enrichment?.dizilah?.totalEpisodes ?? null,
+      cast: series.cast || [],
+    })
+  } catch (err) {
+    console.error('[series] hata:', err.message)
     res.status(502).json({ error: err.message })
   }
 })

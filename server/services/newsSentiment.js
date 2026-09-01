@@ -4,8 +4,11 @@ import { analyzeMediaSentiment } from '../llm.js'
 
 // Proje raporu §4.6 "Basın/Haber Duygu Analizi". Kendi tablosu (media_sentiment, bkz. db.js) —
 // trends_cache gibi ham SerpAPI yanıtı değil, LLM analiziyle ZENGİNLEŞTİRİLMİŞ bir sonuç
-// tutulduğu için genel cache_entries'ten ayrı. 30 günlük TTL.
-const NEWS_SENTIMENT_TTL_MS = 30 * 24 * 60 * 60 * 1000
+// tutulduğu için genel cache_entries'ten ayrı. 30 günden 14 güne indirildi (kullanıcı talebi 7
+// gündü — enrichmentTargets.js'teki kapasite notunda gerekçesiyle: bu, haftalık toplu taramanın
+// EN BÜYÜK kalemi olduğu için tam 7 güne inmek 875 kombinasyonluk havuzla bütçeyi aşardı, 14 gün
+// hem gerçek bir tazelik kazancı hem de bütçe içinde kalan bir denge).
+const NEWS_SENTIMENT_TTL_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_STORED_ARTICLES = 20
 
 const getStmt = db.prepare('SELECT * FROM media_sentiment WHERE series_id = ? AND country_iso2 = ?')
@@ -84,6 +87,50 @@ export function getMediaSentimentByCountry() {
     avgPositivePct: Math.round(row.avgPositive * 1000) / 10,
     dominantTone: classifyTone(row.avgPositive, row.avgNegative),
   }))
+}
+
+const getBySeriesStmt = db.prepare(`
+  SELECT country_iso2, total_news_count, positive_score, negative_score, dominant_sentiment, created_at
+  FROM media_sentiment
+  WHERE series_id = ?
+  ORDER BY country_iso2
+`)
+
+// TrendsExplorer.jsx — Tekli Analiz'in "Küresel Ayak İzi & Medya Algısı" bloğu. getMediaSentimentSummary/
+// getMediaSentimentByCountry (yukarıda) TÜM dizilerin ortalaması — burası TEK bir dizinin, o ana kadar
+// taranmış ülkelerdeki dağılımı. 3 durumu ayrı tutuyoruz: hiç tarama yoksa 'pending' (buton dürüstçe
+// "tara" der), taranmış ama hepsi sıfır haber bulmuşsa 'no-data' (tarandı ama sonuç yok, tekrar taramak
+// muhtemelen aynı sonucu verir), gerçek veri varsa 'ready'.
+export function getMediaSentimentForSeries(seriesId) {
+  const rows = getBySeriesStmt.all(seriesId)
+  if (rows.length === 0) {
+    return { status: 'pending', scannedCount: 0, countries: [] }
+  }
+
+  const countries = rows.map((r) => ({
+    iso2: r.country_iso2,
+    totalNewsCount: r.total_news_count,
+    positivePct: r.positive_score != null ? Math.round(r.positive_score * 1000) / 10 : null,
+    negativePct: r.negative_score != null ? Math.round(r.negative_score * 1000) / 10 : null,
+    dominantSentiment: r.dominant_sentiment,
+  }))
+
+  const withData = rows.filter((r) => r.dominant_sentiment !== 'yetersiz-veri' && r.positive_score != null)
+  if (withData.length === 0) {
+    return { status: 'no-data', scannedCount: rows.length, countries }
+  }
+
+  const avgPositive = withData.reduce((sum, r) => sum + r.positive_score, 0) / withData.length
+  const avgNegative = withData.reduce((sum, r) => sum + r.negative_score, 0) / withData.length
+  return {
+    status: 'ready',
+    scannedCount: rows.length,
+    withDataCount: withData.length,
+    avgPositivePct: Math.round(avgPositive * 1000) / 10,
+    avgNegativePct: Math.round(avgNegative * 1000) / 10,
+    dominantTone: classifyTone(avgPositive, avgNegative),
+    countries,
+  }
 }
 
 function rowToResult(row, extra) {

@@ -65,3 +65,58 @@ export async function calculateShareOfSearch(iso2, titles, timeframe = 'today 12
   const key = shareOfSearchCacheKey(iso2, titles)
   return cacheFirstSerpApi(key, TRENDS_TTL_MS, () => fetchShareOfSearchRaw(titles, iso2, timeframe))
 }
+
+// --- Bölgesel Üstünlük (ComparisonView.jsx) --------------------------------------------------
+// GERÇEK SerpAPI testiyle doğrulandı (2026-09-01): data_type=GEO_MAP_0 BİRDEN FAZLA sorguyu
+// kabul ETMİYOR ("Please change the data_type to one that supports multiple queries" hatası) —
+// çoklu terimle ülke bazlı karşılaştırma için doğru değer data_type=GEO_MAP (alt çizgisiz).
+// Yanıttaki compared_breakdown_by_region[].geo ZATEN iso2 kodu — ayrıca bir ülke-adı→iso2
+// eşleştirmesine (resolveIso2FromLabel) gerek yok, gerçek yanıtta doğrulandı.
+function regionalBreakdownCacheKey(titles) {
+  const sorted = titles.map(normalizeTitle).sort()
+  return `serp:regional-breakdown:${sorted.join('|')}`
+}
+
+async function fetchRegionalBreakdownRaw(titles, timeframe) {
+  const data = await serpapiGet({ engine: 'google_trends', q: titles.join(','), data_type: 'GEO_MAP', date: timeframe, hl: 'tr' })
+  const rows = (data.compared_breakdown_by_region || [])
+    .map((entry) => ({
+      iso2: entry.geo,
+      location: entry.location,
+      values: titles.map((title) => ({
+        title,
+        value: entry.values?.find((v) => v.query === title)?.extracted_value ?? 0,
+      })),
+    }))
+    .filter((row) => row.iso2)
+  return { titles, timeframe, queriedAt: new Date().toISOString(), rows }
+}
+
+/**
+ * Seçilen 2-5 dizinin DÜNYA GENELİNDE, ülke bazında karşılaştırmalı arama ilgisi — TEK bir
+ * SerpAPI çağrısında (sabit 5 ülke değil, kullanıcı talebi: "en çok ilgi gören ilk 10 gerçek
+ * ülke"). "En çok ilgi" = tüm seçilen dizilerin o ülkedeki değerlerinin TOPLAMI (tek bir dizinin
+ * baskın çıkıp diğerlerini gölgelemesini önlemek için) — sıralanıp ilk N alınır.
+ * countryCountByTitle da AYNI yanıttan (tam, kırpılmamış satır kümesinden) çıkar — her dizi için
+ * ayrı bir tekil-sorgu (GEO_MAP_0) çağrısına gerek KALMAZ, ComparisonView.jsx'in "Taranan Ülke
+ * Sayısı" metriği de bu tek çağrıyı paylaşır.
+ */
+export async function getRegionalBreakdown(titles, n = 10, timeframe = 'today 12-m') {
+  if (!Array.isArray(titles) || titles.length < 2) {
+    throw new Error('Bölgesel Üstünlük için en az 2 dizi adı gerekir')
+  }
+  if (titles.length > MAX_TERMS) {
+    throw new Error(`Bölgesel Üstünlük tek sorguda en fazla ${MAX_TERMS} dizi karşılaştırabilir (${titles.length} verildi)`)
+  }
+  const key = regionalBreakdownCacheKey(titles)
+  const result = await cacheFirstSerpApi(key, TRENDS_TTL_MS, () => fetchRegionalBreakdownRaw(titles, timeframe))
+
+  const allRows = result.rows.map((row) => ({ ...row, totalInterest: row.values.reduce((sum, v) => sum + v.value, 0) }))
+  const topRows = [...allRows].sort((a, b) => b.totalInterest - a.totalInterest).slice(0, n)
+  const countryCountByTitle = {}
+  for (const title of titles) {
+    countryCountByTitle[title] = allRows.filter((row) => (row.values.find((v) => v.title === title)?.value ?? 0) > 0).length
+  }
+
+  return { titles, timeframe: result.timeframe, queriedAt: result.queriedAt, topRows, countryCountByTitle }
+}

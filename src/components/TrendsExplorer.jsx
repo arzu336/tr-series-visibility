@@ -4,81 +4,219 @@ import {
   fetchTrends,
   fetchSocialListening,
   fetchImdbData,
-  fetchShareOfSearch,
   fetchTrendsTimeSeries,
+  fetchTrendsInsight,
+  fetchSeriesMeta,
+  fetchMediaSentimentSummary,
   enrichSeriesNow,
 } from '../lib/api.js'
-import ShareOfSearchChart from './ShareOfSearchChart.jsx'
+import countryNames from '../data/country-centroids.json'
 import SeriesTrendChart from './SeriesTrendChart.jsx'
+import CastBar from './CastBar.jsx'
+import ComparisonView from './ComparisonView.jsx'
 
-const MAX_COMPARE = 3
+const POSTER_BASE = 'https://image.tmdb.org/t/p/w185'
 
 function formatViews(n) {
   if (n == null) return '—'
   return new Intl.NumberFormat('tr-TR').format(n)
 }
 
-function ComparisonMode({ seriesList }) {
-  const [picked, setPicked] = useState([])
-  const [status, setStatus] = useState('idle') // idle | querying | ready | error
-  const [result, setResult] = useState(null)
-  const [error, setError] = useState(null)
+function yearOf(dateStr) {
+  return dateStr ? dateStr.slice(0, 4) : null
+}
 
-  function togglePick(name) {
-    setPicked((prev) => {
-      if (prev.includes(name)) return prev.filter((n) => n !== name)
-      if (prev.length >= MAX_COMPARE) return prev
-      return [...prev, name]
-    })
-  }
+// Blok 1 — Dizi Başlık & Tema. /api/series/:id (poster/yıl/tema/bölüm sayısı) + /api/imdb/:id
+// (puan) ayrı iki kaynak — biri yoksa/hata verirse diğeri dürüstçe kendi boş durumunu gösterir,
+// birbirini bloke etmez. Google Bilgi Grafiği puanları/izleyici beğeni yüzdesi de burada — eskiden
+// "Sosyal & Video Nabzı"ndaydı ama IMDb puanının hemen yanında durması daha tutarlı (kullanıcı
+// geri bildirimi: "alakasız gözüküyor", tüm puan kaynakları artık tek yerde).
+function SeriesHeaderBlock({ meta, metaStatus, imdb, imdbStatus, social }) {
+  if (metaStatus === 'loading') return <p className="dashboard__empty">Yükleniyor…</p>
+  if (metaStatus === 'error' || !meta) return <p className="dashboard__empty">Dizi bilgisi alınamadı.</p>
 
-  async function handleCompare() {
-    setStatus('querying')
-    setError(null)
-    try {
-      const data = await fetchShareOfSearch(picked)
-      setResult(data)
-      setStatus('ready')
-    } catch (err) {
-      setError(err.message)
-      setStatus('error')
-    }
-  }
+  const kg = social?.knowledgeGraph
+  const otherRatings = kg?.ratings || []
+  const hasUserReviews = kg?.userReviewsPct != null
 
   return (
-    <div>
-      <p className="dashboard__hint">
-        En fazla {MAX_COMPARE} dizi seçip aralarındaki göreceli arama payını (Share of Search) tek bir
-        sorguda kıyasla — küresel, aynı 12 aylık dönem.
-      </p>
-      <div className="compare-picker">
-        {seriesList.map((s) => {
-          const isPicked = picked.includes(s.name)
-          const disabled = !isPicked && picked.length >= MAX_COMPARE
-          return (
-            <label key={s.id} className={disabled ? 'compare-picker__item compare-picker__item--disabled' : 'compare-picker__item'}>
-              <input type="checkbox" checked={isPicked} disabled={disabled} onChange={() => togglePick(s.name)} />
-              {s.name}
-            </label>
-          )
-        })}
+    <div className="series-header">
+      <div className="series-header__top">
+        {meta.posterPath ? (
+          <img className="series-header__poster" src={`${POSTER_BASE}${meta.posterPath}`} alt="" />
+        ) : (
+          <div className="series-header__poster series-header__poster--empty">Afiş yok</div>
+        )}
+        <div>
+          <h3 className="series-header__title">{meta.name}</h3>
+          <div className="series-header__meta">
+            {yearOf(meta.firstAirDate) && <span><strong>{yearOf(meta.firstAirDate)}</strong></span>}
+            <span>{meta.totalEpisodes != null ? <><strong>{meta.totalEpisodes}</strong> bölüm</> : 'Bölüm sayısı bilinmiyor'}</span>
+            <span>
+              {imdbStatus === 'loading' && 'Puan yükleniyor…'}
+              {imdbStatus === 'ready' && imdb?.rating != null && (
+                <>⭐ <strong>{imdb.rating.toFixed(1)}/10</strong> ({formatViews(imdb.votes)} oy)</>
+              )}
+              {imdbStatus === 'ready' && imdb?.rating == null && 'Puan verisi yok'}
+              {imdbStatus === 'unavailable' && 'Puan verisi yok'}
+            </span>
+            {hasUserReviews && <span>İzleyici Beğenisi: <strong>%{kg.userReviewsPct}</strong></span>}
+            {otherRatings.map((r) => (
+              <span key={r.source}>{r.source}: <strong>{r.rating}</strong></span>
+            ))}
+          </div>
+          <div className="series-header__themes">
+            {meta.theme ? <span className="badge badge--theme">{meta.theme}</span> : <span className="badge badge--uncertain">Tema sınıflandırılmamış</span>}
+          </div>
+          {meta.overview && <p className="series-header__overview">{meta.overview}</p>}
+        </div>
       </div>
-      <div className="trends__controls">
-        <button onClick={handleCompare} disabled={picked.length < 2 || status === 'querying'}>
-          {status === 'querying' ? 'Karşılaştırılıyor…' : `Karşılaştır (${picked.length}/${MAX_COMPARE})`}
-        </button>
-        {picked.length === 1 && <span className="dashboard__hint" style={{ margin: 0 }}>En az 2 dizi seçmelisin.</span>}
-      </div>
-
-      {status === 'error' && <div className="status status--error">Hata: {error}</div>}
-
-      {status === 'ready' && result && (
-        <section className="dashboard__section">
-          <h3 className="dashboard__section-title">Göreceli Arama Payı (Share of Search)</h3>
-          <ShareOfSearchChart items={result.items} />
-        </section>
+      {meta.cast?.length > 0 && (
+        <div className="series-header__cast">
+          <h4 className="subcard__title">Oyuncular</h4>
+          <CastBar cast={meta.cast} />
+        </div>
       )}
     </div>
+  )
+}
+
+// Blok 3 (sol) — en çok arandığı ilk 8 ülke, zaten sorgulanmış result.byCountry'den (yeni bir
+// istek YOK). Haritada Göster burada kalıyor çünkü tam ülke listesine (result.byCountry, 8'den
+// fazla) ihtiyaç duyuyor.
+function GlobalFootprintCard({ result, seriesId, onShowOnMap }) {
+  const byCountry = result?.byCountry
+  const withInterest = [...(byCountry || [])].filter((row) => row.value > 0).sort((a, b) => b.value - a.value)
+  if (withInterest.length === 0) {
+    return (
+      <div className="subcard">
+        <h4 className="subcard__title">Küresel Ayak İzi — İlk 8 Ülke</h4>
+        <p className="dashboard__empty">Bu dizi için ülke bazlı arama ilgisi verisi bulunamadı.</p>
+      </div>
+    )
+  }
+  const top8 = withInterest.slice(0, 8)
+  const maxValue = top8[0].value
+
+  return (
+    <div className="subcard">
+      <h4 className="subcard__title">Küresel Ayak İzi — İlk 8 Ülke</h4>
+      <div className="benchmark-card">
+        <div className="benchmark-card__bars">
+          {top8.map((row) => (
+            <div key={row.country} className="benchmark-card__row">
+              <div className="benchmark-card__row-label">{row.country}</div>
+              <div className="benchmark-card__row-bar-track">
+                <div className="benchmark-card__row-bar" style={{ width: `${(row.value / maxValue) * 100}%`, background: '#EE3135' }} />
+              </div>
+              <div className="benchmark-card__row-value">{row.value}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+      {withInterest.length > 8 && (
+        <div className="map-cta">
+          <div className="map-cta__text">
+            <strong>{withInterest.length} ülkede arama ilgisi ölçüldü</strong>
+            <span>Haritayı bu dizinin ilgi dağılımına göre boyar, sağ panelde kadro/yayın bilgisini açar.</span>
+          </div>
+          <button className="map-cta__btn" onClick={() => onShowOnMap?.({ ...result, seriesId })}>
+            🗺️ Haritada Göster
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function ToneBadge({ tone }) {
+  if (tone === 'positive') return <span className="badge badge--ok">Olumlu</span>
+  if (tone === 'negative') return <span className="badge badge--uncertain">Olumsuz</span>
+  return <span className="badge badge--info">Nötr</span>
+}
+
+// Blok 3 (sağ) — bu dizi için o ana kadar TARANMIŞ ülkelerin basın/medya duygu dağılımı
+// (getMediaSentimentForSeries, senkron SQLite okuması). "Tüm Ülkeleri Tara" aynı anda hem basın
+// hem sosyal veriyi tazeler (enrichSeriesNow) — buton burada, sonucu hem bu kart hem Blok 4'ü
+// etkiler, bu yüzden altında kısa bir not var.
+function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, scanResult, scanError }) {
+  return (
+    <div className="subcard">
+      <h4 className="subcard__title">Medya &amp; Basın Algısı</h4>
+
+      {status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
+
+      {status === 'ready' && summary?.status === 'pending' && (
+        <p className="dashboard__empty">Bu dizi için henüz hiçbir ülkede basın taraması yapılmadı.</p>
+      )}
+      {status === 'ready' && summary?.status === 'no-data' && (
+        <p className="dashboard__empty">
+          {summary.scannedCount} ülke tarandı ama hiçbirinde haber bulunamadı.
+        </p>
+      )}
+      {status === 'ready' && summary?.status === 'ready' && (
+        <>
+          <div className="series-header__themes" style={{ marginBottom: '0.7rem' }}>
+            <ToneBadge tone={summary.dominantTone} />
+            <span className="badge badge--info" title="Taranmış ülke sayısı — istatistiksel bir örneklem değil">
+              {summary.withDataCount}/{summary.scannedCount} ülkede veri
+            </span>
+          </div>
+          <ul className="panel__series-list">
+            {summary.countries
+              .filter((c) => c.dominantSentiment !== 'yetersiz-veri')
+              .map((c) => (
+                <li key={c.iso2} className="panel__series-item">
+                  <div className="panel__series-row">
+                    <span className="panel__series-info"><span className="panel__series-name">{countryNames[c.iso2]?.name || c.iso2}</span></span>
+                    <span className="panel__series-score">%{c.positivePct} olumlu</span>
+                  </div>
+                </li>
+              ))}
+          </ul>
+        </>
+      )}
+
+      <div className="scan-cta">
+        <div className="scan-cta__text">
+          <strong>Daha fazla ülke mi taransın?</strong>
+          <span>En görünür 15 ülkede basın + sosyal/YouTube verisini birlikte tazeler.</span>
+        </div>
+        <button className="scan-cta__btn" onClick={onScanAll} disabled={scanStatus === 'running'}>
+          {scanStatus === 'running' ? 'Taranıyor…' : '🔎 Tüm Ülkeleri Tara'}
+        </button>
+      </div>
+
+      {scanStatus === 'done' && scanResult && (
+        <div className="dashboard__bulk-bar" style={{ marginTop: '0.6rem' }}>
+          {scanResult.countriesTargeted} ülke hedeflendi — basın: {scanResult.news.scanned} tarandı ({scanResult.news.liveCalls} canlı),
+          sosyal: {scanResult.social.scanned} tarandı ({scanResult.social.liveCalls} canlı).
+          {(scanResult.news.budgetExhausted || scanResult.social.budgetExhausted) && ' Aylık SerpAPI kotası sırasında doldu.'}
+        </div>
+      )}
+      {scanStatus === 'error' && <div className="status status--error" style={{ marginTop: '0.6rem' }}>Tarama başarısız: {scanError}</div>}
+    </div>
+  )
+}
+
+// Blok 4 — resmi dizi tanıtımı (YouTube). Bilgi Grafiği puanları artık Blok 1'de (kullanıcı geri
+// bildirimi: burada "alakasız gözüküyordu") — bu blok artık tek amaçlı.
+function SocialPulseBlock({ social }) {
+  if (!social?.youtube) {
+    return <p className="dashboard__empty">Bu dizi için video verisi bulunamadı.</p>
+  }
+  return (
+    <p className="dashboard__hint" style={{ margin: 0 }}>
+      <a href={social.youtube.link} target="_blank" rel="noreferrer" className="dashboard__link-btn">
+        {social.youtube.title}
+      </a>
+      {' — '}
+      {social.youtube.channel || 'Bilinmeyen kanal'}
+      {social.youtube.channelVerified && ' ✓'}
+      {' · '}
+      {formatViews(social.youtube.views)} izlenme
+      {social.youtube.publishedDate && ` · ${social.youtube.publishedDate}`}
+    </p>
   )
 }
 
@@ -87,23 +225,24 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
   const [result, setResult] = useState(null)
   const [social, setSocial] = useState(null)
   const [imdb, setImdb] = useState(null)
-  const [imdbError, setImdbError] = useState(null)
+  const [imdbStatus, setImdbStatus] = useState('idle') // idle | loading | ready | unavailable
   const [status, setStatus] = useState('idle') // idle | querying | ready | error
   const [error, setError] = useState(null)
   const [timeSeries, setTimeSeries] = useState(null)
   const [timeSeriesStatus, setTimeSeriesStatus] = useState('idle') // idle | loading | ready | unavailable
+  const [insight, setInsight] = useState(null)
+  const [insightStatus, setInsightStatus] = useState('idle') // idle | loading | ready
+  const [meta, setMeta] = useState(null)
+  const [metaStatus, setMetaStatus] = useState('idle') // idle | loading | ready | error
+  const [sentimentSummary, setSentimentSummary] = useState(null)
+  const [sentimentStatus, setSentimentStatus] = useState('idle') // idle | loading | ready
   const [enrichStatus, setEnrichStatus] = useState('idle') // idle | running | done | error
   const [enrichResult, setEnrichResult] = useState(null)
   const [enrichError, setEnrichError] = useState(null)
 
-  useEffect(() => {
-    if (seriesList.length > 0 && !selected) {
-      setSelected(seriesList[0].name)
-    }
-  }, [seriesList, selected])
-
-  // Harita üzerindeki "Dizi Analizine Git" bağlantısı (?series=Yargı) — sadece seriesList
-  // yüklendiğinde ve gerçekten listede olan bir dizi ise otomatik seçip sorgular.
+  // Temiz Başlangıç: URL'de ?series= yoksa arama kutusu BOŞ gelir, placeholder ile net bir
+  // seçim arayüzü sunar — daha önceki "listedeki ilk diziyi otomatik doldur" davranışı bilerek
+  // kaldırıldı (kullanıcı hangi diziyi sorguladığını fark etmeden sonuç görüyordu).
   useEffect(() => {
     if (seriesList.length === 0) return
     const fromUrl = new URLSearchParams(window.location.search).get('series')
@@ -120,8 +259,12 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
     setStatus('querying')
     setError(null)
     setSocial(null)
-    setImdbError(null)
     setImdb(null)
+    setImdbStatus('idle')
+    setMeta(null)
+    setMetaStatus('idle')
+    setSentimentSummary(null)
+    setSentimentStatus('idle')
     setEnrichStatus('idle')
     setEnrichResult(null)
     setEnrichError(null)
@@ -134,6 +277,7 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
       setStatus('error')
       return
     }
+
     setTimeSeriesStatus('loading')
     setTimeSeries(null)
     fetchTrendsTimeSeries(name)
@@ -142,21 +286,48 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
         setTimeSeriesStatus(data.timeline?.length > 1 ? 'ready' : 'unavailable')
       })
       .catch(() => setTimeSeriesStatus('unavailable'))
-    try {
-      const socialData = await fetchSocialListening(name)
-      setSocial(socialData)
-    } catch {
-      // Fragman ikincil bir bilgi — bulunamazsa/erişilemezse sessizce atlanır.
-    }
+
+    setInsightStatus('loading')
+    setInsight(null)
+    fetchTrendsInsight(name)
+      .then((data) => {
+        setInsight(data)
+        setInsightStatus('ready')
+      })
+      .catch(() => setInsightStatus('ready'))
+
+    fetchSocialListening(name)
+      .then(setSocial)
+      .catch(() => {
+        // Fragman/Bilgi Grafiği ikincil bilgi — bulunamazsa/erişilemezse sessizce atlanır.
+      })
+
     const selectedId = seriesList.find((s) => s.name === name)?.id
-    if (selectedId != null) {
-      try {
-        const imdbData = await fetchImdbData(selectedId)
-        setImdb(imdbData)
-      } catch (err) {
-        setImdbError(err.message)
-      }
-    }
+    if (selectedId == null) return
+
+    setMetaStatus('loading')
+    fetchSeriesMeta(selectedId)
+      .then((data) => {
+        setMeta(data)
+        setMetaStatus('ready')
+      })
+      .catch(() => setMetaStatus('error'))
+
+    setImdbStatus('loading')
+    fetchImdbData(selectedId)
+      .then((data) => {
+        setImdb(data)
+        setImdbStatus(data.status)
+      })
+      .catch(() => setImdbStatus('unavailable'))
+
+    setSentimentStatus('loading')
+    fetchMediaSentimentSummary(selectedId)
+      .then((data) => {
+        setSentimentSummary(data)
+        setSentimentStatus('ready')
+      })
+      .catch(() => setSentimentStatus('ready'))
   }
 
   const selectedId = seriesList.find((s) => s.name === selected)?.id
@@ -169,6 +340,9 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
       const data = await enrichSeriesNow(selectedId)
       setEnrichResult(data)
       setEnrichStatus('done')
+      // Tarama basın + sosyal veriyi tazeledi — her iki kartı da güncel sonuçla yeniden çeker.
+      fetchMediaSentimentSummary(selectedId).then(setSentimentSummary).catch(() => {})
+      fetchSocialListening(selected).then(setSocial).catch(() => {})
     } catch (err) {
       setEnrichError(err.message)
       setEnrichStatus('error')
@@ -182,7 +356,7 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
           className="search-input"
           list="trends-series-list"
           type="text"
-          placeholder="Dizi ara..."
+          placeholder="Bir dizi ara ve seç…"
           value={selected}
           onChange={(e) => setSelected(e.target.value)}
         />
@@ -194,119 +368,58 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
         <button onClick={() => handleQuery()} disabled={status === 'querying' || !seriesList.some((s) => s.name === selected)}>
           {status === 'querying' ? 'Sorgulanıyor…' : 'Sorgula'}
         </button>
-        {selectedId != null && status === 'ready' && (
-          <button onClick={handleEnrichNow} disabled={enrichStatus === 'running'} title="Bu dizi için basın taraması ve sosyal/YouTube verisini en görünür 15 ülkede anlık tazeler">
-            {enrichStatus === 'running' ? 'Taranıyor…' : '🔎 Gelişmiş Medya & Sosyal Taramayı Çalıştır'}
-          </button>
-        )}
       </div>
 
+      {status === 'idle' && <p className="dashboard__empty">Bir dizi seç ve "Sorgula"ya bas — sonuçlar burada görünecek.</p>}
       {status === 'error' && <div className="status status--error">Hata: {error}</div>}
 
-      {enrichStatus === 'done' && enrichResult && (
-        <div className="dashboard__bulk-bar">
-          "{enrichResult.seriesName}" için {enrichResult.countriesTargeted} ülke hedeflendi — basın:{' '}
-          {enrichResult.news.scanned} tarandı ({enrichResult.news.liveCalls} canlı), sosyal:{' '}
-          {enrichResult.social.scanned} tarandı ({enrichResult.social.liveCalls} canlı).
-          {(enrichResult.news.budgetExhausted || enrichResult.social.budgetExhausted) && ' Aylık SerpAPI kotası sırasında doldu, kalan ülkeler atlandı.'}
-        </div>
-      )}
-      {enrichStatus === 'error' && <div className="status status--error">Tarama başarısız: {enrichError}</div>}
+      {status === 'ready' && (
+        <>
+          <section className="dashboard__section">
+            <h3 className="dashboard__section-title">Dizi Başlık &amp; Tema</h3>
+            <SeriesHeaderBlock meta={meta} metaStatus={metaStatus} imdb={imdb} imdbStatus={imdbStatus} social={social} />
+          </section>
 
-      {(imdbError || imdb) && (
-        <section className="dashboard__section">
-          <h3 className="dashboard__section-title">Puan Verisi</h3>
-          {imdbError && <p className="dashboard__empty">Veri alınamadı: {imdbError}</p>}
-          {imdb && (
-            imdb.status === 'ready' ? (
-              <ul className="panel__series-list">
-                <li className="panel__series-item">
-                  <div className="panel__series-row">
-                    <span className="panel__series-info"><span className="panel__series-name">Puan</span></span>
-                    <span className="panel__series-score">
-                      {imdb.rating != null ? `⭐ ${imdb.rating.toFixed(1)}/10` : '—'}
-                      {imdb.votes != null ? ` (${formatViews(imdb.votes)} oy)` : ''}
-                    </span>
-                  </div>
-                </li>
-                <li className="panel__series-item">
-                  <div className="panel__series-row">
-                    <span className="panel__series-info"><span className="panel__series-name">Ana Karakterler</span></span>
-                    <span className="panel__series-score">
-                      {imdb.topCast?.length > 0 ? imdb.topCast.join(', ') : '—'}
-                    </span>
-                  </div>
-                </li>
-              </ul>
-            ) : (
-              <p className="dashboard__empty">Veri güncelleniyor…</p>
-            )
-          )}
+          <section className="dashboard__section">
+            <h3 className="dashboard__section-title">Küresel Ayak İzi &amp; Medya Algısı</h3>
+            <div className="two-col-grid">
+              <GlobalFootprintCard result={result} seriesId={selectedId} onShowOnMap={onShowOnMap} />
+              <MediaSentimentSummaryCard
+                summary={sentimentSummary}
+                status={sentimentStatus}
+                onScanAll={handleEnrichNow}
+                scanStatus={enrichStatus}
+                scanResult={enrichResult}
+                scanError={enrichError}
+              />
+            </div>
+          </section>
 
-          {social?.youtube && (
-            <>
-              <h4 className="impact__rank-title" style={{ marginTop: '1.25rem' }}>Fragman</h4>
-              <p className="dashboard__hint" style={{ margin: 0 }}>
-                <a href={social.youtube.link} target="_blank" rel="noreferrer" className="dashboard__link-btn">
-                  {social.youtube.title}
-                </a>
-                {' — '}
-                {social.youtube.channel || 'Bilinmeyen kanal'}
-                {social.youtube.channelVerified && ' ✓'}
-                {' · '}
-                {formatViews(social.youtube.views)} izlenme
-                {social.youtube.publishedDate && ` · ${social.youtube.publishedDate}`}
-              </p>
-            </>
-          )}
-        </section>
-      )}
+          <section className="dashboard__section">
+            <h3 className="dashboard__section-title">Dizi Tanıtımı</h3>
+            <SocialPulseBlock social={social} />
+          </section>
 
-      {result && (
-        <section className="dashboard__section">
-          <div className="dashboard__header-row">
-            <h3 className="dashboard__section-title">Ülke Bazlı Arama İlgisi</h3>
-            {result.byCountry.length > 0 && (
-              <button className="dashboard__export-btn dashboard__export-btn--ghost" onClick={() => onShowOnMap?.(result)}>
-                🗺️ Haritada Göster
-              </button>
+          <section className="dashboard__section">
+            <h3 className="dashboard__section-title">Küresel Zaman Serisi (Son 12 Ay)</h3>
+            {timeSeriesStatus === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
+            {timeSeriesStatus === 'unavailable' && (
+              <p className="dashboard__empty">Bu dizi için küresel zaman serisi verisi bulunamadı.</p>
             )}
-          </div>
-          {(() => {
-            const withInterest = result.byCountry.filter((row) => row.value > 0)
-            return withInterest.length === 0 ? (
-              <p className="dashboard__empty">Bu dizi için ülke bazlı arama ilgisi verisi bulunamadı.</p>
-            ) : (
-              <table className="dashboard__table">
-                <thead>
-                  <tr>
-                    <th>Ülke</th>
-                    <th>Arama İlgisi (0-100)</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {withInterest.map((row) => (
-                    <tr key={row.country}>
-                      <td>{row.country}</td>
-                      <td>{row.value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )
-          })()}
-        </section>
-      )}
-
-      {result && (
-        <section className="dashboard__section">
-          <h3 className="dashboard__section-title">Küresel Zaman Serisi (Son 12 Ay)</h3>
-          {timeSeriesStatus === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
-          {timeSeriesStatus === 'unavailable' && (
-            <p className="dashboard__empty">Bu dizi için küresel zaman serisi verisi bulunamadı.</p>
-          )}
-          {timeSeriesStatus === 'ready' && <SeriesTrendChart timeline={timeSeries} />}
-        </section>
+            {timeSeriesStatus === 'ready' && (
+              <>
+                <SeriesTrendChart timeline={timeSeries} />
+                {insightStatus === 'loading' && <p className="dashboard__empty" style={{ marginTop: '0.6rem' }}>Yapay zeka yorumu hazırlanıyor…</p>}
+                {insightStatus === 'ready' && insight?.insightText && (
+                  <div className="theme-insight__ai-box" style={{ marginTop: '0.8rem' }}>
+                    <span className="theme-insight__ai-label">🤖 Yapay Zeka</span>
+                    <p>{insight.insightText}</p>
+                  </div>
+                )}
+              </>
+            )}
+          </section>
+        </>
       )}
     </div>
   )
@@ -357,7 +470,7 @@ export default function TrendsExplorer({ onShowOnMap }) {
           {mode === 'single' ? (
             <SingleSeriesMode seriesList={seriesList} onShowOnMap={onShowOnMap} />
           ) : (
-            <ComparisonMode seriesList={seriesList} />
+            <ComparisonView seriesList={seriesList} />
           )}
         </>
       )}

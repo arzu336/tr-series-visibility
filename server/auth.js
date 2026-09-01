@@ -50,7 +50,12 @@ export function parseCookies(header) {
   return result
 }
 
+// Secure bayrağı SADECE production'da eklenir — yerel geliştirmede (http://localhost) tarayıcı
+// Secure çerezleri düz HTTP üzerinden zaten KABUL ETMEZ, koşulsuz eklenseydi giriş localhost'ta
+// hiç çalışmazdı. Production'da (NODE_ENV=production, gerçek dağıtım HTTPS arkasında) çerez asla
+// düz HTTP'ye sızmaz.
 export function sessionCookieHeader(token, maxAgeSeconds) {
   const parts = [`${COOKIE_NAME}=${token}`, 'HttpOnly', 'Path=/', 'SameSite=Lax', `Max-Age=${maxAgeSeconds}`]
+  if (process.env.NODE_ENV === 'production') parts.push('Secure')
   return parts.join('; ')
 }
