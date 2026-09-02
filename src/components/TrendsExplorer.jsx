@@ -243,12 +243,20 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
   // Temiz Başlangıç: URL'de ?series= yoksa arama kutusu BOŞ gelir, placeholder ile net bir
   // seçim arayüzü sunar — daha önceki "listedeki ilk diziyi otomatik doldur" davranışı bilerek
   // kaldırıldı (kullanıcı hangi diziyi sorguladığını fark etmeden sonuç görüyordu).
+  //
+  // ?series= tüketildikten hemen sonra adres çubuğundan (replaceState, YENİDEN YÜKLEME
+  // OLMADAN) siliniyor — kullanıcı geri bildirimi: "sayfayı yenilediğimde boş gelsin". Bu
+  // parametre hâlâ "Dizi Analizine Git" (App.jsx pushState) ile aynı oturumda çalışır VE
+  // doğrudan paylaşılan bir ?series= linki İLK açılışta hâlâ otomatik sorgular — sadece o
+  // ilk kullanımdan sonra tarayıcının adres çubuğu temizlenir ki bu sekmede bir SONRAKİ
+  // F5, eski aramayı tekrar tekrar geri getirmesin.
   useEffect(() => {
     if (seriesList.length === 0) return
     const fromUrl = new URLSearchParams(window.location.search).get('series')
     if (fromUrl && seriesList.some((s) => s.name === fromUrl)) {
       setSelected(fromUrl)
       handleQuery(fromUrl)
+      window.history.replaceState(null, '', window.location.pathname)
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesList])

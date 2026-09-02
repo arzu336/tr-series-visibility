@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath } from 'd3-geo'
 import { scoreToColor } from '../lib/scale.js'
 import { fetchCountryGeoJSON } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
-import MapPopupCard from './MapPopupCard.jsx'
 
 function displayName(feat) {
   return turkishNames[feat.properties.ISO_A2]?.name || feat.properties.NAME
@@ -23,7 +22,6 @@ const PROXY_DATA_COLOR = '#b45309'
 const VIEWBOX_WIDTH = 960
 const VIEWBOX_HEIGHT = 500
 const DEFAULT_ZOOM = { scale: 1, tx: 0, ty: 0 }
-const POPUP_MARGIN = 8
 
 // Lowy Institute tarzı düz/2D koroplet görünüm — Globe3D ile aynı GeoJSON'u ve
 // aynı renk skalasını (scoreToColor) kullanır; tek fark projeksiyon (küre yerine düzlem).
@@ -46,16 +44,9 @@ export default function Map2D({
   const [hovered, setHovered] = useState(null)
   const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
-  // Pop-up'ın gerçek ekran-piksel konumu (bkz. computeAnchor) + o piksel boyutuna göre
-  // konteynerin dışına taşmayacak şekilde kelepçelenmiş son hali (bkz. aşağıdaki
-  // useLayoutEffect). İkisi ayrı tutuluyor çünkü kelepçeleme, kartın GERÇEK render
-  // boyutunu (popupElRef ile ölçülen) bilmeyi gerektiriyor.
-  const [popupAnchor, setPopupAnchor] = useState(null)
-  const [popupStyle, setPopupStyle] = useState(null)
   const containerRef = useRef(null)
   const svgRef = useRef(null)
   const zoomGroupRef = useRef(null)
-  const popupElRef = useRef(null)
 
   useEffect(() => {
     fetchCountryGeoJSON()
@@ -130,64 +121,6 @@ export default function Map2D({
     return map
   }, [highlightFilter])
 
-  // Pop-up artık SVG <foreignObject> içinde değil, normal bir DOM elemanı olarak
-  // .map2d üzerine bindiriliyor — foreignObject içindeki sabit-CSS-pikselli içerik,
-  // SVG'nin viewBox->konteyner ölçeğine (preserveAspectRatio) göre büyüyüp küçülüyordu;
-  // konteyner genişse kart olduğundan çok büyük render oluyor, konteyner kısaysa da
-  // ölçeklenmiş konumu hesaba katmayan bir kelepçe işe yaramıyordu. getScreenCTM ile
-  // ülkenin gerçek ekran-piksel konumunu (zoom-group'un CSS transform'u dahil, tam
-  // doğru) buluyoruz; kartın kendisi artık sabit CSS boyutuyla normal DOM akışında.
-  const computeAnchor = useCallback(() => {
-    const svg = svgRef.current
-    const g = zoomGroupRef.current
-    const container = containerRef.current
-    if (!svg || !g || !container || !popup || !projection || popup.lat == null || popup.lng == null) {
-      setPopupAnchor(null)
-      return
-    }
-    const [x, y] = projection([popup.lng, popup.lat])
-    const pt = svg.createSVGPoint()
-    pt.x = x
-    pt.y = y
-    const screenPt = pt.matrixTransform(g.getScreenCTM())
-    const containerRect = container.getBoundingClientRect()
-    setPopupAnchor({ x: screenPt.x - containerRect.left, y: screenPt.y - containerRect.top })
-  }, [popup, projection])
-
-  // zoom değiştiğinde (kıta odaklanması) CSS transition'ı 600ms sürüyor — anında bir
-  // hesaplama geçiş başlangıcındaki matrisi okur, 650ms sonraki ikinci hesaplama
-  // animasyon bittikten sonraki doğru konuma "yapıştırır".
-  useEffect(() => {
-    computeAnchor()
-    const t = setTimeout(computeAnchor, 650)
-    return () => clearTimeout(t)
-  }, [computeAnchor, zoom])
-
-  useEffect(() => {
-    const container = containerRef.current
-    if (!container) return
-    const ro = new ResizeObserver(() => computeAnchor())
-    ro.observe(container)
-    return () => ro.disconnect()
-  }, [computeAnchor])
-
-  // Kartın GERÇEK render boyutu bilindikten sonra (popupElRef), konteynerin dışına
-  // taşmayacak şekilde kelepçelenmiş son left/top değerini hesaplar.
-  useLayoutEffect(() => {
-    if (!popup || !popupAnchor || !popupElRef.current || !containerRef.current) {
-      setPopupStyle(null)
-      return
-    }
-    const { offsetWidth: w, offsetHeight: h } = popupElRef.current
-    const cw = containerRef.current.clientWidth
-    const ch = containerRef.current.clientHeight
-    let left = popupAnchor.x - w / 2
-    let top = popupAnchor.y - h - 14
-    left = Math.min(Math.max(left, POPUP_MARGIN), Math.max(cw - w - POPUP_MARGIN, POPUP_MARGIN))
-    top = Math.min(Math.max(top, POPUP_MARGIN), Math.max(ch - h - POPUP_MARGIN, POPUP_MARGIN))
-    setPopupStyle((prev) => (prev && prev.left === left && prev.top === top ? prev : { left, top }))
-  }, [popup, popupAnchor])
-
   const handleMouseMove = (e) => {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
@@ -208,6 +141,11 @@ export default function Map2D({
       <button className="globe__reset-btn" onClick={handleResetView}>
         🌐 Genel Görünüm
       </button>
+      {/* Ülkeye tıklamak artık haritanın üzerinde bir bilgi kartı açmıyor — tüm detaylar
+          sadece sağ çekmecede (CountryPanel.jsx) gösterilir; harita SADECE seçili ülkeyi
+          kenar çizgisiyle (map2d__country--selected) işaretler. popup?.onClose burada hâlâ
+          kullanılıyor: boş/deniz alanına tıklamak seçimi (ve çekmeceyi) kapatır — bu, App.jsx
+          handleCloseSelection'a bağlı, görsel karta değil. */}
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
@@ -327,16 +265,6 @@ export default function Map2D({
               </>
             )
           })()}
-        </div>
-      )}
-      {popup && popupAnchor && (
-        <div
-          ref={popupElRef}
-          className="map2d__popup-overlay"
-          style={popupStyle || { left: popupAnchor.x, top: popupAnchor.y, visibility: 'hidden' }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          <MapPopupCard popup={popup} />
         </div>
       )}
     </div>

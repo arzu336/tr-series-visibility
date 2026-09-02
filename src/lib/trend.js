@@ -3,7 +3,7 @@
 // sıralı listesi aynı sözlüğü paylaşır.
 export function trendLabel(trend) {
   if (!trend || trend.direction === 'yetersiz-veri') {
-    return { icon: '•', text: 'Yetersiz veri (takip yeni başladı)', className: 'trend--neutral' }
+    return { icon: '•', text: 'Takip yeni başladı', className: 'trend--neutral' }
   }
   const pct = trend.changePct > 0 ? `+${trend.changePct}` : `${trend.changePct}`
   const suffix = `(${pct}%, son ${trend.windowDays} gün)`

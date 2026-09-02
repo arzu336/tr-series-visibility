@@ -9,6 +9,8 @@ import {
   submitDestinationOverride,
   clearDestinationOverride,
 } from '../lib/api.js'
+import { highlightKeywordMatches, THEME_KEYWORD_HINTS } from '../lib/highlightKeywords.js'
+import MediaSentimentAuditSection from './MediaSentimentAuditSection.jsx'
 
 const CONFIDENCE_THRESHOLD = 70
 const OVERVIEW_PREVIEW_LENGTH = 90
@@ -29,20 +31,38 @@ function MapLinkButton({ seriesId, onViewSeriesOnMap }) {
   )
 }
 
-function OverviewCell({ overview }) {
+// highlightTerms verilirse (tema/destinasyon ipucu kelimeleri, bkz. src/lib/highlightKeywords.js)
+// gösterilen metin (KISALTILMIŞ hali dahil — tam metin değil, ekranda GÖRÜNEN kısım) içindeki
+// eşleşmeler <mark> ile vurgulanır; analist özeti tıklayıp açmadan gerekçeyi görebilsin.
+function OverviewCell({ overview, highlightTerms }) {
   const [expanded, setExpanded] = useState(false)
   const text = overview || '—'
   const isLong = text.length > OVERVIEW_PREVIEW_LENGTH
   const shown = expanded || !isLong ? text : `${text.slice(0, OVERVIEW_PREVIEW_LENGTH)}…`
+  const rendered = highlightTerms?.length ? highlightKeywordMatches(shown, highlightTerms) : shown
   return (
     <td
       className="dashboard__overview"
       onClick={() => isLong && setExpanded((v) => !v)}
       style={isLong ? { cursor: 'pointer' } : undefined}
     >
-      {shown}
+      {rendered}
       {isLong && <span className="dashboard__expand-hint"> {expanded ? '(kısalt)' : '(devamını gör)'}</span>}
     </td>
+  )
+}
+
+// Kaynak sütununda "İnsan" yazan satırlar için — kürasyonu KİMİN NE ZAMAN yaptığını (kullanıcı
+// talebi: "Kürasyon Geçmişi") üzerine gelince gösteren küçük bir bilgi ikonu. Ayrı bir tooltip
+// kütüphanesi yerine native title="" kullanılıyor — projede zaten aynı desen (bkz. TrendsExplorer.jsx
+// "Taranmış ülke sayısı..." rozeti) kullanılıyor, ek bağımlılık gerektirmiyor.
+export function HumanAuditIcon({ reviewer, at }) {
+  if (!at) return null
+  const formatted = new Date(at).toLocaleDateString('tr-TR')
+  return (
+    <span className="dashboard__audit-icon" title={`${reviewer || 'anonim'} — ${formatted}`} aria-label={`Düzenleyen: ${reviewer || 'anonim'}, ${formatted}`}>
+      ⓘ
+    </span>
   )
 }
 
@@ -284,17 +304,25 @@ function DestinationSection({ canEdit, reviewerName, onViewSeriesOnMap }) {
           <thead>
             <tr>
               <th>Dizi</th>
+              <th>Özet</th>
               <th>Destinasyonlar</th>
               <th>Kaynak</th>
               <th></th>
             </tr>
           </thead>
           <tbody>
-            {tagged.map((item) => (
+            {tagged.map((item) => {
+              // Bu dizi için etiketli destinasyonların HEPSİNİN anahtar kelimeleri — özette
+              // hangisinin geçtiği tek bakışta görünsün diye (bkz. src/lib/highlightKeywords.js).
+              const highlightTerms = item.effectiveDestinations.flatMap(
+                (id) => taxonomy.find((d) => d.id === id)?.keywords ?? []
+              )
+              return (
               <tr key={item.id}>
                 <td>
                   {item.name} <MapLinkButton seriesId={item.id} onViewSeriesOnMap={onViewSeriesOnMap} />
                 </td>
+                <OverviewCell overview={item.overview} highlightTerms={highlightTerms} />
                 <td>
                   {editingId === item.id ? (
                     <DestinationTagPicker
@@ -316,6 +344,7 @@ function DestinationSection({ canEdit, reviewerName, onViewSeriesOnMap }) {
                     : item.detectionMethod === 'llm'
                       ? 'Yapay Zeka'
                       : 'Anahtar kelime'}
+                  {item.humanTags && <HumanAuditIcon reviewer={item.humanTags.reviewer} at={item.humanTags.at} />}
                 </td>
                 <td>
                   {!canEdit ? null : editingId === item.id ? (
@@ -344,7 +373,8 @@ function DestinationSection({ canEdit, reviewerName, onViewSeriesOnMap }) {
                   )}
                 </td>
               </tr>
-            ))}
+              )
+            })}
           </tbody>
         </table>
       </section>
@@ -380,6 +410,7 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
   const [sortBy, setSortBy] = useState('confidence-asc')
   const [selectedIds, setSelectedIds] = useState(new Set())
   const [bulkSaving, setBulkSaving] = useState(false)
+  const [bulkTheme, setBulkTheme] = useState('')
 
   const load = useCallback(() => {
     setStatus('loading')
@@ -456,6 +487,26 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
     }
   }
 
+  // handleBulkApprove'dan farkı: her kaydı KENDİ taslağı/mevcut temasıyla değil, TEK bir
+  // seçilmiş temayla (bulkTheme) onaylar — kullanıcı talebi: "Seçilen 4 dizinin temasını tek
+  // tıkla 'Adalet' yapıp onaylasın". Bireysel taslaklar (drafts) bu eylemde YOK SAYILIR, çünkü
+  // amaç zaten hepsini aynı temaya sabitlemek.
+  const handleBulkChangeThemeAndApprove = async (visibleList) => {
+    const targets = visibleList.filter((item) => selectedIds.has(item.id))
+    if (targets.length === 0 || !bulkTheme) return
+    setBulkSaving(true)
+    try {
+      await Promise.all(targets.map((item) => submitThemeOverride(item.id, bulkTheme, reviewerName)))
+      setSelectedIds(new Set())
+      setBulkTheme('')
+      load()
+    } catch (err) {
+      setError(err.message)
+    } finally {
+      setBulkSaving(false)
+    }
+  }
+
   const q = search.trim().toLocaleLowerCase('tr')
   const matchesQuery = (item) => !q || item.name.toLocaleLowerCase('tr').includes(q)
   const matchesThemeFilter = (item) => !themeFilter || item.effectiveTheme === themeFilter
@@ -494,6 +545,12 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
           onClick={() => setTab('destinations')}
         >
           Yer Etiketleme
+        </button>
+        <button
+          className={tab === 'sentiment' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
+          onClick={() => setTab('sentiment')}
+        >
+          Basın &amp; Medya Algısı
         </button>
       </nav>
 
@@ -542,6 +599,26 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
                     <span>{selectedInView} seçili</span>
                     <button disabled={bulkSaving} onClick={() => handleBulkApprove(needsReview)}>
                       Seçilenleri Onayla
+                    </button>
+                    {/* Toplu Tema Değiştirme: seçilenlerin HER BİRİNİN kendi taslağını değil,
+                        buradan seçilen TEK bir temayı uygulayıp aynı anda onaylar (bkz.
+                        handleBulkChangeThemeAndApprove) — "Seçilenleri Onayla"nın aksine, her
+                        kaydın mevcut/taslak temasını YOK SAYAR. */}
+                    <select
+                      className="dashboard__bulk-theme-select"
+                      value={bulkTheme}
+                      onChange={(e) => setBulkTheme(e.target.value)}
+                      aria-label="Seçilenler için yeni tema"
+                    >
+                      <option value="">Tema seç…</option>
+                      {taxonomy.map((t) => (
+                        <option key={t} value={t}>
+                          {t}
+                        </option>
+                      ))}
+                    </select>
+                    <button disabled={bulkSaving || !bulkTheme} onClick={() => handleBulkChangeThemeAndApprove(needsReview)}>
+                      Seçilenlerin Temasını Değiştir &amp; Onayla
                     </button>
                     <button className="dashboard__link-btn" onClick={() => setSelectedIds(new Set())}>
                       Seçimi Temizle
@@ -593,7 +670,7 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
                           <td>
                             {item.name} <MapLinkButton seriesId={item.id} onViewSeriesOnMap={onViewSeriesOnMap} />
                           </td>
-                          <OverviewCell overview={item.overview} />
+                          <OverviewCell overview={item.overview} highlightTerms={THEME_KEYWORD_HINTS[item.effectiveTheme]} />
                           <td>{item.effectiveTheme}</td>
                           <td>
                             <span className="badge badge--uncertain">{item.effectiveConfidence}</span>
@@ -641,7 +718,12 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
                         <td>
                           <span className="badge badge--ok">{item.effectiveConfidence}</span>
                         </td>
-                        <td>{item.humanOverride ? 'İnsan' : 'Yapay Zeka'}</td>
+                        <td>
+                          {item.humanOverride ? 'İnsan' : 'Yapay Zeka'}
+                          {item.humanOverride && (
+                            <HumanAuditIcon reviewer={item.humanOverride.reviewer} at={item.humanOverride.at} />
+                          )}
+                        </td>
                         <td>
                           {!canEdit ? null : editingId === item.id ? (
                             <EditControls
@@ -686,6 +768,8 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
       {tab === 'destinations' && (
         <DestinationSection canEdit={canEdit} reviewerName={reviewerName} onViewSeriesOnMap={onViewSeriesOnMap} />
       )}
+
+      {tab === 'sentiment' && <MediaSentimentAuditSection canEdit={canEdit} reviewerName={reviewerName} />}
     </div>
   )
 }

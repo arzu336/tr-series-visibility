@@ -46,14 +46,24 @@ export default function App() {
   // işaretidir — kind alanı rozet/etiket metnini oyuncuya göre mi diziye göre mi
   // yazacağını belirler.
   const [highlightFilter, setHighlightFilter] = useState(null) // { kind: 'actor'|'series', label, byIso2: Map<iso2, score> } | null
+  // Mobilde (bkz. styles.css .app__map-layout dar ekran kuralı) kıta çubuğu ve ülke paneli
+  // masaüstündeki gibi haritanın YANINDA değil, haritanın ÜSTÜNDE/İÇİNDE yer kaplıyor — açık
+  // gelirlerse harita neredeyse hiç görünmeden onlarca satır kaydırma gerekiyor. Kullanıcının
+  // daha önce bilinçli bir tercihi (localStorage'da kayıtlı) yoksa, dar ekranda varsayılan
+  // olarak KAPALI başlar (kullanıcı her zaman aynı yuvarlak butonla açabilir) — masaüstünde
+  // davranış hiç değişmiyor (matchMedia geniş ekranda false döner).
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1'
+    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
+    if (stored != null) return stored === '1'
+    return window.matchMedia('(max-width: 900px)').matches
   })
   // Sağdaki CountryPanel de sol kıta çubuğu gibi açılıp kapanabilir olsun istendi.
   const [panelCollapsed, setPanelCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false
-    return window.localStorage.getItem(PANEL_COLLAPSED_KEY) === '1'
+    const stored = window.localStorage.getItem(PANEL_COLLAPSED_KEY)
+    if (stored != null) return stored === '1'
+    return window.matchMedia('(max-width: 900px)').matches
   })
   // Ülke panelindeki "Yayındaki diziler" listesinden hangi dizinin haritada/IMDb'de
   // gösterileceği — null iken en popüler dizi (seriesList zaten popülerliğe göre sıralı,
@@ -404,7 +414,7 @@ export default function App() {
             <img src="/ib-logo.png" alt="T.C. Cumhurbaşkanlığı İletişim Başkanlığı" className="app__brand-logo" />
             <div className="app__brand-divider" />
             <div>
-              <h1>Türk Dizileri — Kültürel Görünürlük Haritası</h1>
+              <h1 title="Türk Dizileri — Kültürel Görünürlük Haritası">Türk Dizileri — Kültürel Görünürlük Haritası</h1>
               {meta && (
                 <p className="app__meta">
                   {meta.seriesCount} dizi · {countries.length} ülke · güncelleme: {new Date(meta.updatedAt).toLocaleString('tr-TR')}
@@ -499,7 +509,7 @@ export default function App() {
           {view === 'impact' && (
             <ImpactAnalysisTabs onSelectCountry={handleSelectCountryFromReport} />
           )}
-          {view === 'admin' && user?.isAdmin && <AdminUsersPanel />}
+          {view === 'admin' && user?.isAdmin && <AdminUsersPanel currentUserId={user.id} />}
           {view === 'map' && (
             <>
               {status === 'loading' && <div className="status">Veri yükleniyor…</div>}

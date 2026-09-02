@@ -6,7 +6,11 @@ describe('trendLabel', () => {
     const result = trendLabel({ direction: 'yetersiz-veri', changePct: null, windowDays: null })
     expect(result.className).toBe('trend--neutral')
     expect(result.icon).toBe('•')
-    expect(result.text).toMatch(/yetersiz veri/i)
+    // Metin "yetersiz veri" ibaresini taşımaz (kullanıcı talebi) ama yön de UYDURMAZ —
+    // nötr ikon (•) ve trend--neutral sınıfı zaten bunu garanti ediyor, buradaki asıl
+    // kontrol edilen davranış bu, kelime seçimi değil.
+    expect(result.text).not.toMatch(/yetersiz veri/i)
+    expect(result.icon).not.toMatch(/[▲▼→]/)
   })
 
   it('trend hiç yoksa (null) da uydurma bir yön göstermez', () => {

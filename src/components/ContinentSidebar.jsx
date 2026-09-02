@@ -136,7 +136,6 @@ export default function ContinentSidebar({
       <aside className={collapsed ? 'sidebar sidebar--collapsed' : 'sidebar'}>
         <div className="sidebar__header">
           <h3>Kıtasal Analiz</h3>
-          <p className="sidebar__hint">Bir kıta seçin.</p>
         </div>
 
         <nav className="sidebar__continent-list">
@@ -187,12 +186,9 @@ export default function ContinentSidebar({
                 <div className="sidebar__big-card-value sidebar__big-card-value--muted">Veri birikiyor</div>
               )}
               {topLearningCountry && (
-                <>
-                  <div className="sidebar__big-card-value">
-                    {nameOf(topLearningCountry.iso2)} — {topLearningCountry.value}
-                  </div>
-                  <div className="sidebar__big-card-meta">Arama ilgisi skoru (0-100)</div>
-                </>
+                <div className="sidebar__big-card-value">
+                  {nameOf(topLearningCountry.iso2)} — {topLearningCountry.value}
+                </div>
               )}
               {globalMomentum && (
                 <div className="sidebar__big-card-meta">

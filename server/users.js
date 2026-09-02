@@ -34,6 +34,7 @@ const insertStmt = db.prepare(`
 const updateStatusStmt = db.prepare('UPDATE users SET status = ?, decided_at = ?, decided_by = ? WHERE id = ?')
 const updateAccessLevelStmt = db.prepare('UPDATE users SET access_level = ?, is_admin = ? WHERE id = ?')
 const updatePasswordStmt = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
+const deleteStmt = db.prepare('DELETE FROM users WHERE id = ?')
 
 function rowToEntry(row) {
   return {
@@ -128,6 +129,26 @@ export function setUserAccessLevel(id, accessLevel) {
   if (!getUser(id)) throw new Error('Kullanıcı bulunamadı')
   updateAccessLevelStmt.run(accessLevel, accessLevel === 'admin' ? 1 : 0, id)
   return getUser(id)
+}
+
+// Başlangıçta sadece reddedilmiş kayıtlar silinebiliyordu (görsel kirlilik temizliği) —
+// kullanıcı talebiyle onaylı hesaplar da (ör. artık kurumda olmayan biri) silinebilsin diye
+// genişletildi. İki gerçek güvenlik kilidi kaldı:
+// 1) Kendi hesabını silemezsin — oturumu açıkken kendini silmek anlık bir kilitlenmeye
+//    (silinmiş bir kullanıcının session'ı hâlâ "geçerli" görünüp sonraki istekte 401'e düşmesi)
+//    yol açabilir, ayrıca "yanlışlıkla kendine tıkladım" senaryosuna karşı basit bir fren.
+// 2) SON yöneticiyi silemezsin — aksi halde uygulamayı yönetecek kimse kalmaz (yeni admin
+//    atamak için zaten bir admin gerekir, bkz. setUserAccessLevel/requireAdmin).
+export function deleteUser(id, requestingUserId) {
+  const user = getUser(id)
+  if (!user) throw new Error('Kullanıcı bulunamadı')
+  if (id === requestingUserId) {
+    throw new Error('Kendi hesabınızı silemezsiniz')
+  }
+  if (user.isAdmin && countAdminsStmt.get().n <= 1) {
+    throw new Error('Son yönetici hesabı silinemez')
+  }
+  deleteStmt.run(id)
 }
 
 const MIN_PASSWORD_LENGTH = 8

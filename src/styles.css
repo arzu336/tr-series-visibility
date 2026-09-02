@@ -151,6 +151,24 @@ body {
   color: #f1f3f8;
   transition: width 250ms ease, padding 250ms ease;
   overscroll-behavior: contain;
+  /* Sol .sidebar ile aynı ince/belli-belirsiz scrollbar (kullanıcı talebi) — bu kural
+     olmadan tarayıcının kalın/koyu varsayılan scrollbar'ına düşüyordu, iki çubuk
+     birbirine hiç benzemiyordu. */
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.panel::-webkit-scrollbar {
+  width: 6px;
+}
+
+.panel::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
 }
 
 .panel--collapsed {
@@ -339,34 +357,6 @@ body {
   color: #8792a8;
 }
 
-/* Ülke verisinin kaynağını dürüstçe etiketler: gerçek TMDB/JustWatch verisi mi, yoksa
-   TMDB'de hiç sağlayıcı bulunmayan ülkeler için Google Trends arama hacmi tahmini mi
-   (bkz. server/services/proxyScore.js, server/aggregate.js mergeProxyFallback). */
-.panel__data-badge {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-  margin-top: 0.4rem;
-  padding: 0.2rem 0.55rem;
-  border-radius: 999px;
-  font-size: 0.7rem;
-  font-weight: 600;
-  letter-spacing: 0.01em;
-  cursor: default;
-}
-
-.panel__data-badge--tmdb {
-  background: rgba(6, 182, 212, 0.12);
-  border: 1px solid rgba(6, 182, 212, 0.4);
-  color: #22d3ee;
-}
-
-.panel__data-badge--proxy {
-  background: rgba(180, 83, 9, 0.15);
-  border: 1px solid rgba(217, 119, 6, 0.5);
-  color: #f59e0b;
-}
-
 .panel h3 {
   margin: 1.25rem 0 0.5rem;
   font-size: 0.8rem;
@@ -474,6 +464,29 @@ body {
   font-size: 0.85rem;
 }
 
+/* "Yayındaki diziler" — net 1..N sırası. Ham TMDB popülerlik puanı (yüzde sanılıp kafa
+   karıştırıyordu) satırdan kaldırıldı, sadece tıklanınca açılan ayrıntıda gösteriliyor
+   (bkz. .panel__series-raw-score, kullanıcı talebi). */
+.panel__series-rank {
+  flex-shrink: 0;
+  width: 1.3rem;
+  text-align: right;
+  font-weight: 700;
+  font-size: 0.78rem;
+  color: #6b7480;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel__series-raw-score {
+  margin: 0;
+  font-size: 0.78rem;
+  color: #8792a8;
+}
+
+.panel__series-raw-score strong {
+  color: #f1f3f8;
+}
+
 .panel__series-poster {
   width: 28px;
   height: 42px;
@@ -531,18 +544,6 @@ body {
   font-size: 0.78rem;
   line-height: 1.5;
   color: #c4cad9;
-}
-
-.sparkline {
-  display: block;
-  margin-bottom: 0.75rem;
-}
-
-.sparkline__empty {
-  font-size: 0.78rem;
-  color: #8792a8;
-  font-style: italic;
-  margin: 0 0 0.75rem;
 }
 
 .panel__series-score {
@@ -817,7 +818,11 @@ body {
   }
 }
 
-/* --- Ülke Sıralaması (Share of Search + Netflix + Basın) --- */
+/* --- Ülke Sıralaması: "Ülkede En Çok İlgi Gören İlk 5 Dizi" ---
+   Skor sıralamanın altında hâlâ 4 faktörlü composite score var (bkz.
+   server/services/countryScoringEngine.js) — burada sadeleştirilen sadece GÖRÜNÜM:
+   "Arama Payı" yüzdeleri, kırılım çubukları ve kanıt metinleri kaldırıldı (kullanıcı talebi),
+   yerine net bir 1-5 sırası + tek, sade bir güven rozeti kaldı. */
 .leaderboard {
   display: flex;
   flex-direction: column;
@@ -847,49 +852,6 @@ body {
   color: #8792a8;
 }
 
-.leaderboard__sos-label {
-  font-size: 0.68rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-  color: #8792a8;
-  margin-top: 0.2rem;
-}
-
-.leaderboard__sos-bar {
-  display: flex;
-  height: 10px;
-  border-radius: 6px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.leaderboard__sos-seg {
-  height: 100%;
-  transition: width 300ms ease;
-}
-
-.leaderboard__sos-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.7rem;
-  font-size: 0.7rem;
-  color: #9aa4b8;
-}
-
-.leaderboard__sos-legend span {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3rem;
-}
-
-.leaderboard__sos-dot {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  display: inline-block;
-}
-
 .leaderboard__list {
   list-style: none;
   margin: 0.3rem 0 0;
@@ -900,8 +862,7 @@ body {
 }
 
 .leaderboard__row {
-  display: grid;
-  grid-template-columns: 1.3rem 2.2rem 1fr auto;
+  display: flex;
   align-items: center;
   gap: 0.6rem;
   padding: 0.4rem 0;
@@ -917,6 +878,8 @@ body {
   font-weight: 700;
   font-size: 0.85rem;
   color: #6b7480;
+  width: 1.3rem;
+  flex-shrink: 0;
   text-align: center;
 }
 
@@ -926,66 +889,21 @@ body {
   border-radius: 4px;
   object-fit: cover;
   background: rgba(255, 255, 255, 0.05);
+  flex-shrink: 0;
 }
 
 .leaderboard__poster--empty {
   display: block;
 }
 
-.leaderboard__info {
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
-}
-
 .leaderboard__name {
   font-size: 0.85rem;
   color: #f1f3f8;
   font-weight: 600;
+  min-width: 0;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-}
-
-.leaderboard__mini-bar {
-  display: flex;
-  height: 5px;
-  border-radius: 3px;
-  overflow: hidden;
-  background: rgba(255, 255, 255, 0.06);
-  cursor: help;
-}
-
-.leaderboard__mini-seg {
-  height: 100%;
-}
-
-.leaderboard__mini-seg--sos {
-  background: #3987e5;
-}
-
-.leaderboard__mini-seg--netflix {
-  background: #e5484d;
-}
-
-.leaderboard__mini-seg--sentiment {
-  background: #5cb85c;
-}
-
-.leaderboard__evidence {
-  font-size: 0.68rem;
-  color: #6b7480;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.leaderboard__score {
-  font-weight: 700;
-  font-size: 0.95rem;
-  color: #f1f3f8;
-  font-variant-numeric: tabular-nums;
 }
 
 .leaderboard--skeleton {
@@ -993,7 +911,6 @@ body {
 }
 
 .leaderboard__skel-badge,
-.leaderboard__skel-bar,
 .leaderboard__skel-row {
   border-radius: 6px;
   background: linear-gradient(
@@ -1009,10 +926,6 @@ body {
 .leaderboard__skel-badge {
   height: 18px;
   width: 45%;
-}
-
-.leaderboard__skel-bar {
-  height: 10px;
 }
 
 .leaderboard__skel-row {
@@ -1090,7 +1003,12 @@ body {
 .app__nav {
   display: flex;
   gap: 0.4rem;
-  flex-shrink: 0;
+  /* flex-shrink:0 buradaydı — nav kendi satırına düştüğünde bile (bkz. .app__header-row
+     flex-wrap) tarayıcı onu "tek satırda sığarmış gibi" tam genişlikte tutmaya çalışıyor,
+     kendi flex-wrap'i hiç devreye giremiyordu. min-width:0 + shrink serbest bırakılınca nav
+     mevcut satır genişliğine sıkışıp KENDİ butonlarını alt satırlara sarabiliyor. */
+  flex-shrink: 1;
+  min-width: 0;
   flex-wrap: wrap;
 }
 
@@ -2290,6 +2208,77 @@ body {
   border-radius: 10px;
   font-size: 0.82rem;
   color: #f1f3f8;
+  flex-wrap: wrap;
+}
+
+/* .dashboard__summary select ile aynı gerekçe: className'siz bir <select> tarayıcı varsayılan
+   BEYAZ arka planla render edilir — Toplu Tema Değiştirme dropdown'u .dashboard__summary'nin
+   DIŞINDA (.dashboard__bulk-bar içinde) olduğu için o kuralı miras almıyordu. */
+.dashboard__bulk-theme-select {
+  background: #0e1420;
+  color: #f1f3f8;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  padding: 0.35rem 0.8rem;
+  font-size: 0.82rem;
+  font-family: inherit;
+  cursor: pointer;
+}
+
+.dashboard__bulk-theme-select:focus {
+  outline: none;
+  border-color: #EE3135;
+}
+
+.dashboard__bulk-theme-select option {
+  background: #0e1420;
+  color: #f1f3f8;
+}
+
+/* Analist Paneli — Akıllı Anahtar Kelime Vurgulama (bkz. src/lib/highlightKeywords.js).
+   Tarayıcı varsayılan <mark> (parlak sarı zemin/siyah metin) koyu temada göz yakardı — projenin
+   sarı/altın vurgu tonuna (bkz. .badge--uncertain, SeriesTrendChart PEAK_COLOR) çekildi. */
+.dashboard__highlight {
+  background: rgba(210, 169, 77, 0.28);
+  color: #f1e2b8;
+  border-radius: 3px;
+  padding: 0 0.15em;
+}
+
+/* Kürasyon Geçmişi — "İnsan" kaynaklı satırlarda kimin/ne zaman düzelttiğini gösteren bilgi
+   ikonu (bkz. HumanAuditIcon, AnalystDashboard.jsx). Native title="" tooltip kullanıyor. */
+.dashboard__audit-icon {
+  display: inline-block;
+  margin-left: 0.35rem;
+  color: #6da7ec;
+  cursor: help;
+  font-size: 0.85em;
+}
+
+/* Basın & Medya Algısı denetim tablosundaki taranan haber başlıkları listesi. */
+.dashboard__article-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  font-size: 0.8rem;
+  max-width: 360px;
+}
+
+.dashboard__article-list a {
+  color: #9ec5f4;
+  text-decoration: none;
+}
+
+.dashboard__article-list a:hover {
+  text-decoration: underline;
+}
+
+.dashboard__article-source {
+  color: #6b7488;
+  font-size: 0.75rem;
 }
 
 .dashboard__section {
@@ -2326,6 +2315,22 @@ body {
   cursor: pointer;
   padding: 0;
   text-decoration: underline;
+}
+
+/* Kalıcı/geri alınamaz eylemler (ör. reddedilmiş kullanıcıyı silme) için — diğer düz metin
+   linklerinden (Düzelt, AI önerisine dön vb.) görsel olarak ayrışsın diye altı çizili değil,
+   ince kenarlıklı küçük bir rozet/buton gibi; kalın yazı tipiyle "bu farklı bir eylem" hissi
+   verir. */
+.dashboard__link-btn--danger {
+  text-decoration: none;
+  font-weight: 700;
+  padding: 0.2rem 0.55rem;
+  border: 1px solid rgba(238, 49, 53, 0.5);
+  border-radius: 999px;
+}
+
+.dashboard__link-btn--danger:hover:not(:disabled) {
+  background: rgba(238, 49, 53, 0.12);
 }
 
 /* "Haritada gör" gibi ikincil, her satırda tekrar eden eylemler için — ana Düzelt/Kaydet
@@ -2988,14 +2993,6 @@ button.sidebar__big-card:hover {
   z-index: 10;
 }
 
-/* Pop-up artık SVG <foreignObject> içinde değil, normal bir DOM elemanı (bkz. Map2D.jsx
-   computeAnchor/getScreenCTM) — .map-popup-card'ın kendi sabit CSS genişliği (232px)
-   harita zoom/ölçeğinden tamamen bağımsız, her zaman aynı gerçek boyutta render olur. */
-.map2d__popup-overlay {
-  position: absolute;
-  z-index: 8;
-}
-
 /* Kıta odaklanması (flyTo eşdeğeri) — d3-geo'nun kendi zoom/pan'ı yok, bu yüzden
    src/App.jsx'teki focusTarget değiştiğinde JS'in hesapladığı transform'u burada
    yumuşak bir geçişle uyguluyoruz. */
@@ -3010,11 +3007,135 @@ button.sidebar__big-card:hover {
     flex-direction: column;
   }
 
-  .sidebar {
+  /* :not(.sidebar--collapsed) BİLEREK: .sidebar--collapsed (width:0) bu dosyada DAHA ÖNCE
+     tanımlı — aynı özgüllükte (tek sınıf) düz ".sidebar" burada SONRA gelip onu ezerdi ve
+     katlanmış sidebar mobilde yeniden tam genişlikte açılırdı. :not() özgüllüğü tek sınıftan
+     yüksek olduğu için sıralamadan bağımsız, katlı durumu her zaman kazanır. */
+  .sidebar:not(.sidebar--collapsed) {
     width: 100%;
-    max-height: 40%;
+    /* .sidebar'ın temel kuralı height:100% — bu, .sidebar-wrap'in yüksekliğine göre
+       hesaplanır, ama sütun modunda (flex-direction:column) .sidebar-wrap artık masaüstündeki
+       gibi "stretch" ile tam yükseklik almıyor, kendi İÇERİĞİNE göre büyüyen sıradan bir kutu
+       (dairesel/belirsiz referans) — bu yüzden hem height:100% hem de yüzdesel bir max-height
+       burada sessizce hiçbir şey yapmaz (CSS speknde belirsiz üst kapsayıcıda yüzde = auto)
+       ve panel tüm içeriği kadar (700px+) büyüyüp haritayı ekranın çok altına itiyordu.
+       vh birimi görünüm alanına göre sabit/belirli olduğu için bu belirsizlik sorununu atlar. */
+    height: auto;
+    max-height: 42vh;
     border-right: none;
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  }
+
+  /* .sidebar--collapsed masaüstünde sadece width:0 yapıyordu — orada .sidebar-wrap'i flex
+     satırı (row) kendisi tam yüksekliğe zaten "stretch" ettiği için height hiç sorun değildi.
+     Sütun modunda (mobil) width:0 olsa da height:auto hâlâ İÇERİĞİN doğal yüksekliğini
+     (1400px+, tüm kıta detay kartları) alıyor, sırf 0 genişlikte görünmez bir dev boşluk
+     bırakıp haritayı ekranın çok altına itiyordu — height:0 ile bu boşluk da kapanır. */
+  .sidebar--collapsed {
+    height: 0;
+  }
+
+  /* Sidebar tam genişlik olunca eski "-14px" (haritaya taşan) konum artık ekranın dışına
+     çıkıyordu — sidebar'ın kendi kutusunun içinde, sağ üst köşede kalacak şekilde taşındı. */
+  .sidebar-toggle {
+    right: 0.6rem;
+  }
+
+  /* min-height:600px masaüstünde haritanın çökmesini önlemek içindi (bkz. yukarıdaki
+     açıklama) — dar ekranda kıta çubuğu (42vh) + bu sabit yükseklik toplamı görünür alanı
+     aşıp haritanın alt kısmını .app__main'in overflow:hidden'ı yüzünden görünmez kılıyordu.
+     min-height:0 ile flex:1 kalan alanı olduğu gibi doldurur, taşma olmaz — çocuklarının
+     zaten align-self:stretch + min-height:0 ile (yukarıdaki .app__map-pane > * kuralı)
+     büzülmesi ayrıca engellendiği için burada bir alt sınıra gerek yok. */
+  .app__map-pane {
+    min-height: 0;
+  }
+
+  /* Sağdaki ülke paneli/arama çubuğu masaüstünde haritanın SAĞ tarafında yer açacağı
+     varsayımıyla 320px sabit genişlikte — dar ekranda bu genişlik + kenar boşlukları
+     ekranı taşırabiliyor, bu yüzden görünür genişliğe göre sınırlandırıldı.
+     :not(.panel--collapsed): aynı .sidebar mantığı — .panel--collapsed (width:0) bu dosyada
+     daha önce tanımlı, düz ".panel" sonra gelip onu ezmesin diye. */
+  .panel:not(.panel--collapsed),
+  .panel-search-wrap {
+    width: min(320px, calc(100vw - 1.5rem));
+  }
+
+  /* Dar ekranda harita neredeyse tam genişlik olduğu için bu üç kontrol (sıfırlama butonu,
+     arama çubuğu, ülke paneli açma kolu) artık aynı satırda yan yana sığmıyor — masaüstünde
+     birbirinden ayrı köşelere yaslanan .globe__reset-btn (sol üst) ve .map-view-toggle
+     (sağ üst, top:4.25rem) ile ÇAKIŞMAYACAK şekilde altlarına, dikey bir sıra hâlinde
+     istiflendi (bkz. sırayla artan top değerleri). */
+  .panel-search-wrap {
+    right: 0.75rem;
+    top: 6.5rem;
+  }
+
+  .panel-wrap {
+    right: 0.75rem;
+    top: 9.5rem;
+  }
+}
+
+/* --- Üst başlık: dar ekranda marka bloğu (logo + başlık + özet) taşan nav'la birlikte
+   sayfayı aşırı uzatıyordu (başlık 4 satıra bölünüyordu) — burada kompakt tek satıra
+   indirildi, tam metin title="" özniteliğiyle hâlâ erişilebilir. --- */
+@media (max-width: 640px) {
+  .app__header {
+    padding: 0.75rem 1rem;
+  }
+
+  .app__brand {
+    min-width: 0;
+    flex: 1 1 auto;
+  }
+
+  .app__brand > div {
+    min-width: 0;
+  }
+
+  .app__brand-logo {
+    height: 34px;
+  }
+
+  .app__brand-divider {
+    display: none;
+  }
+
+  .app__header h1 {
+    font-size: 0.92rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app__meta {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .app__nav-btn {
+    padding: 0.4rem 0.8rem;
+    font-size: 0.78rem;
+  }
+
+  .trends__controls {
+    flex-wrap: wrap;
+  }
+
+  .trends__controls .search-input {
+    min-width: 0;
+    flex: 1 1 100%;
+  }
+
+  /* Kolonlarla dolu tabloları (Analist Paneli, Kullanıcılar) sayfayı yatay taşırmak yerine
+     kendi içinde kaydırılabilir yapar — hücrelerin display türü değişmediği için sütun
+     hizası bozulmaz, sadece <table> kutusunun kendisi bir scroll konteynerine dönüşür. */
+  .dashboard__table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
   }
 }
 
@@ -3168,143 +3289,11 @@ button.sidebar__big-card:hover {
   line-height: 1.5;
 }
 
-/* --- Harita içi Dark Glassmorphism detay kartı (Lowy Institute stili) — Globe3D
-   (DOM/innerHTML) ve Map2D + MapPopupCard.jsx (React/foreignObject) aynı sınıfları
-   paylaşır. Yarı saydam koyu zemin + blur + neon camgöbeği kenarlık. --- */
-
-.map-popup-card {
-  position: relative;
-  display: flex;
-  flex-direction: column;
-  gap: 0.55rem;
-  /* Önceki 0.55 opaklık, özellikle 3D küre arkada dönerken kartın sınırlarını görünmez
-     kılıyordu — kullanıcı hâlâ ülkeyi net gördüğü için "kartın içindeyim" hissi vermiyor,
-     kutunun dışına (küreye) tıklandığı sanılıyordu. Daha opak zemin sınırı netleştirir. */
-  background: rgba(8, 11, 20, 0.92);
-  border: 1px solid rgba(34, 211, 238, 0.4);
-  border-radius: 14px;
-  padding: 0.75rem 0.85rem;
-  backdrop-filter: blur(12px);
-  -webkit-backdrop-filter: blur(12px);
-  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45), 0 0 0 1px rgba(34, 211, 238, 0.08) inset;
-  font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  color: #f1f3f8;
-  width: 232px;
-  transition: border-color 250ms ease, box-shadow 250ms ease;
-  /* Globe3D'de bu kart globe.gl'in htmlElement overlay katmanı (CSS3DRenderer) içinde
-     render edilir; o katmanın kök DOM elemanı globe.gl tarafından pointer-events:none
-     olarak ayarlanır (tıklamalar altındaki WebGL canvas'a/orbit-controls'a geçsin diye).
-     Kart burada auto ile bunu geri açmazsa "Ana Karakterler & Kadro" gibi butonlar hiç
-     tıklanamaz — canvas tıklamayı yutar. z-index, aynı overlay içinde kartın diğer
-     olası öğelerin üzerinde kalmasını garantiler. Map2D'de (foreignObject/React) bu
-     zaten normal DOM tıklaması olduğu için etkisizdir, zararı da yoktur. */
-  pointer-events: auto;
-  z-index: 20;
-}
-
-.map-popup-card__close {
-  position: absolute;
-  top: 0.3rem;
-  right: 0.35rem;
-  min-width: 30px;
-  min-height: 30px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: none;
-  border: none;
-  color: #8792a8;
-  font-size: 1rem;
-  line-height: 1;
-  cursor: pointer;
-  /* Önceki dar tıklama alanı (yalnızca ✕ glifi kadar) yakındaki ülkeye yanlışlıkla
-     tıklamaya yol açıyordu — gerçek hedef artık en az 30x30px. */
-  padding: 0.15rem;
-}
-
-.map-popup-card__close:hover {
-  color: #f1f3f8;
-}
-
-.map-popup-card__top {
-  display: flex;
-  gap: 0.65rem;
-  align-items: flex-start;
-}
-
-.map-popup-card__poster-wrap {
-  position: relative;
-  flex-shrink: 0;
-}
-
-.map-popup-card__poster {
-  width: 56px;
-  height: 82px;
-  object-fit: cover;
-  border-radius: 10px;
-  display: block;
-  background: rgba(255, 255, 255, 0.06);
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
-}
-
-.map-popup-card__poster--empty {
-  display: inline-block;
-}
-
-/* Afişin sağ-alt köşesine hafifçe taşan dairesel IMDb rozeti. */
-.map-popup-card__imdb-badge {
-  position: absolute;
-  right: -10px;
-  bottom: -10px;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 30% 30%, #0891b2, #0a0f1d 78%);
-  border: 1.5px solid #22d3ee;
-  box-shadow: 0 0 10px rgba(34, 211, 238, 0.55);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-}
-
-.map-popup-card__imdb-badge-star {
-  font-size: 0.55rem;
-}
-
-.map-popup-card__imdb-badge-value {
-  font-size: 0.78rem;
-  font-weight: 700;
-  color: #a5f3fc;
-}
-
-.map-popup-card__body {
-  display: flex;
-  flex-direction: column;
-  gap: 0.25rem;
-  min-width: 0;
-  padding-top: 0.1rem;
-  /* Sağ üstteki ✕ kapatma butonuyla uzun dizi adlarının çakışmaması için. */
-  padding-right: 1.1rem;
-}
-
-.map-popup-card__name {
-  font-size: 0.88rem;
-  font-weight: 700;
-  line-height: 1.25;
-}
-
-.map-popup-card__votes {
-  font-size: 0.72rem;
-  color: #8792a8;
-}
-
-.map-popup-card__pending {
-  font-size: 0.7rem;
-  color: #6b7488;
-  font-style: italic;
-}
+/* --- .map-popup-card__pill(s): harita tıklama pop-up'ı kaldırıldı (kullanıcı talebi —
+   tüm ülke/dizi detayları artık yalnızca sağ çekmecede, bkz. CountryPanel.jsx) ama bu iki
+   sınıf SeriesPanel.jsx'te (tema + "N ülkede yayında" rozetleri) hâlâ kullanılıyor, o yüzden
+   ".map-popup-card" önekiyle birlikte korundu — sadece pop-up'a özel olan diğer tüm alt
+   sınıflar (kapatma butonu, afiş, IMDb rozeti, trend varyantları, ipucu metni vb.) silindi. --- */
 
 .map-popup-card__pills {
   display: flex;
@@ -3321,30 +3310,6 @@ button.sidebar__big-card:hover {
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: #cbd5e1;
   white-space: nowrap;
-}
-
-.map-popup-card__pill--trend--up {
-  color: #5cb85c;
-  border-color: rgba(92, 184, 92, 0.4);
-  background: rgba(92, 184, 92, 0.12);
-}
-
-.map-popup-card__pill--trend--down {
-  color: #ff6b6b;
-  border-color: rgba(255, 107, 107, 0.4);
-  background: rgba(255, 107, 107, 0.12);
-}
-
-.map-popup-card__pill--trend--flat,
-.map-popup-card__pill--trend--neutral {
-  color: #8792a8;
-}
-
-.map-popup-card__hint {
-  margin: 0.15rem 0 0;
-  font-size: 0.68rem;
-  color: #6b7488;
-  font-style: italic;
 }
 
 /* --- Dairesel yüzdelik pay göstergesi (CircularProgress.jsx, ContinentSidebar'da kullanılıyor) --- */

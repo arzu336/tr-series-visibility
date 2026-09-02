@@ -84,16 +84,19 @@ function weightedComposite(factors) {
 function badgeFor(usedFactors) {
   const hasNetflix = usedFactors.includes('netflix')
   const hasShareOfSearch = usedFactors.includes('shareOfSearch')
+  // Etiketler kullanıcı talebiyle "resmi veri"/"yetersiz veri" ibarelerinden arındırıldı —
+  // level (verified/partial/weak) aynı kalıyor, sadece görünen metin değişti; hiçbir sayı
+  // olduğundan daha kesin gösterilmiyor, sadece kelime seçimi sadeleşti.
   if (hasNetflix && hasShareOfSearch) {
-    return { label: 'Resmi Verilerle Doğrulandı', level: 'verified' }
+    return { label: 'Çift Kaynakla Doğrulandı', level: 'verified' }
   }
   if (hasShareOfSearch) {
     return { label: 'Arama İlgisiyle Kısmi Doğrulama', level: 'partial' }
   }
   if (hasNetflix) {
-    return { label: 'Resmi Platform Verisiyle Kısmi Doğrulama', level: 'partial' }
+    return { label: 'Platform Verisiyle Kısmi Doğrulama', level: 'partial' }
   }
-  return { label: 'Yetersiz resmi veri — sadece medya/yayın varlığı sinyali', level: 'weak' }
+  return { label: 'Sadece Medya/Yayın Sinyali', level: 'weak' }
 }
 
 /**

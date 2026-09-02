@@ -4,7 +4,6 @@ import * as THREE from 'three'
 import { scoreToColor, brightenRgb } from '../lib/scale.js'
 import { fetchCountryGeoJSON } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
-import { trendLabel } from '../lib/trend.js'
 import turkishNames from '../data/country-centroids.json'
 
 function displayName(feat) {
@@ -28,13 +27,6 @@ const DEFAULT_VIEW = { lat: 15, lng: 20, altitude: 2.4 }
 // Tekil ülke odaklanması — önceki 1.1 aşırı yakınlaşıyordu, ülke ve komşularının rahatça
 // görülebildiği daha gevşek bir mesafeye çekildi.
 const FOCUS_ALTITUDE = 1.8
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w154'
-
-function formatVotes(n) {
-  if (n == null) return null
-  if (n >= 1000) return `${Math.round(n / 100) / 10}k`
-  return String(n)
-}
 // İnce, zarif ülke sınırları (Map2D ile aynı renk) — hover/seçim/highlight bunun üzerine
 // sadece kenar rengi/kalınlığı olarak eklenir, ayrı bir katman yok.
 const STROKE_DEFAULT = '#1e293b'
@@ -43,64 +35,12 @@ const STROKE_SELECTED = '#ffffff'
 const STROKE_HIGHLIGHT = '#f0ad4e'
 const STROKE_CONTINENT = '#22d3ee'
 
-// Lowy Institute tarzı Dark Glassmorphism harita içi detay kartı — globe.gl'in htmlElement
-// API'si React'ten bağımsız çalıştığı için DOM'u burada elle inşa ediyoruz. Aynı görünüm
-// Map2D.jsx'te MapPopupCard.jsx (gerçek React bileşeni) olarak tekrarlanır — ikisi de aynı
-// .map-popup-card sınıflarını paylaşır. Sadece hızlı bakış içindir (dizi + skor + tema +
-// trend + IMDb); kadro ve diğer ayrıntılar artık sadece sağ paneldedir (bkz.
-// CountryPanel.jsx) — burada sadece statik bir ipucu satırı var.
-function buildPopupElement(d) {
-  const el = document.createElement('div')
-  el.className = 'map-popup-card'
-  // globe.gl'in htmlElement katmanı (CSS3DRenderer overlay'i) varsayılan olarak
-  // pointer-events:none taşır (tıklamalar altındaki WebGL canvas'a/orbit-controls'a
-  // geçsin diye) — .map-popup-card'a styles.css'te pointer-events:auto verilmesiyle bu
-  // kart ve içindeki butonlar tekrar tıklanabilir olur. stopPropagation ekstra güvenlik:
-  // kart içi bir tıklamanın document'a kadar kabarıp başka bir dinleyiciyi tetiklememesi için.
-  el.addEventListener('click', (e) => e.stopPropagation())
-
-  const posterHtml = d.series.posterPath
-    ? `<img class="map-popup-card__poster" src="${POSTER_BASE}${d.series.posterPath}" alt="" />`
-    : `<span class="map-popup-card__poster map-popup-card__poster--empty" aria-hidden="true"></span>`
-
-  const imdbReady = d.imdbStatus === 'ready' && d.imdb?.rating != null
-  const imdbBadgeHtml = imdbReady
-    ? `<div class="map-popup-card__imdb-badge"><span class="map-popup-card__imdb-badge-star">⭐</span><span class="map-popup-card__imdb-badge-value">${d.imdb.rating.toFixed(1)}</span></div>`
-    : ''
-  const votesOrPendingHtml =
-    imdbReady && d.imdb.votes != null
-      ? `<div class="map-popup-card__votes">(${formatVotes(d.imdb.votes)} Oy)</div>`
-      : d.imdbStatus !== 'ready'
-        ? `<div class="map-popup-card__pending">Puan güncelleniyor…</div>`
-        : ''
-
-  const trendInfo = trendLabel(d.trend)
-
-  el.innerHTML = `
-    <button class="map-popup-card__close" aria-label="Kapat">✕</button>
-    <div class="map-popup-card__top">
-      <div class="map-popup-card__poster-wrap">
-        ${posterHtml}
-        ${imdbBadgeHtml}
-      </div>
-      <div class="map-popup-card__body">
-        <div class="map-popup-card__name">${d.series.name}</div>
-        ${votesOrPendingHtml}
-      </div>
-    </div>
-    <div class="map-popup-card__pills">
-      ${d.dominantTheme ? `<span class="map-popup-card__pill">${d.dominantTheme}</span>` : ''}
-      <span class="map-popup-card__pill">Skor ${d.score != null ? d.score.toFixed(1) : '—'}</span>
-      <span class="map-popup-card__pill map-popup-card__pill--${trendInfo.className}">${trendInfo.icon} ${trendInfo.pct != null ? `${trendInfo.pct}%` : 'Yeni'}</span>
-    </div>
-    <p class="map-popup-card__hint">Kadro ve ayrıntılar için sağ paneli inceleyin →</p>
-  `
-
-  el.querySelector('.map-popup-card__close')?.addEventListener('click', () => d.onClose?.())
-
-  return el
-}
-
+// Küre üzerinde bir ülkeye tıklamak eskiden burada da (Map2D.jsx'te olduğu gibi) bir
+// glassmorphism bilgi kartı açıyordu — özellikle mobilde haritanın büyük bölümünü kaplayıp
+// ikinci bir "dizi bilgisi" yüzeyi yaratıyordu. Kullanıcı talebiyle kaldırıldı: tüm dizi/ülke
+// detayları artık YALNIZCA sağ çekmecede (CountryPanel.jsx). `popup` prop'u hâlâ geliyor
+// ama sadece boş alana tıklamada seçimi kapatmak (`popup.onClose`, bkz. onGlobeClick) için
+// kullanılıyor — görsel bir kart üretmiyor.
 export default function Globe3D({
   countries,
   onSelect,
@@ -140,19 +80,15 @@ export default function Globe3D({
       .atmosphereColor('#7fb6ff')
       .atmosphereAltitude(0.18)
       .polygonsTransitionDuration(300)
-      .htmlElementsData([])
-      .htmlLat((d) => d.lat)
-      .htmlLng((d) => d.lng)
-      .htmlAltitude(0.02)
-      .htmlElement(buildPopupElement)
       // Sade hover vurgusu — globe.gl'in kendi dokümante edilen deseni: hoveredRef bir
       // useRef olduğu için polygonStrokeColor accessor'ı her çağrıldığında güncel değeri
       // okur, ayrı bir re-render/efekt tetiklemeye gerek kalmaz.
       .onPolygonHover((f) => {
         hoveredRef.current = f
       })
-      // Ülke poligonu dışına (okyanus/boş küre yüzeyi) tıklama — açık pop-up'ı kapatır.
-      // onPolygonClick ülke isabetlerinde ayrıca ve öncelikli tetiklenir, bu ikisi çakışmaz.
+      // Ülke poligonu dışına (okyanus/boş küre yüzeyi) tıklama — seçili ülkeyi (ve sağ
+      // çekmeceyi) kapatır. onPolygonClick ülke isabetlerinde ayrıca ve öncelikli
+      // tetiklenir, bu ikisi çakışmaz.
       .onGlobeClick(() => popupRef.current?.onClose?.())
 
     world.controls().autoRotate = true
@@ -343,10 +279,9 @@ export default function Globe3D({
   }, [countries, geoFeatures, onSelect, actorHighlight, selectedIso2, seriesFilter, highlightFilter, continentHighlight])
 
   useEffect(() => {
+    // Harita üzerinde artık bir bilgi kartı render edilmiyor (bkz. dosya başındaki not) —
+    // popupRef sadece onGlobeClick'in güncel onClose callback'ine erişebilmesi için tutuluyor.
     popupRef.current = popup
-    const world = globeRef.current
-    if (!world) return
-    world.htmlElementsData(popup && popup.lat != null && popup.lng != null ? [popup] : [])
   }, [popup])
 
   useEffect(() => {

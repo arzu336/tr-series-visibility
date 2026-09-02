@@ -1,5 +1,4 @@
 import { useEffect, useMemo, useState } from 'react'
-import Sparkline from './Sparkline.jsx'
 import CastBar from './CastBar.jsx'
 import ActorPanel from './ActorPanel.jsx'
 import SeriesPanel from './SeriesPanel.jsx'
@@ -48,8 +47,14 @@ function RegionalInterest({ seriesName, iso2 }) {
     return <p className="dashboard__empty">Bu ülke/dizi için bölgesel arama ilgisi verisi bulunamadı.</p>
   }
 
-  const top = state.byRegion.slice(0, 8)
+  // value:0 olan bölgeler gerçekte "ölçülebilir ilgi yok" demek — listede göstermek sadece
+  // gürültü (kullanıcı talebi: "yalnızca değer > 0 olanlar listelensin").
+  const top = state.byRegion.filter((r) => r.value > 0).slice(0, 8)
   const maxValue = Math.max(...top.map((r) => r.value), 1)
+
+  if (top.length === 0) {
+    return <p className="dashboard__empty">Bu ülke/dizi için bölgesel arama ilgisi verisi bulunamadı.</p>
+  }
 
   return (
     <div className="benchmark-card">
@@ -189,14 +194,12 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
   )
 }
 
-// Skor, baskın tema, IMDb puanı ve anlık trend zaten haritadaki glassmorphism pop-up
-// kartında (bkz. MapPopupCard.jsx / Globe3D.jsx buildPopupElement — App.jsx'teki aynı
-// `selected`/`activeSeries` state'inden beslenir) gösteriliyor; burada tekrarlanmıyor. Bu
-// panel sadece pop-up'ta YER ALMAYAN derinlemesine içeriği taşır: görünürlük geçmişi
-// grafiği, bölgesel arama ilgisi kırılımı ve ülkedeki tüm dizilerin tam listesi. Bir dizi
-// satırına tıklamak o diziyi haritadaki pop-up'ta ve IMDb kartında da aktif hale getirir
-// (bkz. App.jsx activeSeriesId/onSelectSeries) — ayrıca bir oyuncuya tıklamak bu panelin
-// aynı slotunu geçici olarak oyuncu görünümüne çevirir (bkz. activeActorId/ActorPanel).
+// Haritada artık bir tıklama pop-up'ı YOK (kullanıcı talebi — özellikle mobilde harita
+// görünümünü bozuyordu) — bir ülkeye/diziye dair TÜM detaylar (skor, tema, IMDb puanı,
+// trend, görünürlük geçmişi, bölgesel arama ilgisi, dizilerin tam listesi) yalnızca bu
+// panelde gösterilir. Bir dizi satırına tıklamak o diziyi IMDb kartında da aktif hale
+// getirir (bkz. App.jsx activeSeriesId/onSelectSeries) — ayrıca bir oyuncuya tıklamak bu
+// panelin aynı slotunu geçici olarak oyuncu görünümüne çevirir (bkz. activeActorId/ActorPanel).
 export default function CountryPanel({
   country,
   allCountries,
@@ -346,19 +349,10 @@ export default function CountryPanel({
                 ×
               </button>
               <h2>{country.name}</h2>
-              {country.dataSource === 'proxy' ? (
-                <span
-                  className="panel__data-badge panel__data-badge--proxy"
-                  title="Yayın verisi yok — arama ilgisi tahmini."
-                >
-                  ⚡ Arama Hacmi Tahmini
-                </span>
-              ) : (
-                <span className="panel__data-badge panel__data-badge--tmdb" title="Resmi yayın verisi.">
-                  ✓ Resmi Veri
-                </span>
-              )}
-
+              {/* "✓ Resmi Veri" rozeti daha önce kaldırılmıştı; proxy (tahmini) veri rozeti de
+                  kullanıcı talebiyle kaldırıldı — veri kaynağı dökümü artık hiçbir yerde
+                  gösterilmiyor. Alt başlık ("Arama hacmi endeksi: X/100") ayrı bir gerçek
+                  bilgi olduğu için (rozet değil) olduğu gibi kalıyor. */}
               {country.dataSource === 'proxy' ? (
                 <p className="panel__subtitle">Arama hacmi endeksi: {country.searchInterestScore}/100</p>
               ) : (
@@ -369,16 +363,18 @@ export default function CountryPanel({
               {country.dataSource === 'proxy' ? (
                 <p className="dashboard__empty">Görünürlük geçmişi tutulmuyor.</p>
               ) : (
-                <>
-                  <Sparkline history={country.history} />
-                  <PeriodChart
-                    periods={countryPeriods?.periods || []}
-                    valueKey="avgScore"
-                    range={periodRange}
-                    onRangeChange={setPeriodRange}
-                    unitLabel="puan"
-                  />
-                </>
+                // Eskiden burada hem Sparkline (son 7 gün) hem PeriodChart (Aylık/Yıllık)
+                // yan yana gösteriliyordu — aynı veriyi iki farklı grafikle tekrarlamak kafa
+                // karıştırıyordu (kullanıcı talebi: "mükerrer grafiği teke indir"). Sparkline
+                // kaldırıldı; PeriodChart zaten Aylık/Yıllık geçişiyle daha kapsamlı ve tek
+                // başına yeterli tek bir bileşik zaman serisi.
+                <PeriodChart
+                  periods={countryPeriods?.periods || []}
+                  valueKey="avgScore"
+                  range={periodRange}
+                  onRangeChange={setPeriodRange}
+                  unitLabel="puan"
+                />
               )}
 
               {country.topSeries && (
@@ -390,7 +386,7 @@ export default function CountryPanel({
 
               {country.dataSource !== 'proxy' && (
                 <>
-                  <h3>Yerel Sıralama</h3>
+                  <h3>Ülkede En Çok İlgi Gören İlk 5 Dizi</h3>
                   <CountryLeaderboard iso2={country.iso2} />
                 </>
               )}
@@ -425,10 +421,18 @@ export default function CountryPanel({
                     <p className="dashboard__hint">Bazı diziler için veri henüz kısmi.</p>
                   )}
                   <ul className="panel__series-list">
-                    {sortedSeriesList.map((s) => {
+                    {sortedSeriesList.map((s, i) => {
                   const key = s.id ?? s.name
                   const isExpanded = expandedId === key
                   const isActiveOnMap = activeSeriesId != null && s.id === activeSeriesId
+                  // Ham TMDB popülerlik puanı kullanıcılar tarafından yüzde sanılıp kafa
+                  // karıştırıyordu (kullanıcı geri bildirimi) — satırda artık sadece net bir
+                  // 1..N sırası var, ham sayı + teknik etiketler (kısmi veri *, TR reyting
+                  // rozeti) sadece tıklanınca açılan ayrıntıda gösteriliyor.
+                  const rawScore =
+                    seriesRange !== 'current' && seriesPopularity?.[s.id]?.value != null
+                      ? seriesPopularity[s.id].value
+                      : s.popularity
                   return (
                     <li
                       key={key}
@@ -440,6 +444,7 @@ export default function CountryPanel({
                       onClick={() => handleSelectSeriesRow(s, isExpanded, key)}
                     >
                       <div className="panel__series-row">
+                        <span className="panel__series-rank">{i + 1}.</span>
                         {s.posterPath ? (
                           <img className="panel__series-poster" src={`${POSTER_BASE}${s.posterPath}`} alt="" />
                         ) : (
@@ -458,24 +463,24 @@ export default function CountryPanel({
                             {yearOf(s.firstAirDate) || '—'} · {s.theme}
                           </span>
                         </span>
-                        <span className="panel__series-score">
-                          {(seriesRange !== 'current' && seriesPopularity?.[s.id]?.value != null
-                            ? seriesPopularity[s.id].value
-                            : s.popularity
-                          ).toFixed(1)}
-                          {seriesRange !== 'current' && seriesPopularity?.[s.id]?.isPartial && (
-                            <span title="Bu dönem için veri henüz kısmi">*</span>
-                          )}
-                          {seriesRange !== 'current' && seriesPopularity?.[s.id]?.source === 'reytingtv_rank' && (
-                            <span className="panel__series-source-tag" title="Türkiye'deki gerçek günlük reyting sırasına dayanıyor (canlı popülerlik verisi değil)">
-                              TR
-                            </span>
-                          )}
-                        </span>
                       </div>
                       {isExpanded && (
                         <div className="panel__series-detail" onClick={(e) => e.stopPropagation()}>
                           <p className="panel__series-overview">{s.overview || 'Bu dizi için özet bulunmuyor.'}</p>
+                          <p className="panel__series-raw-score">
+                            Ham popülerlik puanı: <strong>{rawScore.toFixed(1)}</strong>
+                            {seriesRange !== 'current' && seriesPopularity?.[s.id]?.isPartial && (
+                              <span title="Bu dönem için veri henüz kısmi"> *</span>
+                            )}
+                            {seriesRange !== 'current' && seriesPopularity?.[s.id]?.source === 'reytingtv_rank' && (
+                              <span
+                                className="panel__series-source-tag"
+                                title="Türkiye'deki gerçek günlük reyting sırasına dayanıyor (canlı popülerlik verisi değil)"
+                              >
+                                TR
+                              </span>
+                            )}
+                          </p>
                           <CastBar cast={s.cast} onSelectActor={onSelectActor} />
                           <HybridScoreTag seriesName={s.name} iso2={country.iso2} />
                           {onGoToSeriesAnalysis && (

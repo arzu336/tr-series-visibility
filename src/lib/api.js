@@ -182,6 +182,10 @@ export async function resetUserPassword(id) {
   return handle(await fetch(`/api/admin/users/${id}/reset-password`, { method: 'POST' }))
 }
 
+export async function deleteUser(id) {
+  return handle(await fetch(`/api/admin/users/${id}/delete`, { method: 'POST' }))
+}
+
 export async function changePassword(currentPassword, newPassword) {
   return handle(
     await fetch('/api/auth/change-password', {
@@ -228,4 +232,22 @@ export async function submitDestinationOverride(seriesId, destinationIds, review
 
 export async function clearDestinationOverride(seriesId) {
   return handle(await fetch(`/api/destinations/${seriesId}/clear-override`, { method: 'POST' }))
+}
+
+export async function fetchMediaSentimentAudit() {
+  return handle(await fetch('/api/media-sentiment-audit'))
+}
+
+export async function submitMediaSentimentOverride(id, sentiment, reviewer) {
+  return handle(
+    await fetch(`/api/media-sentiment-audit/${id}/override`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ sentiment, reviewer }),
+    })
+  )
+}
+
+export async function clearMediaSentimentOverride(id) {
+  return handle(await fetch(`/api/media-sentiment-audit/${id}/clear-override`, { method: 'POST' }))
 }

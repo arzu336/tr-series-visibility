@@ -39,7 +39,7 @@ export default function PeriodChart({ periods, valueKey, range, onRangeChange, u
       <div>
         <RangeToggle range={range} onRangeChange={onRangeChange} />
         <p className="dashboard__empty">
-          Yetersiz veri — bir eğilim gösterebilmek için en az iki periyot gerekiyor, şu an {periods.length} var.
+          Veri birikiyor — bir eğilim gösterebilmek için en az iki periyot gerekiyor, şu an {periods.length} var.
         </p>
       </div>
     )

@@ -283,6 +283,20 @@ if (!destColumns.some((c) => c.name === 'detection_method')) {
   db.exec("UPDATE destination_classifications SET detection_method = 'keyword' WHERE detection_method IS NULL")
 }
 
+// Analist Paneli'nin "Basın & Medya Algısı" denetim sekmesi — bir analist LLM'in belirlediği
+// dominant_sentiment'i yanlış bulursa (ör. ironik bir eleştiriyi nötr işaretlemiş) düzeltebilsin
+// diye. theme_classifications'taki override_theme / destination_classifications'taki
+// human_tags_* İLE AYNI DESEN: ham LLM sonucu (dominant_sentiment) asla silinmez/ezilmez,
+// insan düzeltmesi AYRI sütunlarda tutulur ki 14 günlük TTL sonunda otomatik yeniden tarama
+// (bkz. server/services/newsSentiment.js upsertStmt) insan kararını sessizce ezmesin —
+// "effective" değer her zaman override varsa onu, yoksa AI'nınkini kullanır.
+const mediaSentimentColumns = db.prepare("PRAGMA table_info(media_sentiment)").all()
+if (!mediaSentimentColumns.some((c) => c.name === 'override_sentiment')) {
+  db.exec('ALTER TABLE media_sentiment ADD COLUMN override_sentiment TEXT')
+  db.exec('ALTER TABLE media_sentiment ADD COLUMN override_reviewer TEXT')
+  db.exec('ALTER TABLE media_sentiment ADD COLUMN override_at TEXT')
+}
+
 // Aylık/Yıllık dönem satırları iki farklı kaynaktan gelebilir: canlı TMDB popülerlik
 // anlık görüntülerinin ortalaması (rutin, ileriye dönük) veya data-pipeline-python'daki
 // ReytingTV geriye dönük dizi sıralaması taramasının doldurduğu gerçek geçmiş veri

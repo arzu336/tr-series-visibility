@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { fetchAdminUsers, approveUser, rejectUser, setAccessLevel, resetUserPassword } from '../lib/api.js'
+import { fetchAdminUsers, approveUser, rejectUser, setAccessLevel, resetUserPassword, deleteUser } from '../lib/api.js'
 
 function formatDate(iso) {
   return new Date(iso).toLocaleString('tr-TR')
@@ -11,7 +11,7 @@ const ACCESS_LEVEL_LABELS = {
   admin: 'Yönetici',
 }
 
-export default function AdminUsersPanel() {
+export default function AdminUsersPanel({ currentUserId }) {
   const [items, setItems] = useState([])
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
@@ -48,6 +48,20 @@ export default function AdminUsersPanel() {
     }
   }
 
+  // Kalıcı ve geri alınamaz olduğu için tek tıkla değil, native confirm ile bir kez daha
+  // soruluyor — onaylı (hâlâ giriş yapabilen) bir hesap için uyarı metni daha net ("hesabı
+  // ve tüm erişimini" gibi), reddedilmiş bir hesap zaten giriş yapamıyordu. Kendi hesabını
+  // silme ve son yöneticiyi silme sunucuda da engelleniyor (bkz. server/users.js deleteUser) —
+  // buradaki disabled/title'lar sadece kullanıcıya erken, açık bir geri bildirim.
+  const handleDelete = async (u) => {
+    const warning =
+      u.status === 'approved'
+        ? `${u.name} (${u.email}) hesabı ve tüm erişimi kalıcı olarak silinsin mi? Bu işlem geri alınamaz.`
+        : `${u.name} (${u.email}) kalıcı olarak silinsin mi? Bu işlem geri alınamaz.`
+    if (!window.confirm(warning)) return
+    await act(deleteUser, u.id)
+  }
+
   const handleResetPassword = async (u) => {
     setActingId(u.id)
     setResetResult(null)
@@ -69,6 +83,7 @@ export default function AdminUsersPanel() {
     !q || u.name.toLocaleLowerCase('tr').includes(q) || u.email.toLocaleLowerCase('tr').includes(q)
   const pending = items.filter((u) => u.status === 'pending' && matchesQuery(u))
   const others = items.filter((u) => u.status !== 'pending' && matchesQuery(u))
+  const adminCount = items.filter((u) => u.isAdmin).length
 
   return (
     <div className="dashboard">
@@ -155,7 +170,7 @@ export default function AdminUsersPanel() {
                 <th>Görev</th>
                 <th>Durum</th>
                 <th>Erişim Düzeyi</th>
-                <th>Şifre</th>
+                <th>İşlem</th>
               </tr>
             </thead>
             <tbody>
@@ -196,6 +211,26 @@ export default function AdminUsersPanel() {
                         Sıfırla
                       </button>
                     )}
+                    {' '}
+                    {(() => {
+                      const isSelf = u.id === currentUserId
+                      const isLastAdmin = u.isAdmin && adminCount <= 1
+                      const blockedReason = isSelf
+                        ? 'Kendi hesabınızı silemezsiniz'
+                        : isLastAdmin
+                          ? 'Son yönetici hesabı silinemez'
+                          : 'Kalıcı olarak sil'
+                      return (
+                        <button
+                          disabled={actingId === u.id || isSelf || isLastAdmin}
+                          className="dashboard__link-btn dashboard__link-btn--danger"
+                          onClick={() => handleDelete(u)}
+                          title={blockedReason}
+                        >
+                          Sil
+                        </button>
+                      )
+                    })()}
                   </td>
                 </tr>
               ))}

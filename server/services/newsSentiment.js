@@ -133,6 +133,79 @@ export function getMediaSentimentForSeries(seriesId) {
   }
 }
 
+const listAllStmt = db.prepare('SELECT * FROM media_sentiment ORDER BY created_at DESC')
+const getByIdStmt = db.prepare('SELECT * FROM media_sentiment WHERE id = ?')
+const setOverrideStmt = db.prepare(`
+  UPDATE media_sentiment SET override_sentiment = ?, override_reviewer = ?, override_at = ? WHERE id = ?
+`)
+const clearOverrideStmt = db.prepare(`
+  UPDATE media_sentiment SET override_sentiment = NULL, override_reviewer = NULL, override_at = NULL WHERE id = ?
+`)
+const VALID_SENTIMENTS = new Set(['positive', 'neutral', 'negative'])
+
+function rowToAuditEntry(row, seriesName) {
+  return {
+    id: row.id,
+    seriesId: row.series_id,
+    seriesName: seriesName ?? null,
+    countryIso2: row.country_iso2,
+    totalNewsCount: row.total_news_count,
+    // Analistin "bu ton neden verildi" diye tüm metni okumadan karar verebilmesi için —
+    // taranan (en fazla 20) haberden ilk 5'i, ton düzeltmesine gerekçe olarak yeterli.
+    articles: row.raw_articles
+      ? JSON.parse(row.raw_articles)
+          .slice(0, 5)
+          .map((a) => ({ title: a.title, source: a.source || null, url: a.url || null }))
+      : [],
+    dominantSentiment: row.dominant_sentiment,
+    effectiveSentiment: row.override_sentiment || row.dominant_sentiment,
+    override: row.override_sentiment
+      ? { sentiment: row.override_sentiment, reviewer: row.override_reviewer, at: row.override_at }
+      : null,
+    createdAt: row.created_at,
+  }
+}
+
+// Analist Paneli'nin "Basın & Medya Algısı" denetim sekmesi. ÖNEMLİ SINIRLAMA: media_sentiment
+// satır başına bir "tarama"dır (bir dizinin bir ülkede taranan haber grubu, bkz.
+// fetchAndAnalyzeSentiment) — LLM haberleri TOPLU değerlendiriyor (server/llm.js
+// analyzeMediaSentiment), tek bir haberin kendi ayrı bir tonu YOK. Bu yüzden burada "ton
+// düzeltme" bu TARAMANIN genel tonunu düzeltir; analistin karar gerekçesini görebilmesi için
+// taranan haber başlıkları da (rawArticles'tan) satırla birlikte döner — liveSeriesById'de
+// olmayan (silinmiş/artık listede olmayan) diziler themes.js/destinations.js'teki aynı
+// "liveIds" filtresiyle dışlanır, hayalet kayıt gösterilmez.
+export function getMediaSentimentAuditRows(liveSeriesById) {
+  return listAllStmt
+    .all()
+    .filter((row) => liveSeriesById.has(row.series_id))
+    .map((row) => rowToAuditEntry(row, liveSeriesById.get(row.series_id)))
+}
+
+export function setSentimentOverride(id, sentiment, reviewer) {
+  if (!VALID_SENTIMENTS.has(sentiment)) {
+    throw new Error(`Geçersiz ton: ${sentiment}`)
+  }
+  const numId = Number(id)
+  const row = getByIdStmt.get(numId)
+  if (!row) {
+    throw new Error(`Kayıt bulunamadı: ${id}`)
+  }
+  setOverrideStmt.run(sentiment, reviewer || 'anonim', new Date().toISOString(), numId)
+  return rowToAuditEntry(getByIdStmt.get(numId))
+}
+
+// İnsan düzeltmesini siler, tarama LLM'in orijinal dominant_sentiment'ine geri döner —
+// themes.js clearHumanOverride / destinations.js clearHumanTags ile aynı "AI önerisine dön" ilkesi.
+export function clearSentimentOverride(id) {
+  const numId = Number(id)
+  const row = getByIdStmt.get(numId)
+  if (!row) {
+    throw new Error(`Kayıt bulunamadı: ${id}`)
+  }
+  clearOverrideStmt.run(numId)
+  return rowToAuditEntry(getByIdStmt.get(numId))
+}
+
 function rowToResult(row, extra) {
   return {
     seriesId: row.series_id,

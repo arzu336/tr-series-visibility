@@ -43,7 +43,13 @@ import { buildBenchmark } from './benchmark.js'
 import { getTurkishLearningIndex } from './turkish-learning-interest.js'
 import { getRegionalInterest } from './regional-interest.js'
 import { getDuolingoTurkishStats } from './duolingo.js'
-import { fetchAndAnalyzeSentiment, getMediaSentimentForSeries } from './services/newsSentiment.js'
+import {
+  fetchAndAnalyzeSentiment,
+  getMediaSentimentForSeries,
+  getMediaSentimentAuditRows,
+  setSentimentOverride,
+  clearSentimentOverride,
+} from './services/newsSentiment.js'
 import { calculateCountryCompositeScore } from './services/countryScoringEngine.js'
 import { calculateShareOfSearch, getRegionalBreakdown } from './services/trendsShareOfSearch.js'
 import { cacheFirstSerpApi, fetchTrendsTimeSeriesRaw, timeSeriesCacheKey, TIMESERIES_TTL_MS } from './services/serpApiCache.js'
@@ -62,6 +68,7 @@ import {
   setUserStatus,
   setUserAccessLevel,
   resetUserPassword,
+  deleteUser,
   changeUserPassword,
   verifyPassword,
   publicUser,
@@ -252,6 +259,16 @@ app.post('/api/admin/users/:id/reset-password', (req, res) => {
   }
 })
 
+// Kendi hesabını ve son yöneticiyi silmeye karşı kilit users.js deleteUser içinde (bkz. orada).
+app.post('/api/admin/users/:id/delete', (req, res) => {
+  try {
+    deleteUser(req.params.id, req.currentUser.id)
+    res.json({ ok: true })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
 app.get('/api/visibility', async (req, res) => {
   try {
     const { data } = await getEnrichedVisibility()
@@ -385,8 +402,11 @@ app.post('/api/themes/:seriesId/clear-override', requireAdmin, (req, res) => {
   }
 })
 
+// keywords eklendi (Analist Paneli'nin "anahtar kelime vurgulama" özelliği için) — bu, hangi
+// kelimenin bir dizinin özetinde bir destinasyonu tetiklediğini istemci tarafında vurgulayabilmek
+// için kullanılıyor, hassas bir veri değil (zaten server/destinations.js'te sabit/genel).
 app.get('/api/destinations/taxonomy', (req, res) => {
-  res.json({ destinations: DESTINATIONS.map((d) => ({ id: d.id, name: d.name })) })
+  res.json({ destinations: DESTINATIONS.map((d) => ({ id: d.id, name: d.name, keywords: d.keywords })) })
 })
 
 app.get('/api/destinations', async (req, res) => {
@@ -451,6 +471,35 @@ app.post('/api/destinations/:seriesId/clear-override', requireAdmin, (req, res) 
       effectiveDestinations: effectiveDestinations(entry),
       isUntagged: effectiveDestinations(entry).length === 0,
     })
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+// Analist Paneli'nin "Basın & Medya Algısı" denetim sekmesi — tema/destinasyon uçlarıyla aynı
+// erişim modeli: listeleme herkese (canEdit'siz de) açık, düzeltme sadece Yönetici'ye.
+app.get('/api/media-sentiment-audit', async (req, res) => {
+  try {
+    const raw = await getRawSeriesDataCached()
+    const liveSeriesById = new Map(raw.series.map((s) => [s.id, s.name]))
+    res.json({ items: getMediaSentimentAuditRows(liveSeriesById) })
+  } catch (err) {
+    res.status(502).json({ error: err.message })
+  }
+})
+
+app.post('/api/media-sentiment-audit/:id/override', requireAdmin, (req, res) => {
+  try {
+    const { sentiment, reviewer } = req.body || {}
+    res.json(setSentimentOverride(req.params.id, sentiment, reviewer))
+  } catch (err) {
+    res.status(400).json({ error: err.message })
+  }
+})
+
+app.post('/api/media-sentiment-audit/:id/clear-override', requireAdmin, (req, res) => {
+  try {
+    res.json(clearSentimentOverride(req.params.id))
   } catch (err) {
     res.status(400).json({ error: err.message })
   }
