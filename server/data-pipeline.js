@@ -12,12 +12,25 @@ const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 saat
 
 // index.js'teki route'lar ve scheduler.js'teki zamanlanmış tazeleme aynı
 // hattı paylaşır — burada tek yerde tanımlı, ikisi de import eder.
+// Denetim B-11: önbellek süresi dolduğu anda gelen N eşzamanlı istek, her biri ayrı ayrı 20
+// discover sayfası + ~800 alt istek çekiyor ve aynı bekleyen dizileri LLM'e gönderiyordu.
+// Tek-uçuş (single-flight): ilk çağrı işi başlatır, aynı anda gelenler AYNI promise'i bekler.
+let rawFetchInFlight = null
+
 export async function getRawSeriesDataCached() {
   const cached = getCached(RAW_CACHE_KEY)
   if (cached) return cached
-  const data = await getRawSeriesData()
-  setCached(RAW_CACHE_KEY, data, RAW_CACHE_TTL_MS)
-  return data
+  if (rawFetchInFlight) return rawFetchInFlight
+
+  rawFetchInFlight = (async () => {
+    const data = await getRawSeriesData()
+    setCached(RAW_CACHE_KEY, data, RAW_CACHE_TTL_MS)
+    return data
+  })().finally(() => {
+    rawFetchInFlight = null
+  })
+
+  return rawFetchInFlight
 }
 
 // /api/visibility ve /api/impact aynı gerçek, canlı veriyi paylaşır — tema/destinasyon

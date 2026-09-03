@@ -1,13 +1,24 @@
+import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const DB_PATH = path.join(__dirname, 'data', 'app.db')
+const DATA_DIR = path.join(__dirname, 'data')
+const DB_PATH = path.join(DATA_DIR, 'app.db')
+
+// server/data .gitignore'da olduğu için TEMİZ BİR KLONDA bu klasör yoktur ve DatabaseSync
+// import anında SQLITE_CANTOPEN ile çöker (sunucu da testler de açılmaz). Denetim bulgusu
+// B-03: klasörü açılışta kendimiz oluşturuyoruz.
+fs.mkdirSync(DATA_DIR, { recursive: true })
 
 const db = new DatabaseSync(DB_PATH)
 db.exec('PRAGMA journal_mode = WAL')
 db.exec('PRAGMA foreign_keys = ON')
+// data-pipeline-python/backfill_reytingtv.py aynı dosyaya YAZIYOR (bkz. denetim B-08/G-14):
+// zaman aşımı olmadan eşzamanlı bir yazma, istek içinde anında SQLITE_BUSY olarak patlıyordu.
+// 5 sn boyunca kilidin açılmasını bekler, sonra hata verir.
+db.exec('PRAGMA busy_timeout = 5000')
 
 db.exec(`
   CREATE TABLE IF NOT EXISTS cache_entries (

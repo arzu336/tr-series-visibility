@@ -2,6 +2,10 @@ import * as XLSX from 'xlsx'
 import db from '../db.js'
 import { resolveIso2FromLabel } from './countryLookup.js'
 
+// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
+// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
+const EXTERNAL_TIMEOUT_MS = 15000
+
 const INDEX_URL = 'https://yigm.ktb.gov.tr/TR-249702/sinir-istatistikleri.html'
 const SYNC_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000 // bülten ayda bir yayınlanıyor, günlük kontrol gereksiz
 const META_KEY = 'lastTourismSyncAt'
@@ -44,7 +48,7 @@ const selectTrackedIso2Stmt = db.prepare('SELECT DISTINCT iso2 FROM tourist_arri
 // Bunun yerine her bülten zaten SON 3 YILIN aynı ayını içeriyor (bkz. parseBulletin) — bu, en
 // azından yıl-yıl aynı ay kıyaslaması için anında geçmiş veri sağlıyor.
 export async function findLatestBulletin() {
-  const res = await fetch(INDEX_URL)
+  const res = await fetch(INDEX_URL, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`Sınır istatistikleri sayfası alınamadı (${res.status})`)
   const html = await res.text()
 
@@ -118,7 +122,7 @@ export function parseBulletin(buffer, bulletinMonth) {
 }
 
 async function downloadAndParseBulletin(bulletin) {
-  const res = await fetch(bulletin.url)
+  const res = await fetch(bulletin.url, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`Bülten dosyası indirilemedi (${res.status}): ${bulletin.url}`)
   const buffer = Buffer.from(await res.arrayBuffer())
   return parseBulletin(buffer, bulletin.month)

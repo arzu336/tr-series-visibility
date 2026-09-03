@@ -7,6 +7,12 @@ export const COOKIE_NAME = 'gp_session'
 const insertStmt = db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)')
 const selectStmt = db.prepare('SELECT user_id, expires_at FROM sessions WHERE token = ?')
 const deleteStmt = db.prepare('DELETE FROM sessions WHERE token = ?')
+// Denetim G-05/G-15: kod tabanında oturumları KULLANICI bazında silen hiçbir sorgu yoktu —
+// şifre değişimi, yönetici sıfırlaması, red veya silme sonrasında eski çerez 7 güne kadar
+// geçerli kalıyordu. Ayrıca süresi dolan satırlar yalnızca "sunulduklarında" siliniyor,
+// tablo sınırsız büyüyordu; periyodik temizlik de aşağıda.
+const deleteByUserStmt = db.prepare('DELETE FROM sessions WHERE user_id = ?')
+const deleteExpiredStmt = db.prepare('DELETE FROM sessions WHERE expires_at < ?')
 
 export function createSession(userId) {
   const token = crypto.randomBytes(24).toString('hex')
@@ -58,4 +64,18 @@ export function sessionCookieHeader(token, maxAgeSeconds) {
   const parts = [`${COOKIE_NAME}=${token}`, 'HttpOnly', 'Path=/', 'SameSite=Lax', `Max-Age=${maxAgeSeconds}`]
   if (process.env.NODE_ENV === 'production') parts.push('Secure')
   return parts.join('; ')
+}
+
+/**
+ * Bir kullanıcının TÜM oturumlarını iptal eder — şifre değişimi/sıfırlama, hesabın reddedilmesi
+ * veya silinmesi gibi "artık bu çerez geçerli olmamalı" anlarında çağrılır.
+ * Kaç oturumun kapatıldığını döndürür (loglama/test için).
+ */
+export function deleteSessionsForUser(userId) {
+  return deleteByUserStmt.run(userId).changes
+}
+
+/** Süresi geçmiş oturum satırlarını toplu siler (scheduler günde bir çağırır). */
+export function purgeExpiredSessions(now = Date.now()) {
+  return deleteExpiredStmt.run(now).changes
 }

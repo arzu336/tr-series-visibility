@@ -1,4 +1,5 @@
 import db from './db.js'
+import { purgeExpiredSessions } from './auth.js'
 import { getEnrichedVisibility } from './data-pipeline.js'
 import { rollupMonthlyIfNeeded } from './period-history.js'
 import { rollupSeriesMonthlyIfNeeded } from './series-period-history.js'
@@ -18,9 +19,35 @@ const setMetaStmt = db.prepare(`
   ON CONFLICT(key) DO UPDATE SET value = excluded.value
 `)
 
+// Denetim B-10: "çalışıyor" bayrağı yoktu. 30 dakikadan uzun süren bir tur (875 dizi×ülke
+// çifti, aralarda 1,5 sn bekleme ve 25 sn LLM zaman aşımlarıyla saatler sürebiliyor) bir sonraki
+// tetiklemede PARALEL olarak yeniden başlıyor, aynı SerpAPI harcaması ikiye katlanıyordu —
+// çünkü haftalık kapılar (meta anahtarları) ancak iş BİTTİĞİNDE yazılıyor.
+let refreshRunning = false
+
 async function runScheduledRefresh() {
+  // Denetim B-10: bayrak, hangi yoldan çıkılırsa çıkılsın (hata dahil) mutlaka sıfırlanmalı —
+  // aksi halde tek bir istisna scheduler'ı kalıcı olarak susturur.
+  if (refreshRunning) {
+    console.log('[scheduler] önceki tur hâlâ sürüyor — bu tetikleme atlandı')
+    return
+  }
+  refreshRunning = true
+  try {
+    await runScheduledRefreshInner()
+  } finally {
+    refreshRunning = false
+  }
+}
+
+async function runScheduledRefreshInner() {
   console.log('[scheduler] zamanlanmış veri tazeleme başladı')
   try {
+    // Süresi geçmiş oturum satırları eskiden yalnızca "sunulduklarında" siliniyordu, tablo
+    // sınırsız büyüyordu (denetim G-15).
+    const purged = purgeExpiredSessions()
+    if (purged > 0) console.log(`[scheduler] süresi geçmiş ${purged} oturum temizlendi`)
+
     await getEnrichedVisibility()
     // Ham visibility_history budanmadan önce (bkz. MAX_SNAPSHOTS_PER_COUNTRY, history.js)
     // tamamlanmış ayları kalıcı özet tabloya taşır — kendi günlük kapısı var (period-history.js).
@@ -86,11 +113,13 @@ async function runScheduledRefresh() {
 // üç haftalık toplu iş (aşağıda) o bütçeyi kullanıcı tetiklemeli aramalarla (trend/sosyal/basın
 // tıklamaları) PAYLAŞIR, aşarsa dürüstçe kalanı bir sonraki haftaya bırakır, uygulamayı çökertmez.
 export function startScheduler() {
+  // .unref(): bu zamanlayıcı tek başına Node sürecini ayakta TUTMASIN — sunucu kapatılırken
+  // (SIGTERM/test sonu) 30 dakikalık bir timer yüzünden asılı kalmaz (denetim B-10).
   setInterval(() => {
     const row = getMetaStmt.get(META_KEY)
     const lastRunAt = row ? Number(row.value) : 0
     if (Date.now() - lastRunAt >= REFRESH_INTERVAL_MS) {
       runScheduledRefresh()
     }
-  }, CHECK_INTERVAL_MS)
+  }, CHECK_INTERVAL_MS).unref()
 }

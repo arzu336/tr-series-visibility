@@ -4,6 +4,7 @@ import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
 import compression from 'compression'
+import helmet from 'helmet'
 import rateLimit from 'express-rate-limit'
 import { buildDestinationRanking } from './aggregate.js'
 import {
@@ -58,7 +59,18 @@ import { getSeriesTrendInsight } from './services/seriesTrendInsight.js'
 import { enrichSeriesNewsNow } from './services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from './services/socialEnricher.js'
 import { getCached } from './cache.js'
-import { COOKIE_NAME, createSession, getSessionUserId, isValidSession, deleteSession, parseCookies, sessionCookieHeader } from './auth.js'
+import { isValidIso2, normalizeIso2, resolveKnownSeriesName, resolveKnownSeriesNames } from './services/requestGuards.js'
+import { runWithUserContext, getUserLiveCallUsage } from './services/liveCallQuota.js'
+import {
+  COOKIE_NAME,
+  createSession,
+  getSessionUserId,
+  isValidSession,
+  deleteSession,
+  deleteSessionsForUser,
+  parseCookies,
+  sessionCookieHeader,
+} from './auth.js'
 import {
   ensureBootstrapAdmin,
   registerUser,
@@ -79,7 +91,81 @@ dotenv.config({ path: path.join(__dirname, '.env') })
 const SESSION_MAX_AGE_S = 7 * 24 * 60 * 60 // 7 gün
 
 const app = express()
-app.use(cors({ origin: true, credentials: true }))
+
+// Denetim bulgusu G-08: hicbir guvenlik basligi yoktu. helmet varsayilanlari (nosniff,
+// X-Frame-Options: SAMEORIGIN, Referrer-Policy, HSTS, X-DNS-Prefetch-Control...) + uygulamaya
+// gore ELLE daraltilmis bir CSP. Sunucu uretimde dist/'i de servis ettigi (asagida
+// express.static) icin bu CSP gercek uygulama sayfasina uygulanir — bu yuzden calisma
+// zamaninda gercekten yuklenen TEK dis kaynak acikca izinli:
+//   - image.tmdb.org      -> dizi afisleri (img)
+// Kure dokulari (unpkg) ve ulke sinirlari GeoJSON'u (GitHub raw) B-06 kapsaminda public/map/
+// altina alindi; artik kendi origin'imizden geliyorlar, bu yuzden CSP'den cikarildilar.
+// styleSrc'ta 'unsafe-inline': React'in style={{...}} nitelikleri; scriptSrc'ta YOK.
+// upgradeInsecureRequests kapali: kurum ici HTTP dagitimini kirmasin (Secure cerez zaten
+// req.secure'a bagli, bkz. auth.js).
+app.use(
+  helmet({
+    contentSecurityPolicy: {
+      useDefaults: true,
+      directives: {
+        defaultSrc: ["'self'"],
+        scriptSrc: ["'self'"],
+        styleSrc: ["'self'", "'unsafe-inline'"],
+        // unpkg.com ve raw.githubusercontent.com KALDIRILDI: küre dokuları ve ülke sınırı
+        // GeoJSON'u artık public/map/ altında, uygulamanın kendi origin'inden geliyor
+        // (denetim B-06). Dışarıya kalan tek çalışma zamanı bağımlılığı TMDB afişleri.
+        imgSrc: ["'self'", 'data:', 'blob:', 'https://image.tmdb.org'],
+        connectSrc: ["'self'"],
+        workerSrc: ["'self'", 'blob:'],
+        objectSrc: ["'none'"],
+        frameAncestors: ["'self'"],
+        upgradeInsecureRequests: null,
+      },
+    },
+    // COEP acilirsa CORP basligi gondermeyen capraz-origin gorseller (TMDB afisleri)
+    // engellenir; kapatiyoruz.
+    crossOriginEmbedderPolicy: false,
+    // TMDB afisleri farkli origin'den geldigi icin same-origin degil, cross-origin kaynak
+    // paylasimina izin veren varsayilan gerekli.
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+  })
+)
+
+// Ters proxy (nginx/IIS) arkasında express-rate-limit her isteği proxy'nin IP'siyle görüyordu:
+// herhangi birinin 10 hatalı girişi TÜM kurumun girişini kilitliyor, 300 istek/15 dk kurum
+// geneline bölünüyordu (denetim G-02/B-07 — kendi kendine DoS). 1 hop varsayılıyor; proxy
+// yoksa X-Forwarded-For gelmeyeceği için davranış değişmez.
+app.set('trust proxy', 1)
+
+// CORS artık her origin'i credential ile yansıtmıyor (denetim G-03): üretimde yalnızca
+// APP_ORIGIN, geliştirmede yerel Vite portları. Vite dev sunucusu /api'yi aynı origin'den
+// proxy'lediği için normal geliştirme akışı zaten CORS'a takılmaz; bu liste doğrudan
+// tarayıcıdan başka bir origin ile bağlanan istisnalar içindir.
+const ALLOWED_ORIGINS = [
+  process.env.APP_ORIGIN,
+  ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173']),
+].filter(Boolean)
+
+// DİKKAT (canlı testte yakalandı): sunucu üretimde dist/'i de servis ediyor ve Vite'ın
+// ürettiği <script type="module" crossorigin> / <link crossorigin> etiketleri AYNI ORIGIN'e
+// giden isteklerde bile Origin başlığı gönderir. Bu yüzden isteğin KENDİ origin'i de her
+// zaman izinli olmalı — aksi halde uygulama kendi JS/CSS'ini 403 alır ve hiç açılmaz.
+// Bu yüzden basit `origin` listesi yerine req'e erişebilen delege biçimi kullanılıyor.
+app.use(
+  cors((req, callback) => {
+    const origin = req.headers.origin
+    const host = req.headers.host
+    const selfOrigins = host ? [`http://${host}`, `https://${host}`] : []
+    // Origin başlığı olmayan istekler (curl, sunucu-sunucu) zaten tarayıcı kaynaklı
+    // çapraz-site istekleri değildir, engellenmez.
+    if (!origin || selfOrigins.includes(origin) || ALLOWED_ORIGINS.includes(origin)) {
+      return callback(null, { origin: true, credentials: true })
+    }
+    const err = new Error('Bu origin için CORS izni yok')
+    err.status = 403 // aşağıdaki hata middleware'i bunu 500 değil 403 olarak döndürsün
+    callback(err)
+  })
+)
 // /api/visibility ~700KB ham JSON dönüyor (200 dizi × ülke başına tekrar eden
 // sinopsis metni) — gzip bunu ~6-7 kata kadar küçültüyor, gerçek darboğaz
 // sunucu hesaplaması değil (warm cache'te <150ms), aktarım boyutuydu.
@@ -178,6 +264,11 @@ app.post('/api/auth/change-password', (req, res) => {
   try {
     const { currentPassword, newPassword } = req.body || {}
     changeUserPassword(userId, currentPassword, newPassword)
+    // Şifre değişti → eski çerezler (başka cihaz/oturum) geçersiz olmalı; mevcut istemciye
+    // taze bir oturum verilir ki kullanıcı kendi kendini dışarı atmasın.
+    deleteSessionsForUser(userId)
+    const token = createSession(userId)
+    res.setHeader('Set-Cookie', sessionCookieHeader(token, SESSION_MAX_AGE_S))
     res.json({ ok: true })
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -186,8 +277,23 @@ app.post('/api/auth/change-password', (req, res) => {
 
 app.use('/api', (req, res, next) => {
   if (req.path.startsWith('/auth/')) return next()
-  if (isValidSession(req.cookies[COOKIE_NAME])) return next()
-  res.status(401).json({ error: 'Giriş gerekli' })
+  const userId = getSessionUserId(req.cookies[COOKIE_NAME])
+  if (!userId) return res.status(401).json({ error: 'Giriş gerekli' })
+
+  // Denetim G-05: oturum satırının varlığı tek başına yeterli değildi — silinmiş, reddedilmiş
+  // veya onayı geri alınmış bir kullanıcının çerezi 7 güne kadar geçerli kalıyordu. Her istekte
+  // kullanıcının HÂLÂ var ve 'approved' olduğu doğrulanıyor.
+  const user = getUser(userId)
+  if (!user || user.status !== 'approved') {
+    deleteSessionsForUser(userId)
+    res.setHeader('Set-Cookie', sessionCookieHeader('', 0))
+    return res.status(401).json({ error: 'Oturumunuz sonlandırıldı, lütfen tekrar giriş yapın' })
+  }
+
+  req.currentUser = user
+  // Ücretli çağrıların kullanıcı başına günlük kotaya yazılabilmesi için (bkz.
+  // services/liveCallQuota.js) — isteğin tüm asenkron zinciri bu bağlamda çalışır.
+  runWithUserContext(userId, next)
 })
 
 // Analist Paneli'ndeki sınıflandırma/destinasyon düzeltme ve onaylama
@@ -232,6 +338,7 @@ app.post('/api/admin/users/:id/approve', (req, res) => {
 app.post('/api/admin/users/:id/reject', (req, res) => {
   try {
     const entry = setUserStatus(req.params.id, 'rejected', req.currentUser.id)
+    deleteSessionsForUser(req.params.id) // reddedilen hesabın açık oturumu kalmasın
     res.json(publicUser(entry))
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -241,7 +348,7 @@ app.post('/api/admin/users/:id/reject', (req, res) => {
 app.post('/api/admin/users/:id/access-level', (req, res) => {
   try {
     const { accessLevel } = req.body || {}
-    const entry = setUserAccessLevel(req.params.id, accessLevel)
+    const entry = setUserAccessLevel(req.params.id, accessLevel, req.currentUser.id)
     res.json(publicUser(entry))
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -253,6 +360,7 @@ app.post('/api/admin/users/:id/access-level', (req, res) => {
 app.post('/api/admin/users/:id/reset-password', (req, res) => {
   try {
     const tempPassword = resetUserPassword(req.params.id)
+    deleteSessionsForUser(req.params.id) // eski şifreyle açılmış oturumlar da kapansın
     res.json({ tempPassword })
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -263,6 +371,7 @@ app.post('/api/admin/users/:id/reset-password', (req, res) => {
 app.post('/api/admin/users/:id/delete', (req, res) => {
   try {
     deleteUser(req.params.id, req.currentUser.id)
+    deleteSessionsForUser(req.params.id) // silinen kullanıcının çerezi anında geçersiz
     res.json({ ok: true })
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -343,24 +452,33 @@ app.get('/api/theme-insight', async (req, res) => {
   }
 })
 
+// try/catch BİLEREK: bu, projedeki tek try/catch'siz async rotaydı ve soğuk önbellekte TMDB
+// hata verdiğinde (intranette egress yoksa olası) reddedilen promise Express 4 tarafından
+// yutulup Node'un varsayılan --unhandled-rejections=throw davranışıyla SÜRECİ KAPATIYORDU
+// (denetim bulgusu B-01). Diğer tüm rotalarla aynı desene getirildi.
 app.get('/api/themes', async (req, res) => {
-  const raw = await getRawSeriesDataCached()
-  const liveIds = new Set(raw.series.map((s) => s.id))
-  const store = getThemeStore()
-  const list = Object.values(store)
-    .filter((entry) => liveIds.has(entry.id))
-    .map((entry) => ({
-      id: entry.id,
-      name: entry.name,
-      overview: entry.overview,
-      theme: entry.theme,
-      confidence: entry.confidence,
-      effectiveTheme: effectiveTheme(entry),
-      effectiveConfidence: effectiveConfidence(entry),
-      humanOverride: entry.humanOverride,
-    }))
-    .sort((a, b) => a.effectiveConfidence - b.effectiveConfidence)
-  res.json({ items: list })
+  try {
+    const raw = await getRawSeriesDataCached()
+    const liveIds = new Set(raw.series.map((s) => s.id))
+    const store = getThemeStore()
+    const list = Object.values(store)
+      .filter((entry) => liveIds.has(entry.id))
+      .map((entry) => ({
+        id: entry.id,
+        name: entry.name,
+        overview: entry.overview,
+        theme: entry.theme,
+        confidence: entry.confidence,
+        effectiveTheme: effectiveTheme(entry),
+        effectiveConfidence: effectiveConfidence(entry),
+        humanOverride: entry.humanOverride,
+      }))
+      .sort((a, b) => a.effectiveConfidence - b.effectiveConfidence)
+    res.json({ items: list })
+  } catch (err) {
+    console.error('[themes] hata:', err.message)
+    res.status(502).json({ error: err.message })
+  }
 })
 
 app.post('/api/themes/:seriesId/override', requireAdmin, (req, res) => {
@@ -522,12 +640,18 @@ app.get('/api/trends/series', async (req, res) => {
 // deseni "share-of-search"i sahte bir dizi adı sanıp önce yakalardı (gerçek bir bug olarak
 // yaşandı: SerpAPI'nin "share-of-search" diye bir dizi bulamaması gibi yanıltıcı bir hataya yol
 // açıyordu — aynı sebeple /api/trends/timeseries/:seriesName da spesifik önce gelmeli).
+// Aşağıdaki ücretli uçların HEPSİ, ham kullanıcı girdisini dış servise geçirmeden önce onu
+// canlı dizi listesine / geçerli ISO2 listesine karşı çözümler (denetim G-01). Bilinmeyen bir
+// değer 400 ile döner: ne SerpAPI çağrısı yapılır ne de o değerle yeni bir önbellek satırı açılır.
 app.get('/api/trends/share-of-search', async (req, res) => {
   try {
-    const titles = String(req.query.titles || '')
+    const rawTitles = String(req.query.titles || '')
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean)
+    const resolved = await resolveKnownSeriesNames(rawTitles)
+    if (!resolved.ok) return res.status(400).json({ error: `Bilinmeyen dizi: ${resolved.unknown}` })
+    const titles = resolved.titles
     const data = await calculateShareOfSearch(null, titles)
     res.json(data)
   } catch (err) {
@@ -540,11 +664,13 @@ app.get('/api/trends/share-of-search', async (req, res) => {
 // den ÖNCE tanımlı.
 app.get('/api/trends/regional-breakdown', async (req, res) => {
   try {
-    const titles = String(req.query.titles || '')
+    const rawTitles = String(req.query.titles || '')
       .split(',')
       .map((t) => t.trim())
       .filter(Boolean)
-    const data = await getRegionalBreakdown(titles)
+    const resolved = await resolveKnownSeriesNames(rawTitles)
+    if (!resolved.ok) return res.status(400).json({ error: `Bilinmeyen dizi: ${resolved.unknown}` })
+    const data = await getRegionalBreakdown(resolved.titles)
     res.json(data)
   } catch (err) {
     console.error('[trends/regional-breakdown] hata:', err.message)
@@ -557,9 +683,11 @@ app.get('/api/trends/regional-breakdown', async (req, res) => {
 // Aynı gerekçeyle (yukarıdaki not) /api/trends/:seriesName'den ÖNCE tanımlı.
 app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
   try {
-    const key = timeSeriesCacheKey(req.params.seriesName, null, 'today 12-m')
+    const seriesName = await resolveKnownSeriesName(req.params.seriesName)
+    if (!seriesName) return res.status(400).json({ error: 'Bilinmeyen dizi' })
+    const key = timeSeriesCacheKey(seriesName, null, 'today 12-m')
     const data = await cacheFirstSerpApi(key, TIMESERIES_TTL_MS, () =>
-      fetchTrendsTimeSeriesRaw(req.params.seriesName, null, 'today 12-m')
+      fetchTrendsTimeSeriesRaw(seriesName, null, 'today 12-m')
     )
     res.json(data)
   } catch (err) {
@@ -574,7 +702,8 @@ app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
 // gerekçeyle (yukarıdaki not) /api/trends/:seriesName'den ÖNCE tanımlı.
 app.get('/api/trends/insight/:seriesName', async (req, res) => {
   try {
-    const seriesName = req.params.seriesName
+    const seriesName = await resolveKnownSeriesName(req.params.seriesName)
+    if (!seriesName) return res.status(400).json({ error: 'Bilinmeyen dizi' })
     const key = timeSeriesCacheKey(seriesName, null, 'today 12-m')
     const timeseries = await cacheFirstSerpApi(key, TIMESERIES_TTL_MS, () =>
       fetchTrendsTimeSeriesRaw(seriesName, null, 'today 12-m')
@@ -589,7 +718,9 @@ app.get('/api/trends/insight/:seriesName', async (req, res) => {
 
 app.get('/api/trends/:seriesName', async (req, res) => {
   try {
-    const data = await queryTrends(req.params.seriesName)
+    const seriesName = await resolveKnownSeriesName(req.params.seriesName)
+    if (!seriesName) return res.status(400).json({ error: 'Bilinmeyen dizi' })
+    const data = await queryTrends(seriesName)
     res.json(data)
   } catch (err) {
     console.error('[trends] hata:', err.message)
@@ -599,7 +730,9 @@ app.get('/api/trends/:seriesName', async (req, res) => {
 
 app.get('/api/social/:seriesName', async (req, res) => {
   try {
-    const data = await querySocialListening(req.params.seriesName)
+    const seriesName = await resolveKnownSeriesName(req.params.seriesName)
+    if (!seriesName) return res.status(400).json({ error: 'Bilinmeyen dizi' })
+    const data = await querySocialListening(seriesName)
     res.json(data)
   } catch (err) {
     console.error('[social] hata:', err.message)
@@ -670,7 +803,10 @@ app.get('/api/person/:personId', async (req, res) => {
 
 app.get('/api/regional-interest/:seriesName/:iso2', async (req, res) => {
   try {
-    const data = await getRegionalInterest(req.params.seriesName, req.params.iso2)
+    const seriesName = await resolveKnownSeriesName(req.params.seriesName)
+    if (!seriesName) return res.status(400).json({ error: 'Bilinmeyen dizi' })
+    if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
+    const data = await getRegionalInterest(seriesName, normalizeIso2(req.params.iso2))
     res.json(data)
   } catch (err) {
     console.error('[regional-interest] hata:', err.message)
@@ -695,7 +831,8 @@ app.get('/api/media-sentiment/:seriesId/:iso2', async (req, res) => {
       res.status(404).json({ error: `${seriesId} kimlikli dizi için canlı veri bulunamadı` })
       return
     }
-    const data = await fetchAndAnalyzeSentiment(seriesId, series.name, null, req.params.iso2)
+    if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
+    const data = await fetchAndAnalyzeSentiment(seriesId, series.name, null, normalizeIso2(req.params.iso2))
     res.json(data)
   } catch (err) {
     console.error('[media-sentiment] hata:', err.message)
@@ -755,7 +892,8 @@ app.get('/api/series/:tmdbId', (req, res) => {
 // GET uçları gibi anlık değil — bu yüzden burada da aynı honest-502 deseni korunuyor.
 app.get('/api/country-leaderboard/:iso2', async (req, res) => {
   try {
-    const data = await calculateCountryCompositeScore(req.params.iso2)
+    if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
+    const data = await calculateCountryCompositeScore(normalizeIso2(req.params.iso2))
     res.json(data)
   } catch (err) {
     console.error('[country-leaderboard] hata:', err.message)
@@ -848,6 +986,28 @@ app.get('*', (req, res, next) => {
 })
 
 const port = process.env.PORT || 3001
+// Son savunma katmanı (denetim B-01/L3): yakalanmamış bir promise reddi ya da senkron
+// istisna SÜRECİ KAPATMASIN — loglanır, sunucu ayakta kalır. Express'in varsayılan hata
+// sayfası yerine JSON döndüren bir hata middleware'i de eklendi (istemci her zaman JSON
+// bekliyor; ayrıca üretim dışında stack trace sızdırmasın diye mesaj genel tutuldu).
+process.on('unhandledRejection', (reason) => {
+  console.error('[process] yakalanmamış promise reddi:', reason instanceof Error ? reason.message : reason)
+})
+process.on('uncaughtException', (err) => {
+  console.error('[process] yakalanmamış istisna:', err.message)
+})
+
+// eslint-disable-next-line no-unused-vars
+app.use((err, req, res, next) => {
+  // CORS reddi gibi BİLİNÇLİ retler kendi durum kodunu taşır (err.status) ve gerçek sebebini
+  // söyleyebilir; geri kalan her şey beklenmeyen bir hatadır → 500 + genel mesaj (denetim L3:
+  // üst servis hata metinleri/stack trace istemciye sızmasın).
+  const status = Number.isInteger(err.status) ? err.status : 500
+  console.error('[express] işlenmemiş hata:', err.message)
+  if (res.headersSent) return
+  res.status(status).json({ error: status === 500 ? 'Beklenmeyen bir sunucu hatası oluştu.' : err.message })
+})
+
 app.listen(port, () => {
   console.log(`Sunucu http://localhost:${port} adresinde çalışıyor`)
 })

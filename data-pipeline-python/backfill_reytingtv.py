@@ -45,7 +45,11 @@ def rollup_monthly(conn: sqlite3.Connection) -> dict[tuple[int, int, int], tuple
 
 
 def write_to_node_db(monthly: dict[tuple[int, int, int], tuple[float, int]]) -> None:
-    conn = sqlite3.connect(NODE_DB_PATH)
+    # Node sunucusu aynı dosyayı açık tutuyor (server/db.js) — zaman aşımı olmadan
+    # eşzamanlı yazma her iki tarafta da anında 'database is locked' veriyordu.
+    # Node tarafında da PRAGMA busy_timeout = 5000 var; ikisi simetrik.
+    conn = sqlite3.connect(NODE_DB_PATH, timeout=5.0)
+    conn.execute("PRAGMA busy_timeout = 5000")
     try:
         conn.executemany(
             """

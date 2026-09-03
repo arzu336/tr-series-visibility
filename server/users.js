@@ -35,6 +35,10 @@ const updateStatusStmt = db.prepare('UPDATE users SET status = ?, decided_at = ?
 const updateAccessLevelStmt = db.prepare('UPDATE users SET access_level = ?, is_admin = ? WHERE id = ?')
 const updatePasswordStmt = db.prepare('UPDATE users SET password_hash = ? WHERE id = ?')
 const deleteStmt = db.prepare('DELETE FROM users WHERE id = ?')
+// bkz. ensureBootstrapAdmin — hiç yönetici kalmadığında var olan hesabı kurtarır.
+const promoteToAdminStmt = db.prepare(
+  "UPDATE users SET is_admin = 1, access_level = 'admin', status = 'approved', decided_at = ? WHERE id = ?"
+)
 
 function rowToEntry(row) {
   return {
@@ -122,11 +126,26 @@ export function setUserStatus(id, status, decidedBy) {
   return getUser(id)
 }
 
-export function setUserAccessLevel(id, accessLevel) {
+// deleteUser ile AYNI iki kilit (denetim bulgusu G-04): silme yolu korunuyordu ama DÜŞÜRME
+// yolu açıktı — son yönetici kendini 'viewer' yapabiliyordu. Sonucu sadece kilitlenme değil,
+// açılışta çökme döngüsüydü: ensureBootstrapAdmin yönetici olmadığını görüp aynı ADMIN_EMAIL
+// ile INSERT deniyor, users.email UNIQUE kısıtına takılıyor ve hata index.js'te
+// yakalanmadığı için süreç her açılışta kapanıyordu (o taraf da aşağıda UPSERT'e çevrildi).
+export function setUserAccessLevel(id, accessLevel, requestingUserId) {
   if (!ACCESS_LEVELS.includes(accessLevel)) {
     throw new Error(`Geçersiz erişim düzeyi: ${accessLevel}`)
   }
-  if (!getUser(id)) throw new Error('Kullanıcı bulunamadı')
+  const user = getUser(id)
+  if (!user) throw new Error('Kullanıcı bulunamadı')
+  const isDemotion = user.isAdmin && accessLevel !== 'admin'
+  if (isDemotion) {
+    if (id === requestingUserId) {
+      throw new Error('Kendi yönetici yetkinizi kaldıramazsınız')
+    }
+    if (countAdminsStmt.get().n <= 1) {
+      throw new Error('Son yönetici hesabının yetkisi kaldırılamaz')
+    }
+  }
   updateAccessLevelStmt.run(accessLevel, accessLevel === 'admin' ? 1 : 0, id)
   return getUser(id)
 }
@@ -198,8 +217,21 @@ export function ensureBootstrapAdmin() {
     return
   }
   const email = normalizeEmail(process.env.ADMIN_EMAIL || 'admin@kurum.gov.tr')
-  const id = 'usr_' + crypto.randomBytes(12).toString('hex')
   const now = new Date().toISOString()
+
+  // E-posta zaten kayıtlıysa INSERT users.email UNIQUE kısıtına takılıp süreci çökertiyordu
+  // (denetim G-04). Bu durum "hiç yönetici yok AMA bu e-posta var" demektir — yani hesap
+  // düşürülmüş/reddedilmiştir; doğru kurtarma davranışı onu yeniden yönetici yapmaktır.
+  // ŞİFREYE DOKUNULMAZ: var olan hesabın şifresi .env'deki APP_PASSWORD ile sessizce
+  // değiştirilmez, sadece yetki/durum geri verilir.
+  const existing = findUserByEmail(email)
+  if (existing) {
+    promoteToAdminStmt.run(now, existing.id)
+    console.log(`[users] Yönetici kalmamıştı — mevcut hesap yeniden yönetici yapıldı: ${email}`)
+    return
+  }
+
+  const id = 'usr_' + crypto.randomBytes(12).toString('hex')
   insertStmt.run(id, 'Yönetici', email, 'Sistem Yöneticisi', hashPassword(password), 'approved', 1, 'admin', now, now, null)
   console.log(`[users] Bootstrap admin oluşturuldu: ${email}`)
 }

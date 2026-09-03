@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import Globe from 'globe.gl'
 import * as THREE from 'three'
 import { scoreToColor, brightenRgb } from '../lib/scale.js'
-import { fetchCountryGeoJSON } from '../lib/geo.js'
+import { fetchCountryGeoJSON, featureIso2 } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
 
 function displayName(feat) {
-  return turkishNames[feat.properties.ISO_A2]?.name || feat.properties.NAME
+  return turkishNames[featureIso2(feat)]?.name || feat.properties.NAME
 }
 
 const MIN_ALTITUDE = 0.006
@@ -73,9 +73,11 @@ export default function Globe3D({
   useEffect(() => {
     if (!containerRef.current) return
     const world = Globe()(containerRef.current)
-      .globeImageUrl('https://unpkg.com/three-globe/example/img/earth-night.jpg')
-      .bumpImageUrl('https://unpkg.com/three-globe/example/img/earth-topology.png')
-      .backgroundImageUrl('https://unpkg.com/three-globe/example/img/night-sky.png')
+      // Dokular eskiden unpkg.com'dan çalışma zamanında çekiliyordu — internet çıkışı olmayan
+      // kurumsal ağda küre dokusuz/siyah kalıyordu (denetim B-06). Artık public/map/ altında.
+      .globeImageUrl('/map/earth-night.jpg')
+      .bumpImageUrl('/map/earth-topology.png')
+      .backgroundImageUrl('/map/night-sky.png')
       .showAtmosphere(true)
       .atmosphereColor('#7fb6ff')
       .atmosphereAltitude(0.18)
@@ -172,7 +174,7 @@ export default function Globe3D({
       byIso2.set(c.iso2, { ...c, t })
     })
 
-    const matched = geoFeatures.filter((f) => byIso2.has(f.properties.ISO_A2)).length
+    const matched = geoFeatures.filter((f) => byIso2.has(featureIso2(f))).length
     if (matched === 0) {
       console.warn('[Globe3D] Hiçbir ülke sınırı verisiyle eşleşmedi (ISO_A2 kontrol edilmeli)')
     }
@@ -207,7 +209,7 @@ export default function Globe3D({
     world
       .polygonsData(geoFeatures)
       .polygonCapColor((f) => {
-        const iso2 = f.properties.ISO_A2
+        const iso2 = featureIso2(f)
         if (highlightByIso2) {
           const entry = highlightByIso2.get(iso2)
           return entry ? HIGHLIGHT_FILTER_COLOR : NO_DATA_COLOR
@@ -226,7 +228,7 @@ export default function Globe3D({
       })
       .polygonSideColor(() => 'rgba(20, 24, 38, 0.35)')
       .polygonStrokeColor((f) => {
-        const iso2 = f.properties.ISO_A2
+        const iso2 = featureIso2(f)
         // Öncelik sırası: oyuncu popülerlik ağı > seçili ülke > kıta vurgusu > hover > varsayılan.
         if (actorHighlightRef.current.has(iso2)) return STROKE_HIGHLIGHT
         if (iso2 === selectedIso2Ref.current) return STROKE_SELECTED
@@ -235,7 +237,7 @@ export default function Globe3D({
         return STROKE_DEFAULT
       })
       .polygonAltitude((f) => {
-        const c = byIso2.get(f.properties.ISO_A2)
+        const c = byIso2.get(featureIso2(f))
         if (!c) return 0.003
         // Proxy ülkelerin skoru sabit 0 → gerçek min/max'a göre t negatif çıkabilir, bu da
         // ülkeyi küre yüzeyinin altına gömerdi. Sabit, en düşük gerçek yükseklikte kalırlar.
@@ -244,7 +246,7 @@ export default function Globe3D({
       })
       .polygonLabel((f) => {
         const name = displayName(f)
-        const iso2 = f.properties.ISO_A2
+        const iso2 = featureIso2(f)
         if (highlightByIso2) {
           const entry = highlightByIso2.get(iso2)
           return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${entry ? `Görünürlük skoru: ${entry.score.toFixed(1)}` : 'Veri yok'}</div>`
@@ -268,9 +270,9 @@ export default function Globe3D({
         `
       })
       .onPolygonClick((f) => {
-        const c = byIso2.get(f.properties.ISO_A2)
+        const c = byIso2.get(featureIso2(f))
         if (!c) return
-        const geo = turkishNames[f.properties.ISO_A2]
+        const geo = turkishNames[featureIso2(f)]
         if (geo) {
           world.pointOfView({ lat: geo.lat, lng: geo.lng, altitude: FOCUS_ALTITUDE }, 1000)
         }

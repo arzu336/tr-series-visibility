@@ -2,6 +2,10 @@ import db from './db.js'
 import { getExternalIds } from './tmdb.js'
 import { getCached, setCached } from './cache.js'
 
+// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
+// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
+const EXTERNAL_TIMEOUT_MS = 15000
+
 const EXTERNAL_IDS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 gün — imdb_id neredeyse hiç değişmez
 const IMDB_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 gün — puan/oy/oyuncu listesi yavaş değişir
 
@@ -73,7 +77,7 @@ async function fetchFromOmdb(imdbId) {
   url.searchParams.set('i', imdbId)
   url.searchParams.set('apikey', apiKey)
 
-  const res = await fetch(url)
+  const res = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
   if (!res.ok) {
     throw new Error(`Veri isteği başarısız (${res.status})`)
   }

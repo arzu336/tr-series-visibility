@@ -1,5 +1,9 @@
 import db from './db.js'
 
+// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
+// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
+const EXTERNAL_TIMEOUT_MS = 15000
+
 const CACHE_KEY = 'turkish-learning-index'
 // Türkçe dizilerinin kültürel etkisini "Türkçe öğrenme ilgisi" üzerinden ölçmek için gerçek
 // Google Trends arama hacmi çekilen terimler — server/serpapi.js'teki queryTrends ile aynı
@@ -20,7 +24,7 @@ async function fetchRegionInterest(term, apiKey) {
   url.searchParams.set('hl', 'tr')
   url.searchParams.set('api_key', apiKey)
 
-  const res = await fetch(url)
+  const res = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
   if (!res.ok) {
     if (res.status === 429) {
       throw new Error('Aylık ücretsiz kota dolmuş görünüyor (429).')

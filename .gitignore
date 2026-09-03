@@ -2,3 +2,7 @@ node_modules
 dist
 .env
 server/data
+
+# Geliştirici makine yollarını sızdırdığı için (bkz. denetim G-17) log dosyaları
+# depoya girmez — çalıştırma çıktıları yerelde kalır.
+*.log

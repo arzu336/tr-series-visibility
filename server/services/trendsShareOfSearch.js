@@ -93,13 +93,21 @@ async function fetchRegionalBreakdownRaw(titles, timeframe) {
 }
 
 /**
- * Seçilen 2-5 dizinin DÜNYA GENELİNDE, ülke bazında karşılaştırmalı arama ilgisi — TEK bir
- * SerpAPI çağrısında (sabit 5 ülke değil, kullanıcı talebi: "en çok ilgi gören ilk 10 gerçek
- * ülke"). "En çok ilgi" = tüm seçilen dizilerin o ülkedeki değerlerinin TOPLAMI (tek bir dizinin
- * baskın çıkıp diğerlerini gölgelemesini önlemek için) — sıralanıp ilk N alınır.
- * countryCountByTitle da AYNI yanıttan (tam, kırpılmamış satır kümesinden) çıkar — her dizi için
- * ayrı bir tekil-sorgu (GEO_MAP_0) çağrısına gerek KALMAZ, ComparisonView.jsx'in "Taranan Ülke
- * Sayısı" metriği de bu tek çağrıyı paylaşır.
+ * Seçilen 2-5 dizinin ülke bazında karşılaştırmalı arama PAYI — TEK bir SerpAPI çağrısıyla.
+ *
+ * ÖNEMLİ ÖLÇEK NOTU (denetim bulgusu D.4-1, canlı veriyle doğrulandı): SerpAPI'nin
+ * `compared_breakdown_by_region` alanı MUTLAK ilgi değil, her ülke İÇİNDE karşılaştırılan
+ * terimler arasındaki YÜZDE PAYIDIR — önbellekteki gerçek yanıtlarda her ülkenin değerleri
+ * toplamı istisnasız 100 çıkıyor. Bu yüzden eski "totalInterest = Σ values" hesabı her ülke
+ * için sabit 100 üretiyordu ve ona göre yapılan "en çok ilgi gören ilk 10 ülke" sıralaması
+ * hiçbir şey ifade etmiyordu (sıralama fiilen SerpAPI'nin kendi sırasını koruyordu).
+ *
+ * Artık sıralama, LİSTEDEKİ İLK dizinin o ülkedeki payına göre azalan yapılır — yani
+ * "birinci dizi hangi ülkelerde rakiplerine göre en baskın?" sorusunun gerçek cevabı.
+ * Ülkeler arası mutlak hacim KARŞILAŞTIRILAMAZ; arayüz de bunu böyle etiketler.
+ *
+ * countryCountByTitle: o dizinin SIFIR OLMAYAN bir pay aldığı ülke sayısı (erişim/izlenme
+ * değil) — aynı yanıttan çıkar, ek çağrı gerektirmez.
  */
 export async function getRegionalBreakdown(titles, n = 10, timeframe = 'today 12-m') {
   if (!Array.isArray(titles) || titles.length < 2) {
@@ -111,12 +119,32 @@ export async function getRegionalBreakdown(titles, n = 10, timeframe = 'today 12
   const key = regionalBreakdownCacheKey(titles)
   const result = await cacheFirstSerpApi(key, TRENDS_TTL_MS, () => fetchRegionalBreakdownRaw(titles, timeframe))
 
-  const allRows = result.rows.map((row) => ({ ...row, totalInterest: row.values.reduce((sum, v) => sum + v.value, 0) }))
-  const topRows = [...allRows].sort((a, b) => b.totalInterest - a.totalInterest).slice(0, n)
+  const primaryTitle = titles[0]
+  const shareOf = (row, title) => row.values.find((v) => v.title === title)?.value ?? 0
+  const allRows = result.rows
+  // Sıralama ölçütü: ilk seçilen dizinin o ülkedeki payı (eşitlikte ikinci dizininki, vb.) —
+  // sabit 100 olan toplam değil (bkz. yukarıdaki ölçek notu).
+  const topRows = [...allRows]
+    .sort((a, b) => {
+      for (const title of titles) {
+        const diff = shareOf(b, title) - shareOf(a, title)
+        if (diff !== 0) return diff
+      }
+      return 0
+    })
+    .slice(0, n)
+
   const countryCountByTitle = {}
   for (const title of titles) {
-    countryCountByTitle[title] = allRows.filter((row) => (row.values.find((v) => v.title === title)?.value ?? 0) > 0).length
+    countryCountByTitle[title] = allRows.filter((row) => shareOf(row, title) > 0).length
   }
 
-  return { titles, timeframe: result.timeframe, queriedAt: result.queriedAt, topRows, countryCountByTitle }
+  return {
+    titles,
+    primaryTitle,
+    timeframe: result.timeframe,
+    queriedAt: result.queriedAt,
+    topRows,
+    countryCountByTitle,
+  }
 }

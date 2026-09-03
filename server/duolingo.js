@@ -1,6 +1,10 @@
 import { getCached, setCached } from './cache.js'
 import { getDuolingoTrend, maybeRecordDuolingoSnapshot } from './duolingo-history.js'
 
+// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
+// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
+const EXTERNAL_TIMEOUT_MS = 15000
+
 const DUOLINGO_COURSES_URL = 'https://www.duolingo.com/api/1/courses/list'
 const RAW_CACHE_KEY = 'duolingo-courses'
 const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 saat — data-pipeline.js'teki aynı TTL
@@ -14,7 +18,7 @@ async function fetchCourses() {
   const cached = getCached(RAW_CACHE_KEY)
   if (cached) return cached
 
-  const res = await fetch(DUOLINGO_COURSES_URL)
+  const res = await fetch(DUOLINGO_COURSES_URL, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
   if (!res.ok) {
     throw new Error(`Veri isteği başarısız (${res.status})`)
   }

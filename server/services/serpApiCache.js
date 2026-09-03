@@ -1,5 +1,10 @@
 import db from '../db.js'
+import { chargeCurrentUserForLiveCall } from './liveCallQuota.js'
 import { resolveIso2FromLabel } from './countryLookup.js'
+
+// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
+// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
+const EXTERNAL_TIMEOUT_MS = 15000
 
 // Proje raporu §4.6 "Cache & Performans" — SerpAPI (Trends/Social) için TEK, disiplinli bir
 // TTL katmanı. server/serpapi.js, server/regional-interest.js ve server/social-listening.js
@@ -165,12 +170,23 @@ export async function serpapiGet(params) {
     throw new Error(`Aylık kota dolmuş görünüyor (429). (${reserved - 1}/${budget})`)
   }
 
+  // Kurum bütçesinin yanına KULLANICI BAŞINA günlük sınır (denetim G-01/B-15). Buraya
+  // gelinmişse gerçekten dışarıya çıkan bir çağrı yapılacak demektir — önbellekten dönen
+  // istekler serpapiGet'e hiç uğramadığı için ücretsiz kalmaya devam eder.
+  let releaseUserCall
+  try {
+    releaseUserCall = chargeCurrentUserForLiveCall()
+  } catch (err) {
+    releaseUsageStmt.run(monthKey)
+    throw err
+  }
+
   try {
     const url = new URL('https://serpapi.com/search.json')
     for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v)
     url.searchParams.set('api_key', apiKey)
 
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
     if (!res.ok) {
       if (res.status === 429) {
         throw new Error('Aylık kota dolmuş görünüyor (429).')
@@ -183,7 +199,9 @@ export async function serpapiGet(params) {
     }
     return data
   } catch (err) {
+    // Başarısız çağrı ne kurum bütçesinden ne de kullanıcının günlük kotasından düşer.
     releaseUsageStmt.run(monthKey)
+    releaseUserCall()
     throw err
   }
 }
@@ -323,12 +341,35 @@ export function localizedSocialCacheKey(seriesName, iso2) {
   return `serp:social-local:${normalizeSeriesKey(seriesName)}::${iso2.toUpperCase()}`
 }
 
+// Denetim bulgusu B-05: bu iki fonksiyon alt çağrı hatalarını `{error}` nesnesine çevirip
+// döndürüyordu; cacheFirstSerpApi bunu BAŞARILI bir sonuç sanıp 30 GÜN kalıcı yazıyordu. Sonuç:
+// "kota doldu"/"anahtar yok" gibi geçici bir hata bir ay boyunca "taze veri" gibi davranıyor,
+// socialEnricher `fromCache:true` görüp bir daha denemiyordu. Yeni davranış:
+//   - hata `{error}` olarak ASLA kalıcı yazılmaz (null'a çevrilir),
+//   - İKİ yarı da başarısızsa fırlatılır → cacheFirstSerpApi hiçbir şey yazmaz, varsa eski
+//     (stale) kaydı döndürür; yoksa hata yukarı çıkar,
+//   - yalnızca biri başarısızsa diğerinin gerçek verisi normal TTL ile yazılır (yarısı boş bir
+//     kayıt, hiç kayıt olmamasından iyidir ve bir sonraki turda tazelenir).
+function settleHalf(result) {
+  if (result.status === 'fulfilled') return { value: result.value, error: null }
+  return { value: null, error: result.reason?.message || String(result.reason) }
+}
+
+function combineSocialHalves(base, kgResult, ytResult) {
+  const kg = settleHalf(kgResult)
+  const yt = settleHalf(ytResult)
+  if (kg.error && yt.error) {
+    throw new Error(`Sosyal dinleme çağrılarının ikisi de başarısız: ${kg.error} / ${yt.error}`)
+  }
+  return { ...base, queriedAt: new Date().toISOString(), knowledgeGraph: kg.value, youtube: yt.value }
+}
+
 export async function fetchLocalizedSocialListeningRaw(seriesName, iso2) {
-  const [knowledgeGraph, youtube] = await Promise.all([
-    fetchLocalizedKnowledgeGraphRaw(seriesName, iso2).catch((err) => ({ error: err.message })),
-    fetchLocalizedYouTubeRaw(seriesName, iso2).catch((err) => ({ error: err.message })),
+  const [kgResult, ytResult] = await Promise.allSettled([
+    fetchLocalizedKnowledgeGraphRaw(seriesName, iso2),
+    fetchLocalizedYouTubeRaw(seriesName, iso2),
   ])
-  return { seriesName, iso2: iso2.toUpperCase(), queriedAt: new Date().toISOString(), knowledgeGraph, youtube }
+  return combineSocialHalves({ seriesName, iso2: iso2.toUpperCase() }, kgResult, ytResult)
 }
 
 // "fragman" sorgusu genelde en yüksek izlenmeli sonuç olarak "1. Bölüm Fragmanı" (tek bölümlük,
@@ -358,11 +399,11 @@ async function fetchYouTubeRaw(seriesName) {
 }
 
 export async function fetchSocialListeningRaw(seriesName) {
-  const [knowledgeGraph, youtube] = await Promise.all([
-    fetchKnowledgeGraphRaw(seriesName).catch((err) => ({ error: err.message })),
-    fetchYouTubeRaw(seriesName).catch((err) => ({ error: err.message })),
+  const [kgResult, ytResult] = await Promise.allSettled([
+    fetchKnowledgeGraphRaw(seriesName),
+    fetchYouTubeRaw(seriesName),
   ])
-  return { seriesName, queriedAt: new Date().toISOString(), knowledgeGraph, youtube }
+  return combineSocialHalves({ seriesName }, kgResult, ytResult)
 }
 
 // google_news SerpAPI motoru — server/services/newsSentiment.js tarafından kullanılır. Kendi

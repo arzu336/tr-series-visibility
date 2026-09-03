@@ -1,5 +1,9 @@
 import { mapWithConcurrency } from './utils/concurrency.js'
 
+// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
+// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
+const EXTERNAL_TIMEOUT_MS = 15000
+
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const TOP_N_SERIES = 400
 const PAGE_SIZE = 20
@@ -31,7 +35,7 @@ async function tmdbGet(path, params = {}) {
 
   let lastError
   for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
-    const res = await fetch(url)
+    const res = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
     if (res.ok) return res.json()
 
     lastError = new Error(`Veri isteği başarısız: ${path} (${res.status})`)
@@ -66,9 +70,18 @@ async function getTopSeriesByOrigin(originCountry, originalLanguage, n = TOP_N_S
     seen.add(show.id)
     return true
   })
+  // TMDB'nin `name` alanı İSTENEN language parametresine (tr-TR) göre yerelleştirilmiş bir
+  // başlık döner — ama bu, crowdsourced bir veritabanı: bazı dizilerde tr-TR çevirisi hiç
+  // girilmemiş/yanlış girilmiş olabiliyor (canlı doğrulandı: id 242551 "Rüzgarlı Tepe",
+  // TMDB'nin tr-TR `name` alanı yanlışlıkla Arapça "تل الرياح" dönüyor, original_name ise
+  // doğru Türkçe başlığı veriyor). `original_name` locale'e bakmaksızın dizinin GERÇEK
+  // orijinal-dil başlığıdır ve zaten with_original_language=originalLanguage ile filtrelendiği
+  // için (bu fonksiyonun tek çağrı yeri de dahil, bkz. getRawSeriesData/benchmark.js) bu alan
+  // her zaman istenen dilde — bu yüzden `name` yerine önceliklendirildi, yalnızca boşsa
+  // (olağanüstü bir durum) `name`'e düşülür.
   return results.slice(0, n).map((show) => ({
     id: show.id,
-    name: show.name,
+    name: show.original_name || show.name,
     popularity: show.popularity,
     posterPath: show.poster_path,
     firstAirDate: show.first_air_date || null,

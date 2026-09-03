@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath } from 'd3-geo'
 import { scoreToColor } from '../lib/scale.js'
-import { fetchCountryGeoJSON } from '../lib/geo.js'
+import { fetchCountryGeoJSON, featureIso2 } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
 
 function displayName(feat) {
-  return turkishNames[feat.properties.ISO_A2]?.name || feat.properties.NAME
+  return turkishNames[featureIso2(feat)]?.name || feat.properties.NAME
 }
 
 // Lowy Institute paleti: koyu mat lacivert taban (veri yoksa) — koyu okyanus zemininden
@@ -158,7 +158,7 @@ export default function Map2D({
           style={{ transform: `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.scale})` }}
         >
           {features.map((f) => {
-            const iso2 = f.properties.ISO_A2
+            const iso2 = featureIso2(f)
             const c = byIso2.get(iso2)
             const d = path(f)
             if (!d) return null
@@ -195,7 +195,7 @@ export default function Map2D({
                   : NO_DATA_COLOR
             return (
               <path
-                key={iso2 || f.properties.NAME}
+                key={iso2 || f.properties.ADM0_A3 || f.properties.NAME}
                 d={d}
                 fill={fill}
                 className={className}
@@ -217,7 +217,7 @@ export default function Map2D({
         <div className="map2d__tooltip" style={{ left: tooltipPos.x + 12, top: tooltipPos.y + 12 }}>
           {(() => {
             const name = displayName(hovered)
-            const iso2 = hovered.properties.ISO_A2
+            const iso2 = featureIso2(hovered)
             if (highlightByIso2) {
               const entry = highlightByIso2.get(iso2)
               return (

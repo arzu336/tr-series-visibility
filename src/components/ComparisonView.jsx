@@ -55,8 +55,11 @@ function Head2HeadCard({ card, isRatingLeader, isShareLeader, isCountryLeader })
           </span>
         </div>
         <div className="h2h-card__metric">
-          <span className="h2h-card__metric-label" title="Google Trends'e göre gerçek arama ilgisi ölçülen ülke sayısı">
-            Taranan Ülke Sayısı
+          <span
+            className="h2h-card__metric-label"
+            title="Karşılaştırmalı Google Trends verisinde bu dizinin sıfırdan büyük bir arama payı aldığı ülke sayısı — erişim/izlenme değil"
+          >
+            Pay Aldığı Ülke Sayısı
           </span>
           <span className="h2h-card__metric-value">
             {card.countryCount ?? '—'}
@@ -68,10 +71,12 @@ function Head2HeadCard({ card, isRatingLeader, isShareLeader, isCountryLeader })
   )
 }
 
-// Kullanıcı talebi: sabit 5 ülke yerine, seçilen dizilerin compared_breakdown_by_region
-// verisinden (server/services/trendsShareOfSearch.js'teki getRegionalBreakdown, TEK SerpAPI
-// çağrısı) en çok TOPLAM ilgi gören ilk 10 GERÇEK ülke. topRows zaten sıralı/kırpılmış gelir —
-// burada sadece çiziliyor.
+// TEK SerpAPI çağrısından (getRegionalBreakdown) gelen `compared_breakdown_by_region` verisi.
+// DÜRÜSTLÜK NOTU: bu değerler mutlak ilgi DEĞİL, her ülke İÇİNDE karşılaştırılan diziler
+// arasındaki yüzde payıdır (bir ülkenin satırındaki değerler toplamı 100). Bu yüzden:
+// (1) çubuk genişliği doğrudan yüzdedir, satır içi bir maksimuma göre değil;
+// (2) değerler "%" ile yazılır; (3) ülkeler arası mutlak hacim karşılaştırması yapılmaz —
+// sıralama, ilk seçilen dizinin payına göredir (bkz. trendsShareOfSearch.js).
 function RegionalDominanceTable({ topRows, cards }) {
   if (topRows.length === 0) {
     return <p className="dashboard__empty">Seçilen diziler için ülke bazlı karşılaştırma verisi bulunamadı.</p>
@@ -79,7 +84,6 @@ function RegionalDominanceTable({ topRows, cards }) {
   return (
     <div className="regional-dominance">
       {topRows.map((row) => {
-        const maxValue = Math.max(1, ...row.values.map((v) => v.value))
         return (
           <div key={row.iso2} className="regional-dominance__row">
             <div className="regional-dominance__label">{row.location || row.iso2}</div>
@@ -88,12 +92,12 @@ function RegionalDominanceTable({ topRows, cards }) {
                 const value = row.values.find((v) => v.title === c.name)?.value ?? 0
                 return (
                   <div key={c.id} className="regional-dominance__bar-row">
-                    <div className="regional-dominance__bar-track" title={`${c.name}: ${value}`}>
-                      <div className="regional-dominance__bar" style={{ width: `${(value / maxValue) * 100}%`, background: c.color }} />
+                    <div className="regional-dominance__bar-track" title={`${c.name}: %${value}`}>
+                      <div className="regional-dominance__bar" style={{ width: `${value}%`, background: c.color }} />
                     </div>
-                    {/* Değer görünür yazılıyor — bar sıfır genişlikte olduğunda (gerçekten ölçülmüş
-                        ilgi yoksa) boş bir çubuk "bozuk" gibi görünmesin, dürüstçe "0" yazsın. */}
-                    <span className="regional-dominance__bar-value">{value}</span>
+                    {/* Değer görünür yazılıyor — bar sıfır genişlikteyken (o ülkede bu diziye
+                        düşen pay yoksa) boş bir çubuk "bozuk" gibi görünmesin, dürüstçe %0 yazsın. */}
+                    <span className="regional-dominance__bar-value">%{value}</span>
                   </div>
                 )
               })}
@@ -252,7 +256,11 @@ export default function ComparisonView({ seriesList }) {
           </section>
 
           <section className="dashboard__section">
-            <h3 className="dashboard__section-title">Bölgesel Üstünlük — En Çok İlgi Gören İlk 10 Ülke</h3>
+            <h3 className="dashboard__section-title">Karşılaştırılan Dizilerin Ülke İçi İlgi Payı</h3>
+            <p className="dashboard__hint">
+              Google Trends karşılaştırmalı verisi — seçilen ülkede bu diziler arasındaki arama payı
+              dağılımını gösterir (ülke toplamı %100). Ülkeler, listedeki ilk dizinin payına göre sıralanır.
+            </p>
             <RegionalDominanceTable topRows={regionalRows} cards={cards} />
           </section>
         </>

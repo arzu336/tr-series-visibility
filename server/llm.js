@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { chargeCurrentUserForLiveCall } from './services/liveCallQuota.js'
 import path from 'node:path'
 import tls from 'node:tls'
 import { fileURLToPath } from 'node:url'
@@ -48,6 +49,11 @@ async function callLLMForJson(prompt, maxTokens = 300) {
   if (!baseUrl || !model) {
     throw new Error('LLM_BASE_URL / LLM_MODEL tanımlı değil (.env dosyasını kontrol et)')
   }
+
+  // Kullanıcı başına günlük canlı çağrı kotası (denetim G-01): LLM de ücretli/sınırlı bir
+  // kaynak. Yeniden denemeler tek bir mantıksal çağrı sayılır — döngünün DIŞINDA bir kez ücret
+  // işlenir. Scheduler gibi kullanıcısız bağlamlarda bu bir no-op'tur.
+  const releaseUserCall = chargeCurrentUserForLiveCall()
 
   let lastError
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {

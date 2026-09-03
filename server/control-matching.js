@@ -1,5 +1,9 @@
 import { getCached, setCached } from './cache.js'
 
+// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
+// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
+const EXTERNAL_TIMEOUT_MS = 15000
+
 // GSYH/gelir grubu/bölge sınıflandırması sık değişmez — 30 günlük cache yeterli
 // ve World Bank'ın günlük istek limitini boşuna zorlamaz.
 const WB_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
@@ -7,7 +11,7 @@ const META_CACHE_KEY = 'worldbank-country-meta'
 const GDP_CACHE_KEY = 'worldbank-gdp-per-capita'
 
 async function fetchWorldBankJson(url) {
-  const res = await fetch(url)
+  const res = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`World Bank isteği başarısız (${res.status})`)
   return res.json()
 }
