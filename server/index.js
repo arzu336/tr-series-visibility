@@ -138,13 +138,27 @@ app.use(
 app.set('trust proxy', 1)
 
 // CORS artık her origin'i credential ile yansıtmıyor (denetim G-03): üretimde yalnızca
-// APP_ORIGIN, geliştirmede yerel Vite portları. Vite dev sunucusu /api'yi aynı origin'den
-// proxy'lediği için normal geliştirme akışı zaten CORS'a takılmaz; bu liste doğrudan
-// tarayıcıdan başka bir origin ile bağlanan istisnalar içindir.
-const ALLOWED_ORIGINS = [
-  process.env.APP_ORIGIN,
-  ...(process.env.NODE_ENV === 'production' ? [] : ['http://localhost:5173', 'http://127.0.0.1:5173']),
-].filter(Boolean)
+// APP_ORIGIN (+ isteğin kendi origin'i), geliştirmede yerel/LAN origin'leri. Vite dev sunucusu
+// /api'yi aynı origin'den proxy'lediği için normal geliştirme akışı zaten CORS'a takılmaz; bu
+// izin doğrudan tarayıcıdan başka bir origin ile bağlanan durumlar içindir.
+const IS_PRODUCTION = process.env.NODE_ENV === 'production'
+const ALLOWED_ORIGINS = [process.env.APP_ORIGIN].filter(Boolean)
+
+// Geliştirmede sabit ['http://localhost:5173', 'http://127.0.0.1:5173'] listesi çok dardı:
+// Vite 5173 doluyken 5174'e düşüyor, tarayıcı bazen `[::1]` (IPv6 loopback) kullanıyor, telefondan
+// test için `--host` ile LAN IP'si gerekiyor ve VS Code'un yerleşik önizleme penceresi de başka bir
+// port açıyor. Bunların hepsi geçerli geliştirme senaryosu ama listede olmadıkları için 403
+// alıyorlardı (canlı olarak yaşandı). Artık liste yerine DESEN: sadece loopback ve özel LAN
+// aralıkları, herhangi bir portta. Genel internetteki hiçbir origin buraya uymaz.
+// ÜRETİMDE (NODE_ENV=production) devrede DEĞİL — orada yalnızca APP_ORIGIN + isteğin kendi
+// origin'i geçerlidir, denetim G-03'ün gerektirdiği sıkılık aynen korunur.
+const LOCAL_DEV_ORIGIN_RE =
+  /^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/
+
+function isAllowedOrigin(origin, selfOrigins) {
+  if (selfOrigins.includes(origin) || ALLOWED_ORIGINS.includes(origin)) return true
+  return !IS_PRODUCTION && LOCAL_DEV_ORIGIN_RE.test(origin)
+}
 
 // DİKKAT (canlı testte yakalandı): sunucu üretimde dist/'i de servis ediyor ve Vite'ın
 // ürettiği <script type="module" crossorigin> / <link crossorigin> etiketleri AYNI ORIGIN'e
@@ -158,9 +172,12 @@ app.use(
     const selfOrigins = host ? [`http://${host}`, `https://${host}`] : []
     // Origin başlığı olmayan istekler (curl, sunucu-sunucu) zaten tarayıcı kaynaklı
     // çapraz-site istekleri değildir, engellenmez.
-    if (!origin || selfOrigins.includes(origin) || ALLOWED_ORIGINS.includes(origin)) {
+    if (!origin || isAllowedOrigin(origin, selfOrigins)) {
       return callback(null, { origin: true, credentials: true })
     }
+    // Red sessizdi: kullanıcı tarayıcıda "CORS izni yok" görüyor, sunucuda HANGİ origin'in
+    // reddedildiğine dair hiçbir iz kalmıyordu — teşhis edilemez bir hata sınıfı.
+    console.warn(`[cors] Reddedilen origin: ${origin} (host: ${host || 'yok'})`)
     const err = new Error('Bu origin için CORS izni yok')
     err.status = 403 // aşağıdaki hata middleware'i bunu 500 değil 403 olarak döndürsün
     callback(err)
