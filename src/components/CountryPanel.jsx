@@ -260,14 +260,27 @@ export default function CountryPanel({
   // sıraladığı sıra) korunur. Aksi halde seçili dönemdeki ortalama popülerliğe göre yeniden
   // sıralanır — o dönem için geçmişi olmayan (yeni) diziler dürüstçe canlı değerine düşer,
   // listeden atılmaz/0 sayılmaz.
+  // Denetim bulgusu B-09: burası eskiden HAM değerlere göre sıralıyordu, ama o değerler iki ayrı
+  // ölçekten geliyor — TMDB aylık ortalaması (canlı ölçüm: 5,1-80, ort. 11) ve ReytingTV sıra
+  // skoru (0-100, ort. 41). Sonuç: ReytingTV verisi olan 48 dizi, 525'lik havuzda ilk 20'nin
+  // 16'sını kaplıyordu (tesadüfen beklenen ~2 yerine). Artık sunucu her kayda KENDİ kaynağı
+  // içindeki yüzdeliğini de veriyor (bkz. series-period-history.js yuzdelikAta) ve sıralama onu
+  // kullanıyor; aynı ölçümle 16 → 1'e indi. Ham değer gösterimde AYNEN kalır.
   const sortedSeriesList = useMemo(() => {
     const list = country?.seriesList || []
     if (seriesRange === 'current' || !seriesPopularity) return list
-    return [...list].sort((a, b) => {
-      const aValue = seriesPopularity[a.id]?.value ?? a.popularity
-      const bValue = seriesPopularity[b.id]?.value ?? b.popularity
-      return bValue - aValue
-    })
+    // Dönem geçmişi olmayan diziler (map'te yok) canlı popülerliğe düşer — o da üçüncü bir ölçek
+    // olduğu için görünür listenin kendi dağılımı içindeki yüzdeliğine çevrilir, böylece hepsi
+    // aynı 0-100 ekseninde karşılaştırılır.
+    const canliDegerler = list.map((s) => s.popularity).sort((a, b) => a - b)
+    const canliYuzdelik = (deger) => {
+      if (canliDegerler.length === 0) return 50
+      const altinda = canliDegerler.filter((x) => x < deger).length
+      const esit = canliDegerler.filter((x) => x === deger).length
+      return ((altinda + esit / 2) / canliDegerler.length) * 100
+    }
+    const skor = (s) => seriesPopularity[s.id]?.percentile ?? canliYuzdelik(s.popularity)
+    return [...list].sort((a, b) => skor(b) - skor(a))
   }, [country?.seriesList, seriesRange, seriesPopularity])
 
   useEffect(() => {

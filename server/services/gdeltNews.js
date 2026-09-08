@@ -132,32 +132,70 @@ const ISO2_TO_FIPS = {
 
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
 
-/** Beklenen İngilizce ülke adı — yanıttaki `sourcecountry` bununla doğrulanır. */
-function beklenenUlkeAdi(iso2) {
+// Karşılaştırma normalize edilerek yapılır: küçük harf, aksan ayrıştırma, harf/rakam dışını atma.
+// Böylece yalnızca noktalama/ayraç farkı olan yazımlar (GDELT "Bosnia-Herzegovina" ↔ Intl
+// "Bosnia & Herzegovina") elle alias yazmadan eşleşir.
+function normalizeAd(value) {
+  return String(value || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[^a-z0-9]/g, '')
+}
+
+// GDELT ülke adları FIPS 10-4 dönemine ait; `Intl.DisplayNames`'in GÜNCEL adlarıyla bazı ülkelerde
+// ayrışıyor. CANLI YANITLA ÖLÇÜLDÜ (75 makalelik filtresiz bir sorgudan dönen 22 ülke): katı ad
+// eşitliği bunların 4'ünü reddediyordu — normalizasyon Bosna'yı kurtardı, aşağıdaki üç ülke ise
+// gerçekten farklı isimlendiriliyor. En kritiği TÜRKİYE: Intl "Türkiye" döner, GDELT "Turkey"
+// yazar; bu tablo olmasaydı TR için gelen her makale sessizce elenirdi.
+// Buradaki her girdi aynı ülkenin BİLİNEN başka bir yazımıdır — uydurma eşleştirme yoktur.
+const GDELT_AD_ISTISNALARI = {
+  TR: ['Turkey'],
+  SK: ['Slovak Republic'],
+  MK: ['Macedonia'],
+  GB: ['UK'],
+  US: ['United States of America', 'USA'],
+  RU: ['Russian Federation'],
+  KR: ['Korea, South', 'South Korea'],
+  KP: ['Korea, North', 'North Korea'],
+  CZ: ['Czech Republic'],
+  MM: ['Burma'],
+  AE: ['UAE'],
+  CD: ['Congo, Democratic Republic of the', 'Congo Kinshasa'],
+  CG: ['Congo, Republic of the', 'Congo Brazzaville'],
+  LA: ['Laos'],
+  SY: ['Syria'],
+  VN: ['Vietnam'],
+  IR: ['Iran'],
+  MD: ['Moldova'],
+  TZ: ['Tanzania'],
+  VE: ['Venezuela'],
+  BO: ['Bolivia'],
+  CI: ['Cote dIvoire', "Cote d'Ivoire", 'Ivory Coast'],
+  CV: ['Cape Verde'],
+  TL: ['East Timor', 'Timor-Leste'],
+  SZ: ['Swaziland', 'Eswatini'],
+}
+
+/**
+ * Bir ISO2 için GDELT yanıtında kabul edilebilir ülke adlarının normalize kümesi.
+ * Boş küme dönerse (tanınmayan kod) doğrulama yapılamaz demektir.
+ */
+function kabulEdilenAdlar(iso2) {
+  const kod = String(iso2).toUpperCase()
+  const kume = new Set()
   try {
-    const ad = regionNames.of(iso2.toUpperCase())
-    return ad && ad !== iso2.toUpperCase() ? ad : null
+    const intlAdi = regionNames.of(kod)
+    if (intlAdi && intlAdi !== kod) kume.add(normalizeAd(intlAdi))
   } catch {
-    return null
+    // Geçersiz kod — aşağıdaki istisna tablosu yine de bir şey verebilir.
   }
+  for (const ad of GDELT_AD_ISTISNALARI[kod] || []) kume.add(normalizeAd(ad))
+  return kume
 }
 
-// GDELT bazı ülkeleri kendi kısa adıyla yazıyor ve Intl'in resmî adıyla birebir tutmayabilir.
-// Bunlar UYDURMA eşleşme değil, aynı ülkenin bilinen yazım varyantları.
-const ULKE_ADI_ESLERI = {
-  'United Kingdom': ['United Kingdom', 'UK'],
-  'United States': ['United States', 'United States of America', 'USA'],
-  Russia: ['Russia', 'Russian Federation'],
-  'South Korea': ['South Korea', 'Korea, South', 'Republic of Korea'],
-  Czechia: ['Czechia', 'Czech Republic'],
-  'Bosnia & Herzegovina': ['Bosnia & Herzegovina', 'Bosnia and Herzegovina'],
-  'United Arab Emirates': ['United Arab Emirates', 'UAE'],
-}
-
-function ulkeEslesiyorMu(sourcecountry, beklenen) {
-  if (!sourcecountry || !beklenen) return false
-  const kabul = ULKE_ADI_ESLERI[beklenen] || [beklenen]
-  return kabul.some((a) => a.toLowerCase() === String(sourcecountry).toLowerCase())
+function ulkeEslesiyorMu(sourcecountry, kabulKumesi) {
+  if (!sourcecountry || kabulKumesi.size === 0) return false
+  return kabulKumesi.has(normalizeAd(sourcecountry))
 }
 
 /** GDELT'in `20260907T203000Z` biçimini ISO 8601'e çevirir; tanınmazsa ham değeri döner. */
@@ -170,13 +208,15 @@ export function seendateToIso(seendate) {
 
 /** Ham GDELT makale listesini uygulamanın ortak biçimine çevirir (test edilebilir olsun diye ayrı). */
 export function normalizeGdeltArticles(articles, iso2) {
-  const beklenen = beklenenUlkeAdi(iso2)
+  const kabul = kabulEdilenAdlar(iso2)
   const hepsi = articles || []
-  const suzulmus = beklenen ? hepsi.filter((a) => ulkeEslesiyorMu(a.sourcecountry, beklenen)) : []
+  const suzulmus = hepsi.filter((a) => ulkeEslesiyorMu(a.sourcecountry, kabul))
 
   if (hepsi.length > 0 && suzulmus.length === 0) {
+    const gorulen = [...new Set(hepsi.map((a) => a.sourcecountry).filter(Boolean))].slice(0, 5)
     console.warn(
-      `[gdelt] ${iso2} için ${hepsi.length} makale döndü ama hiçbiri beklenen ülkeyle (${beklenen || '?'}) eşleşmedi — atlanıyor.`
+      `[gdelt] ${iso2} için ${hepsi.length} makale döndü ama hiçbiri bu ülkeyle eşleşmedi — atlanıyor. ` +
+        `Yanıttaki ülkeler: ${gorulen.join(', ') || '(boş)'}. Beklenen: ${[...kabul].join(' / ') || '(kod tanınmadı)'}`
     )
   }
 

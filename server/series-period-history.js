@@ -29,10 +29,16 @@ const pruneStmt = db.prepare(`
 const selectRawStmt = db.prepare('SELECT tmdb_id, popularity, captured_at FROM series_popularity_history')
 const selectMonthlyKeysStmt = db.prepare('SELECT tmdb_id, year, month FROM series_popularity_monthly')
 const upsertMonthlyStmt = db.prepare(`
-  INSERT INTO series_popularity_monthly (tmdb_id, year, month, avg_popularity, sample_count) VALUES (?, ?, ?, ?, ?)
-  ON CONFLICT(tmdb_id, year, month) DO UPDATE SET
+  INSERT INTO series_popularity_monthly (tmdb_id, year, month, avg_popularity, sample_count, source)
+  VALUES (?, ?, ?, ?, ?, 'tmdb_snapshot')
+  ON CONFLICT(tmdb_id, year, month, source) DO UPDATE SET
     avg_popularity = excluded.avg_popularity, sample_count = excluded.sample_count
 `)
+// Denetim bulgusu B-08: bu yazıcı `source` sütununu HİÇ doldurmuyordu, dolayısıyla eklediği her
+// satır NULL kaynakla kalıyordu (canlı veride 487 satır) ve çakışma hedefi de kaynağı
+// içermediği için Python'un ReytingTV upsert'i bu satırları eziyordu. Artık kaynak açıkça
+// yazılıyor ve çakışma (tmdb_id, year, month, source) üzerinden çözülüyor — iki kaynak aynı ay
+// içinde yan yana yaşayabilir, okuyucu taraf zaten dizi başına birini seçiyor.
 const selectMonthlyForYearsStmt = db.prepare(
   'SELECT tmdb_id, year, month, avg_popularity, source FROM series_popularity_monthly WHERE year >= ?'
 )
@@ -113,6 +119,36 @@ function currentMonthAverages() {
 // {value, sampleCount, isPartial}> — CountryPanel bunu kendi seriesList'iyle eşleştirip
 // yeniden sıralar. Geçmişi olmayan (yeni eklenmiş) diziler map'te YER ALMAZ — çağıran taraf
 // bu durumda dürüstçe güncel (canlı) popülerliğe düşer, sıfır/uydurma bir değer atanmaz.
+// Denetim bulgusu B-09: getSeriesPopularityMap iki AYRI ölçekten değer döndürüyor ve CountryPanel
+// bunları tek listede aritmetik olarak karşılaştırıyordu. Gerçek veriyle ölçüldü (487 TMDB + 305
+// ReytingTV satırı): TMDB aylık ortalaması 5,1-80 (ort. 11,5) iken ReytingTV skoru 0-100
+// (ort. 44,9) — yani ReytingTV verisi olan 49 dizi, GERÇEK popülerliklerinden bağımsız olarak
+// sistematik biçimde listenin tepesine çıkıyordu. (Denetim raporu bunun tersini, "dibe batar"
+// diyordu; canlı veri aksini gösteriyor — yön farklı ama hata aynı.)
+//
+// Çözüm: değerler KENDİ kaynağı içinde yüzdeliğe çevriliyor. Yüzdelik ölçeksizdir, bu yüzden
+// "kendi ölçüm kaynağında ilk %10'da" ifadesi iki kaynak arasında karşılaştırılabilir. Ham değer
+// (value) gösterim için AYNEN korunuyor — arayüz onu kaynak rozetiyle birlikte basmaya devam eder.
+function yuzdelikAta(entries) {
+  const kaynagaGore = new Map()
+  for (const entry of entries) {
+    if (!kaynagaGore.has(entry.source)) kaynagaGore.set(entry.source, [])
+    kaynagaGore.get(entry.source).push(entry.value)
+  }
+  for (const dizi of kaynagaGore.values()) dizi.sort((a, b) => a - b)
+  for (const entry of entries) {
+    const dizi = kaynagaGore.get(entry.source)
+    const altinda = dizi.filter((v) => v < entry.value).length
+    const esit = dizi.filter((v) => v === entry.value).length
+    // Orta-sıra (mid-rank) yüzdeliği: eşit değerler aynı konumu paylaşır.
+    entry.percentile = Math.round(((altinda + esit / 2) / dizi.length) * 1000) / 10
+    // Tek elemanlı bir kaynak grubunda yüzdelik anlamsızdır (her zaman 50 çıkar) — çağıran taraf
+    // bunu bilsin diye açıkça işaretleniyor.
+    entry.percentileReliable = dizi.length >= 5
+  }
+  return entries
+}
+
 export function getSeriesPopularityMap(range) {
   const now = new Date()
   const currentYear = now.getUTCFullYear()
@@ -123,6 +159,8 @@ export function getSeriesPopularityMap(range) {
     for (const [tmdbId, c] of current) {
       result.set(tmdbId, { value: round1(c.sum / c.count), sampleCount: c.count, isPartial: false, source: 'tmdb_snapshot' })
     }
+    // Tek kaynak olsa da aynı sözleşme dönsün: çağıran taraf her aralıkta `percentile` bulur.
+    yuzdelikAta([...result.values()])
     return result
   }
 
@@ -171,5 +209,6 @@ export function getSeriesPopularityMap(range) {
       source: chosenSource,
     })
   }
+  yuzdelikAta([...result.values()])
   return result
 }

@@ -77,6 +77,7 @@ gorunurluk-platformu/
 
 ### Etki & İhracat Analizi
 - Donut grafiklerle görünürlük skoruna göre en öndeki ülkeler ve en çok görünürlük kazanan destinasyonlar
+- **Erken Seyahat Talep Sinyali**: bir dizinin ülke bazlı arama ilgisi ile aynı ülkeden gelen seyahat aramalarının 16 hafta gecikmeli korelasyonu. Her sinyal örneklem büyüklüğüne göre bir anlamlılık eşiğiyle (|r| ≥ ~0,33, n=36) karşılaştırılır; eşiği geçmeyenler "zayıf" olarak işaretlenir ve hiç anlamlı sinyal yoksa öne çıkarılan bir değer gösterilmez. Korelasyon nedensellik değildir.
 - **Yükselen Ülkeler**: trend geçmişine dayalı gerçek yükseliş tespiti (uydurma yön göstermez) + otomatik önerilen DiD kontrol ülkesi
 - **Turizm Korelasyonu**: YİGM sınır istatistikleri bülteni otomatik indirilip `tourist_arrivals` tablosuna yazılır; Pearson + %95 güven aralığı + DiD hesaplanır. **Sınır:** elde yalnızca en son bültenin aynı ayı × 3 yıl verisi olduğu için tek bir önce/sonra çifti kullanılır, paralel-trend kontrolü yoktur — sonuçlar nedensellik değil, işaret niteliğindedir.
 - **İhracat**: TMDB popülerlik payına dayalı kıyaslama; parasal ihracat/lisans verisi henüz yoktur.
@@ -132,6 +133,7 @@ Node'un okuduğu tablolar: `series_mapping`, `dizilah_series`, `imdb_series`, `i
 - **Zamanlanmış tazeleme** (`scheduler.js`): proje raporu §4.7'deki n8n otomasyonunun kod-içi karşılığı.
   - *Günlük*: TMDB + LLM sınıflandırma + trend anlık görüntüsü, aylık özet toplama, YİGM turizm senkronizasyonu (kendi haftalık kapısıyla).
   - *Haftalık, SerpAPI bütçesine tabi*: öncü turizm sinyali, yerelleştirilmiş sosyal zenginleştirme, oyuncu trendleri — her biri kendi 7 günlük kapısını kontrol eder ve saatlere yayılır.
+  - *Kapalı (varsayılan)*: sosyal zenginleştirme ve oyuncu trend taraması. Denetim C.3 — bu iki haftalık tarama ücretli çağrı yapıyor ama sonucu arayüzde hiçbir yerde gösterilmiyordu; `ENABLE_SOCIAL_ENRICHMENT` / `ENABLE_ACTOR_TRENDS` ile açılabilir. Sosyal taramanın **anlık** tetikleyicisi (Arama İlgisi sekmesindeki buton) bu bayraktan bağımsız, her zaman çalışır.
   - *Haftalık, ücretsiz*: basın taraması (GDELT). SerpAPI kotasından bağımsızdır. **Sınır:** GDELT'in genel ucu agresif hız sınırlıdır (belgesi 5 sn/istek der, pratikte daha katı) ve TLS el sıkışması ~10 sn sürebilir; istemci 20 sn'lik global bir kuyruk ve geri çekilmeli yeniden deneme uygular, bu yüzden soğuk bir tam tarama saatler sürebilir. Ayrıca GDELT makale ÖZETİ döndürmez — duygu analizi başlık + alan adı üzerinden çalışır, bu bilinçli bir kalite takasıdır.
 - **LLM dayanıklılığı** (`llm.js`, `themes.js`): zaman aşımı + 429/5xx için üstel geri çekilmeli yeniden deneme; kalıcı başarısızlıklar `classification_failures` tablosunda geri çekilme süresiyle işaretlenir. En fazla 5 eşzamanlı istek.
 - **Güvenlik**: scrypt + rastgele tuz ile şifreleme, `HttpOnly; SameSite=Lax` oturum çerezi (HTTPS'te `Secure`), tüm SQL parametreli, `/api` altında oturum zorunlu, yönetici uçlarında ikinci sunucu-taraflı kontrol, giriş/kayıt/genel için ayrı hız sınırları, `trust proxy`, CORS allowlist ve `helmet` güvenlik başlıkları (uygulamanın gerçekten kullandığı üç dış kaynağa göre daraltılmış CSP).

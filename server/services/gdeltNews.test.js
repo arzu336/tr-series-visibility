@@ -76,3 +76,41 @@ describe('normalizeGdeltArticles', () => {
     expect(normalizeGdeltArticles([], 'TR')).toEqual([])
   })
 })
+
+// CANLI ÖLÇÜM: filtresiz bir GDELT sorgusundan (75 makale) dönen 22 gerçek `sourcecountry` değeri.
+// Katı ad eşitliği bunların 4'ünü reddediyordu (Bosnia-Herzegovina, Slovak Republic, Macedonia,
+// Turkey) — normalizasyon + FIPS dönemi alias tablosu hepsini kurtarıyor.
+const CANLI_ULKE_ADLARI = [
+  ['Ukraine', 'UA'], ['Bulgaria', 'BG'], ['Pakistan', 'PK'], ['Bosnia-Herzegovina', 'BA'],
+  ['Serbia', 'RS'], ['Poland', 'PL'], ['Hungary', 'HU'], ['Slovak Republic', 'SK'],
+  ['United Kingdom', 'GB'], ['Russia', 'RU'], ['Macedonia', 'MK'], ['Germany', 'DE'],
+  ['Azerbaijan', 'AZ'], ['India', 'IN'], ['Turkey', 'TR'], ['United States', 'US'],
+  ['Saudi Arabia', 'SA'], ['Greece', 'GR'], ['Italy', 'IT'], ['Bangladesh', 'BD'],
+  ['Israel', 'IL'], ['South Africa', 'ZA'],
+]
+
+describe('ülke adı doğrulaması — canlı GDELT adlarıyla', () => {
+  it('canlı yanıtta görülen 22 ülke adının TAMAMI doğru ISO2 ile eşleşir', () => {
+    const eslesmeyen = CANLI_ULKE_ADLARI.filter(([ad, iso2]) => {
+      const makale = [{ title: 't', domain: 'd.com', seendate: '20260901T000000Z', sourcecountry: ad }]
+      return normalizeGdeltArticles(makale, iso2).length !== 1
+    })
+    expect(eslesmeyen).toEqual([])
+  })
+
+  it('Türkiye: Intl "Türkiye" der ama GDELT "Turkey" yazar — yine de eşleşmeli', () => {
+    const makale = [{ title: 't', domain: 'hurriyet.com.tr', seendate: '20260901T000000Z', sourcecountry: 'Turkey' }]
+    expect(normalizeGdeltArticles(makale, 'TR')).toHaveLength(1)
+  })
+
+  it('yanlış ülke hâlâ elenir (gevşetme bir kaçak yaratmadı)', () => {
+    const makale = [{ title: 't', domain: 'd.com', seendate: '20260901T000000Z', sourcecountry: 'Germany' }]
+    expect(normalizeGdeltArticles(makale, 'FR')).toHaveLength(0)
+    expect(normalizeGdeltArticles(makale, 'TR')).toHaveLength(0)
+  })
+
+  it('boş sourcecountry kabul edilmez (canlı yanıtta 2 makalede boştu)', () => {
+    const makale = [{ title: 't', domain: 'd.com', seendate: '20260901T000000Z', sourcecountry: '' }]
+    expect(normalizeGdeltArticles(makale, 'DE')).toHaveLength(0)
+  })
+})

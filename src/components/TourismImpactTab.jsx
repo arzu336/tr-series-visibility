@@ -117,6 +117,122 @@ function TourismCorrelation({ pendingAnalysis }) {
   return <DidTable countries={pendingAnalysis.countries} />
 }
 
+
+// C.3 — "yetim sinyal" düzeltmesi: tourism_leading_signal haftalık olarak toplanıp
+// /api/impact/tourism ile ZATEN dönülüyordu ama src/ içinde hiçbir bileşen okumuyordu; yani her
+// hafta ücretli Trends çağrısı yapılıp veri kimseye gösterilmiyordu. Artık burada.
+//
+// DÜRÜSTLÜK ÇERÇEVESİ (bu bölümün asıl tasarım kararı): korelasyon YÖNLÜ bir ölçüdür ve küçük
+// örneklemde tesadüfen büyüyebilir. Gerçek veride 35 sinyalin yalnızca 3'ü anlamlılık eşiğini
+// (|r| >= ~0,33, n=36) geçiyor ve bunların İKİSİ NEGATİF. Bu yüzden:
+//   - |r|'ye göre sıralayıp "en güçlü sinyal" demek yeterli değil; yön ayrı gösteriliyor,
+//   - eşiğin altındakiler "zayıf" olarak işaretlenip soluklaştırılıyor, gizlenmiyor,
+//   - hiç anlamlı sinyal yoksa öne çıkarılan bir başlık DEĞERİ GÖSTERİLMİYOR.
+function LeadingSignalSection({ leadingSignal }) {
+  if (!leadingSignal || leadingSignal.status !== 'gerçek-veri-mevcut') {
+    return (
+      <p className="dashboard__empty">
+        Öncü seyahat sinyali için henüz veri toplanmadı. Haftalık tarama çalıştığında burada
+        görünecek.
+      </p>
+    )
+  }
+
+  const { signals, significantCount, countriesScanned, lagWeeksRange, strongestSignal } = leadingSignal
+  const gosterilecek = signals.slice(0, 8)
+
+  return (
+    <>
+      <p className="leading-signal__intro">
+        Bir dizinin o ülkedeki arama ilgisi ile aynı ülkeden gelen seyahat aramalarının
+        (&ldquo;Istanbul&rdquo;, &ldquo;Antalya&rdquo;, &ldquo;Travel to Turkey&rdquo;)
+        {' '}<strong>{lagWeeksRange}</strong> gecikmeli korelasyonu. {countriesScanned} ülke tarandı,{' '}
+        {signals.length} sinyal hesaplandı; bunlardan <strong>{significantCount} tanesi</strong>{' '}
+        istatistiksel eşiği geçiyor. Korelasyon nedensellik değildir.
+      </p>
+
+      {strongestSignal ? (
+        <div className="leading-signal__hero">
+          <span className={`leading-signal__hero-value leading-signal__hero-value--${strongestSignal.direction}`}>
+            {strongestSignal.correlation > 0 ? '+' : '−'}
+            {Math.abs(strongestSignal.correlation).toFixed(2)}
+          </span>
+          <span className="leading-signal__hero-label">
+            {nameOf(strongestSignal.iso2)} — &ldquo;{strongestSignal.travelQuery}&rdquo; aramaları,{' '}
+            <strong>{strongestSignal.topSeriesName}</strong> ilgisiyle{' '}
+            {strongestSignal.direction === 'pozitif' ? 'aynı yönde' : 'ters yönde'} hareket ediyor.
+          </span>
+          <span className="leading-signal__hero-note">
+            En güçlü anlamlı sinyal · {strongestSignal.lagWeeks} hafta gecikme · {strongestSignal.sampleSize} haftalık örneklem
+          </span>
+        </div>
+      ) : (
+        <div className="leading-signal__hero">
+          <span className="leading-signal__hero-label">
+            Hesaplanan {signals.length} sinyalin hiçbiri istatistiksel eşiği geçmiyor — bu
+            örneklemde öne çıkarılabilecek bir bulgu yok.
+          </span>
+        </div>
+      )}
+
+      <table className="dashboard__table">
+        <thead>
+          <tr>
+            <th>Ülke</th>
+            <th>Seyahat Sorgusu</th>
+            <th>Öne Çıkan Dizi</th>
+            <th>Korelasyon</th>
+            <th>Örneklem</th>
+            <th>Anlamlılık</th>
+          </tr>
+        </thead>
+        <tbody>
+          {gosterilecek.map((sig) => (
+            <tr
+              key={`${sig.iso2}-${sig.travelQuery}`}
+              className={sig.significant ? undefined : 'leading-signal__row--weak'}
+            >
+              <td>{nameOf(sig.iso2)}</td>
+              <td>{sig.travelQuery}</td>
+              <td>{sig.topSeriesName || '—'}</td>
+              <td>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  {/* Yön çubuğun SIFIR EKSENİNE göre yönüyle okunur — renk tek başına taşımaz. */}
+                  <span
+                    className="leading-signal__bar"
+                    title={`${sig.direction === 'pozitif' ? 'Aynı yönde' : 'Ters yönde'} hareket · r = ${sig.correlation}`}
+                  >
+                    <span
+                      className={`leading-signal__bar-fill leading-signal__bar-fill--${sig.direction}`}
+                      style={{ width: `${Math.min(Math.abs(sig.correlation), 1) * 50}%` }}
+                    />
+                  </span>
+                  <span className="leading-signal__value">
+                    {sig.correlation > 0 ? '+' : '−'}
+                    {Math.abs(sig.correlation).toFixed(2)}
+                  </span>
+                </div>
+              </td>
+              <td>{sig.sampleSize} hafta</td>
+              <td>
+                <span className={`leading-signal__strength${sig.significant ? ' leading-signal__strength--yes' : ''}`}>
+                  {sig.significant ? 'Anlamlı' : `Zayıf (eşik ${sig.criticalR ?? '—'})`}
+                </span>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      {signals.length > gosterilecek.length && (
+        <p className="dashboard__empty" style={{ marginTop: '0.5rem' }}>
+          En güçlü {gosterilecek.length} sinyal gösteriliyor ({signals.length} sinyalin tamamı
+          anlamlılığa ve büyüklüğe göre sıralı).
+        </p>
+      )}
+    </>
+  )
+}
+
 export default function TourismImpactTab() {
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
@@ -143,6 +259,11 @@ export default function TourismImpactTab() {
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Diziler Turizmi Etkiliyor mu?</h3>
         <TourismCorrelation pendingAnalysis={data.pendingAnalysis} />
+      </section>
+
+      <section className="dashboard__section">
+        <h3 className="dashboard__section-title">Erken Seyahat Talep Sinyali</h3>
+        <LeadingSignalSection leadingSignal={data.leadingSignal} />
       </section>
     </>
   )

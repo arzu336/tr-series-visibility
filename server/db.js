@@ -189,13 +189,19 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_series_popularity_history_id ON series_popularity_history(tmdb_id);
 
+  -- Denetim bulgusu B-08: birincil anahtar source sutununu ICERMEK ZORUNDA. Ayni (dizi, yil, ay)
+  -- icin iki farkli olcum kaynagi vardir: Node'un TMDB anlik goruntu ortalamasi ve Python'un
+  -- ReytingTV geriye donuk sira skoru. Okuyucu taraf (series-period-history.js) zaten ikisini
+  -- AYRI tutup dizi basina birini sececek sekilde yazilmis; source anahtara dahil olmadigi icin
+  -- Python'un upsert'i TMDB satirini eziyor ve o ayin TMDB olcumu kalici olarak kayboluyordu.
   CREATE TABLE IF NOT EXISTS series_popularity_monthly (
-    tmdb_id INTEGER,
-    year INTEGER,
-    month INTEGER,
+    tmdb_id INTEGER NOT NULL,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL,
     avg_popularity REAL,
     sample_count INTEGER,
-    PRIMARY KEY (tmdb_id, year, month)
+    source TEXT NOT NULL DEFAULT 'tmdb_snapshot',
+    PRIMARY KEY (tmdb_id, year, month, source)
   );
 
   -- Proje raporu §4.6 "Basın/Haber Duygu Analizi" — bkz. server/services/newsSentiment.js.
@@ -328,7 +334,40 @@ if (!mediaSentimentColumns.some((c) => c.name === 'source')) {
 const seriesMonthlyColumns = db.prepare("PRAGMA table_info(series_popularity_monthly)").all()
 if (!seriesMonthlyColumns.some((c) => c.name === 'source')) {
   db.exec("ALTER TABLE series_popularity_monthly ADD COLUMN source TEXT")
-  db.exec("UPDATE series_popularity_monthly SET source = 'tmdb_snapshot' WHERE source IS NULL")
+}
+// Yukarıdaki ALTER yalnızca O ANDA var olan satırları etiketliyordu; Node'un rollup yazıcısı
+// `source` sütununu hiç doldurmadığı için sonradan eklenen her satır NULL kalmıştı (canlı veride
+// 487 satır). Yazıcı artık değeri açıkça yazıyor (series-period-history.js), burada da kalanlar
+// normalize ediliyor — `source` birincil anahtara gireceği için NULL kabul edilemez.
+db.exec("UPDATE series_popularity_monthly SET source = 'tmdb_snapshot' WHERE source IS NULL")
+
+// Denetim bulgusu B-08 — anahtar genişletme. Eski birincil anahtar (tmdb_id, year, month) iki
+// kaynağın aynı ayda bir arada var olmasını engelliyor, bu yüzden Python'un ReytingTV upsert'i
+// TMDB satırını EZİYORDU (veri kaybı). SQLite'ta birincil anahtar yerinde değiştirilemez —
+// tablo yeniden kurulup veri taşınıyor. Tek seferlik: PK'da `source` varsa blok atlanır.
+const seriesMonthlyPk = db
+  .prepare("PRAGMA table_info(series_popularity_monthly)")
+  .all()
+  .filter((c) => c.pk > 0)
+  .map((c) => c.name)
+if (!seriesMonthlyPk.includes('source')) {
+  db.exec(`
+    CREATE TABLE series_popularity_monthly_yeni (
+      tmdb_id INTEGER NOT NULL,
+      year INTEGER NOT NULL,
+      month INTEGER NOT NULL,
+      avg_popularity REAL,
+      sample_count INTEGER,
+      source TEXT NOT NULL DEFAULT 'tmdb_snapshot',
+      PRIMARY KEY (tmdb_id, year, month, source)
+    );
+    INSERT INTO series_popularity_monthly_yeni (tmdb_id, year, month, avg_popularity, sample_count, source)
+      SELECT tmdb_id, year, month, avg_popularity, sample_count, COALESCE(source, 'tmdb_snapshot')
+      FROM series_popularity_monthly;
+    DROP TABLE series_popularity_monthly;
+    ALTER TABLE series_popularity_monthly_yeni RENAME TO series_popularity_monthly;
+  `)
+  console.log('[db] series_popularity_monthly birincil anahtarı source ile genişletildi (B-08)')
 }
 
 export default db

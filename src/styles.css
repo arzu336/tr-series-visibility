@@ -3488,3 +3488,110 @@ button.sidebar__big-card:hover {
   margin-top: 0.2rem;
 }
 
+/* --- Erken Seyahat Talep Sinyali (C.3: tourism_leading_signal artık arayüze bağlı) ------------
+   Korelasyon YÖN taşıyan bir ölçü (ters yönlü hareket "zayıf pozitif" değildir), bu yüzden
+   çubuklar SIFIR EKSENİNDE ortalanır: yön, rengin yanı sıra KONUMLA okunur.
+   Bu ikincil kodlama zorunlu — projenin yerleşik yeşil/kırmızı çifti (#5cb85c / #e5484d, bkz.
+   .media-sentiment__badge--positive/negative) renk körlüğü ayrımı testinde 6,7 ΔE (deutan)
+   veriyor; bu bant yalnızca konum/işaret/etiket gibi ikincil kodlama varsa kullanılabilir.
+   Bu yüzden ayrıca sayının başında +/- işareti ve satırda açık yön etiketi var. */
+.leading-signal__intro {
+  font-size: 0.78rem;
+  color: #8792a8;
+  line-height: 1.5;
+  margin: 0 0 0.9rem;
+}
+
+.leading-signal__hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5rem 0.8rem;
+  padding: 0.7rem 0.9rem;
+  margin-bottom: 0.9rem;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 10px;
+}
+
+.leading-signal__hero-value {
+  font-size: 1.35rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+
+.leading-signal__hero-value--pozitif { color: #5cb85c; }
+.leading-signal__hero-value--negatif { color: #e5484d; }
+
+.leading-signal__hero-label {
+  font-size: 0.8rem;
+  color: #c3ccdb;
+}
+
+.leading-signal__hero-note {
+  flex-basis: 100%;
+  font-size: 0.72rem;
+  color: #8792a8;
+}
+
+/* Sıfırda ortalanmış ayrışan çubuk: sol yarı negatif, sağ yarı pozitif. */
+.leading-signal__bar {
+  position: relative;
+  width: 130px;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 3px;
+}
+
+.leading-signal__bar::before {
+  content: '';
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.leading-signal__bar-fill {
+  position: absolute;
+  top: 0;
+  height: 100%;
+}
+
+/* Veri ucu yuvarlak, sıfır ekseni ucu düz — çubuğun hangi uçtan büyüdüğü belli olsun. */
+.leading-signal__bar-fill--pozitif {
+  left: 50%;
+  background: #5cb85c;
+  border-radius: 0 4px 4px 0;
+}
+
+.leading-signal__bar-fill--negatif {
+  right: 50%;
+  background: #e5484d;
+  border-radius: 4px 0 0 4px;
+}
+
+.leading-signal__value {
+  font-variant-numeric: tabular-nums;
+  font-weight: 600;
+}
+
+.leading-signal__row--weak {
+  opacity: 0.55;
+}
+
+.leading-signal__strength {
+  font-size: 0.72rem;
+  color: #8792a8;
+  white-space: nowrap;
+}
+
+.leading-signal__strength--yes {
+  color: #c3ccdb;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .leading-signal__bar { width: 78px; }
+}

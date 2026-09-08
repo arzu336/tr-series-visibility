@@ -53,12 +53,17 @@ def write_to_node_db(monthly: dict[tuple[int, int, int], tuple[float, int]]) -> 
     try:
         conn.executemany(
             """
+            -- Denetim bulgusu B-08: cakisma hedefi eskiden (tmdb_id, year, month) idi ve
+            -- DO UPDATE, o aya ait TMDB satirini source'unu da degistirerek EZIYORDU; Node'un o
+            -- ay icin olctugu popularite kalici olarak kayboluyordu. Artik anahtar source'u da
+            -- iceriyor (bkz. server/db.js migrasyonu): ReytingTV satiri kendi satirini gunceller,
+            -- TMDB satirina hic dokunmaz. Ikisi yan yana yasar, okuyucu taraf
+            -- (server/series-period-history.js) dizi basina birini secer.
             INSERT INTO series_popularity_monthly (tmdb_id, year, month, avg_popularity, sample_count, source)
             VALUES (?, ?, ?, ?, ?, 'reytingtv_rank')
-            ON CONFLICT(tmdb_id, year, month) DO UPDATE SET
+            ON CONFLICT(tmdb_id, year, month, source) DO UPDATE SET
                 avg_popularity = excluded.avg_popularity,
-                sample_count = excluded.sample_count,
-                source = 'reytingtv_rank'
+                sample_count = excluded.sample_count
             """,
             [
                 (tmdb_id, year, month, avg_score, count)

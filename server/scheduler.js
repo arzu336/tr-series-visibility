@@ -85,15 +85,28 @@ async function runScheduledRefreshInner() {
   } catch (err) {
     console.error('[scheduler] öncü turizm sinyali taraması başarısız:', err.message)
   }
-  try {
-    await runSocialEnrichmentIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] sosyal zenginleştirme başarısız:', err.message)
+  // Denetim raporu C.3 — "yetim sinyaller": aşağıdaki iki haftalık tarama her hafta ücretli
+  // SerpAPI çağrısı yapıp veriyi tabloya/önbelleğe yazıyor, ama sonucu ARAYÜZDE HİÇBİR YERDE
+  // gösterilmiyordu (socialEnrichmentSummary impact.js'te dönüyor ama src/ içinde okunmuyor;
+  // actor_country_interest'in getter'ı hiçbir yerden çağrılmıyor). Kullanıcı kararıyla ikisi de
+  // VARSAYILAN OLARAK KAPALI — kod silinmedi, bir env bayrağıyla geri açılabilir.
+  //
+  // ÖNEMLİ: bu yalnızca ZAMANLANMIŞ toplu taramayı kapatır. TrendsExplorer'daki "Gelişmiş Medya
+  // & Sosyal Taramayı Çalıştır" butonu (enrichSeriesSocialNow) etkilenmez — kullanıcı istediğinde
+  // yine canlı tarama yapabilir, yani görünür bir özellik kaybı yok.
+  if (process.env.ENABLE_SOCIAL_ENRICHMENT === 'true') {
+    try {
+      await runSocialEnrichmentIfNeeded()
+    } catch (err) {
+      console.error('[scheduler] sosyal zenginleştirme başarısız:', err.message)
+    }
   }
-  try {
-    await runActorTrendsCollectionIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] oyuncu trend taraması başarısız:', err.message)
+  if (process.env.ENABLE_ACTOR_TRENDS === 'true') {
+    try {
+      await runActorTrendsCollectionIfNeeded()
+    } catch (err) {
+      console.error('[scheduler] oyuncu trend taraması başarısız:', err.message)
+    }
   }
 }
 
