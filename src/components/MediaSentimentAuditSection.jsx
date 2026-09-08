@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { fetchMediaSentimentAudit, submitMediaSentimentOverride, clearMediaSentimentOverride } from '../lib/api.js'
+import { safeExternalUrl } from '../lib/safeUrl.js'
 import countryNames from '../data/country-centroids.json'
 import { HumanAuditIcon } from './AnalystDashboard.jsx'
 
@@ -19,7 +20,7 @@ function ToneBadge({ tone }) {
 // toplu değerlendiriyor, bkz. server/llm.js analyzeMediaSentiment) — bu yüzden "ton düzeltme"
 // bu taramanın genel tonunu düzeltir; analistin kararına dayanak olsun diye taranan haber
 // başlıkları da satırla birlikte gösterilir.
-export default function MediaSentimentAuditSection({ canEdit = true, reviewerName = 'anonim' }) {
+export default function MediaSentimentAuditSection({ canEdit = true }) {
   const [items, setItems] = useState([])
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
@@ -50,7 +51,7 @@ export default function MediaSentimentAuditSection({ canEdit = true, reviewerNam
     if (sentiment === item.effectiveSentiment) return
     setSavingId(item.id)
     try {
-      await submitMediaSentimentOverride(item.id, sentiment, reviewerName)
+      await submitMediaSentimentOverride(item.id, sentiment)
       load()
     } catch (err) {
       setError(err.message)
@@ -133,8 +134,11 @@ export default function MediaSentimentAuditSection({ canEdit = true, reviewerNam
                     <ul className="dashboard__article-list">
                       {item.articles.map((a, i) => (
                         <li key={i}>
-                          {a.url ? (
-                            <a href={a.url} target="_blank" rel="noreferrer">
+                          {/* Denetim G-13: URL üst servisten (SerpAPI google_news) geliyor —
+                              şema doğrulanmadan href'e verilemez. Güvenli değilse başlık düz
+                              metin olarak gösterilir, link hiç oluşturulmaz. */}
+                          {safeExternalUrl(a.url) ? (
+                            <a href={safeExternalUrl(a.url)} target="_blank" rel="noreferrer">
                               {a.title}
                             </a>
                           ) : (

@@ -146,7 +146,7 @@ function DestinationTagPicker({ taxonomy, draft, onToggle }) {
   )
 }
 
-function DestinationSection({ canEdit, reviewerName, onViewSeriesOnMap }) {
+function DestinationSection({ canEdit, onViewSeriesOnMap }) {
   const [items, setItems] = useState([])
   const [taxonomy, setTaxonomy] = useState([])
   const [status, setStatus] = useState('loading')
@@ -189,7 +189,7 @@ function DestinationSection({ canEdit, reviewerName, onViewSeriesOnMap }) {
     const chosen = drafts[item.id] ?? item.effectiveDestinations
     setSavingId(item.id)
     try {
-      await submitDestinationOverride(item.id, chosen, reviewerName)
+      await submitDestinationOverride(item.id, chosen)
       setEditingId(null)
       load()
     } catch (err) {
@@ -396,7 +396,7 @@ function sortItems(list, sortBy) {
   return sorted
 }
 
-export default function AnalystDashboard({ canEdit = true, reviewerName = 'anonim', onViewSeriesOnMap }) {
+export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) {
   const [tab, setTab] = useState('themes') // themes | destinations
   const [items, setItems] = useState([])
   const [taxonomy, setTaxonomy] = useState([])
@@ -434,7 +434,7 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
     const chosen = drafts[item.id] ?? item.effectiveTheme
     setSavingId(item.id)
     try {
-      await submitThemeOverride(item.id, chosen, reviewerName)
+      await submitThemeOverride(item.id, chosen)
       setEditingId(null)
       load()
     } catch (err) {
@@ -476,7 +476,7 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
     setBulkSaving(true)
     try {
       await Promise.all(
-        targets.map((item) => submitThemeOverride(item.id, drafts[item.id] ?? item.effectiveTheme, reviewerName))
+        targets.map((item) => submitThemeOverride(item.id, drafts[item.id] ?? item.effectiveTheme))
       )
       setSelectedIds(new Set())
       load()
@@ -496,7 +496,7 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
     if (targets.length === 0 || !bulkTheme) return
     setBulkSaving(true)
     try {
-      await Promise.all(targets.map((item) => submitThemeOverride(item.id, bulkTheme, reviewerName)))
+      await Promise.all(targets.map((item) => submitThemeOverride(item.id, bulkTheme)))
       setSelectedIds(new Set())
       setBulkTheme('')
       load()
@@ -766,10 +766,10 @@ export default function AnalystDashboard({ canEdit = true, reviewerName = 'anoni
       )}
 
       {tab === 'destinations' && (
-        <DestinationSection canEdit={canEdit} reviewerName={reviewerName} onViewSeriesOnMap={onViewSeriesOnMap} />
+        <DestinationSection canEdit={canEdit} onViewSeriesOnMap={onViewSeriesOnMap} />
       )}
 
-      {tab === 'sentiment' && <MediaSentimentAuditSection canEdit={canEdit} reviewerName={reviewerName} />}
+      {tab === 'sentiment' && <MediaSentimentAuditSection canEdit={canEdit} />}
     </div>
   )
 }

@@ -14,7 +14,14 @@ const ImpactAnalysisTabs = lazy(() => import('./components/ImpactAnalysisTabs.js
 const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
 const PENDING_APPROVALS_POLL_MS = 60000
 const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
-import { fetchVisibility, fetchAuthStatus, logout, fetchAdminUsers, fetchImdbData } from './lib/api.js'
+import {
+  fetchVisibility,
+  fetchAuthStatus,
+  logout,
+  fetchAdminUsers,
+  fetchImdbData,
+  setUnauthorizedHandler,
+} from './lib/api.js'
 import { continentCentroid } from './lib/continents.js'
 import countryNames from './data/country-centroids.json'
 const SIDEBAR_COLLAPSED_KEY = 'gp_sidebar_collapsed'
@@ -22,6 +29,8 @@ const PANEL_COLLAPSED_KEY = 'gp_panel_collapsed'
 
 export default function App() {
   const [authStatus, setAuthStatus] = useState('checking') // checking | in | out
+  // Oturum düştüğünde giriş ekranında gösterilecek açıklama (bkz. aşağıdaki 401 dinleyicisi).
+  const [sessionNotice, setSessionNotice] = useState(null)
   const [user, setUser] = useState(null)
   const [status, setStatus] = useState('loading') // loading | ready | error
   const [error, setError] = useState(null)
@@ -90,6 +99,7 @@ export default function App() {
       .then((d) => {
         setUser(d.user)
         setAuthStatus(d.authenticated ? 'in' : 'out')
+        if (d.authenticated) setSessionNotice(null)
       })
       .catch(() => setAuthStatus('out'))
   }, [])
@@ -97,6 +107,19 @@ export default function App() {
   useEffect(() => {
     loadAuthStatus()
   }, [loadAuthStatus])
+
+  // Denetim bulgusu B-18: herhangi bir API çağrısı 401 döndüğünde (oturum süresi doldu ya da
+  // sunucu oturumu iptal etti, bkz. G-05) tek noktadan giriş ekranına dönülür — panellerin ayrı
+  // ayrı "Giriş gerekli" hatası basıp ekranı yarı dolu bırakması yerine. Sebep metni giriş
+  // ekranına taşınır ki kullanıcı neden atıldığını görsün.
+  useEffect(() => {
+    setUnauthorizedHandler((message) => {
+      setUser(null)
+      setAuthStatus('out')
+      setSessionNotice(message)
+    })
+    return () => setUnauthorizedHandler(null)
+  }, [])
 
   useEffect(() => {
     if (!showProfileMenu) return
@@ -403,7 +426,7 @@ export default function App() {
   }
 
   if (authStatus === 'out') {
-    return <Login onSuccess={loadAuthStatus} />
+    return <Login onSuccess={loadAuthStatus} notice={sessionNotice} />
   }
 
   return (
@@ -501,7 +524,6 @@ export default function App() {
           {view === 'dashboard' && user?.isAdmin && (
             <AnalystDashboard
               canEdit={Boolean(user?.isAdmin)}
-              reviewerName={user?.name || user?.email || 'anonim'}
               onViewSeriesOnMap={handleViewSeriesOnMap}
             />
           )}

@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { safeExternalUrl } from '../lib/safeUrl.js'
 import {
   fetchTrendSeriesList,
   fetchTrends,
@@ -205,11 +206,18 @@ function SocialPulseBlock({ social }) {
   if (!social?.youtube) {
     return <p className="dashboard__empty">Bu dizi için video verisi bulunamadı.</p>
   }
+  // Denetim G-13: link SerpAPI'nin youtube motorundan geliyor — şema doğrulanmadan href'e
+  // verilemez. Güvenli değilse video başlığı linksiz, düz metin olarak gösterilir.
+  const videoUrl = safeExternalUrl(social.youtube.link)
   return (
     <p className="dashboard__hint" style={{ margin: 0 }}>
-      <a href={social.youtube.link} target="_blank" rel="noreferrer" className="dashboard__link-btn">
-        {social.youtube.title}
-      </a>
+      {videoUrl ? (
+        <a href={videoUrl} target="_blank" rel="noreferrer" className="dashboard__link-btn">
+          {social.youtube.title}
+        </a>
+      ) : (
+        <strong>{social.youtube.title}</strong>
+      )}
       {' — '}
       {social.youtube.channel || 'Bilinmeyen kanal'}
       {social.youtube.channelVerified && ' ✓'}
@@ -261,9 +269,20 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesList])
 
+  // Denetim bulgusu B-14: bu bileşen sorgu başına 6-7 bağımsız fetch atıyor ve hiçbiri iptal
+  // edilmiyordu. A dizisi uçuştayken B seçilirse A'nın geç dönen sosyal/IMDb/meta/duygu cevabı
+  // B'nin başlığı altına yerleşiyordu — kullanıcıya yanlış diziye ait veri gösteren sessiz bir
+  // veri bütünlüğü hatası. api.js sarmalayıcıları AbortSignal almadığı için (her fonksiyonun
+  // imzasını değiştirmek gerekirdi) raporun da önerdiği ve App.jsx'te zaten kullanılan iptal
+  // jetonu deseni: her sorgu artan bir jeton alır, geç gelen cevap güncel jetonu taşımıyorsa
+  // hiçbir state'e yazmaz.
+  const queryTokenRef = useRef(0)
+
   const handleQuery = async (seriesName) => {
     const name = seriesName ?? selected
     if (!name) return
+    const token = ++queryTokenRef.current
+    const isStale = () => queryTokenRef.current !== token
     setStatus('querying')
     setError(null)
     setSocial(null)
@@ -278,34 +297,45 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
     setEnrichError(null)
     try {
       const data = await fetchTrends(name)
+      if (isStale()) return
       setResult(data)
       setStatus('ready')
     } catch (err) {
+      if (isStale()) return
       setError(err.message)
       setStatus('error')
       return
     }
+    if (isStale()) return
 
     setTimeSeriesStatus('loading')
     setTimeSeries(null)
     fetchTrendsTimeSeries(name)
       .then((data) => {
+        if (isStale()) return
         setTimeSeries(data.timeline)
         setTimeSeriesStatus(data.timeline?.length > 1 ? 'ready' : 'unavailable')
       })
-      .catch(() => setTimeSeriesStatus('unavailable'))
+      .catch(() => {
+        if (!isStale()) setTimeSeriesStatus('unavailable')
+      })
 
     setInsightStatus('loading')
     setInsight(null)
     fetchTrendsInsight(name)
       .then((data) => {
+        if (isStale()) return
         setInsight(data)
         setInsightStatus('ready')
       })
-      .catch(() => setInsightStatus('ready'))
+      .catch(() => {
+        if (!isStale()) setInsightStatus('ready')
+      })
 
     fetchSocialListening(name)
-      .then(setSocial)
+      .then((data) => {
+        if (!isStale()) setSocial(data)
+      })
       .catch(() => {
         // Fragman/Bilgi Grafiği ikincil bilgi — bulunamazsa/erişilemezse sessizce atlanır.
       })
@@ -316,26 +346,35 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
     setMetaStatus('loading')
     fetchSeriesMeta(selectedId)
       .then((data) => {
+        if (isStale()) return
         setMeta(data)
         setMetaStatus('ready')
       })
-      .catch(() => setMetaStatus('error'))
+      .catch(() => {
+        if (!isStale()) setMetaStatus('error')
+      })
 
     setImdbStatus('loading')
     fetchImdbData(selectedId)
       .then((data) => {
+        if (isStale()) return
         setImdb(data)
         setImdbStatus(data.status)
       })
-      .catch(() => setImdbStatus('unavailable'))
+      .catch(() => {
+        if (!isStale()) setImdbStatus('unavailable')
+      })
 
     setSentimentStatus('loading')
     fetchMediaSentimentSummary(selectedId)
       .then((data) => {
+        if (isStale()) return
         setSentimentSummary(data)
         setSentimentStatus('ready')
       })
-      .catch(() => setSentimentStatus('ready'))
+      .catch(() => {
+        if (!isStale()) setSentimentStatus('ready')
+      })
   }
 
   const selectedId = seriesList.find((s) => s.name === selected)?.id

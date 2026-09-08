@@ -1,14 +1,18 @@
 import { useState } from 'react'
 import { login, register } from '../lib/api.js'
 
-export default function Login({ onSuccess }) {
+// `notice` (bkz. App.jsx sessionNotice): oturum düştüğü için giriş ekranına DÖNDÜRÜLEN kullanıcıya
+// sebebi söyler (denetim B-18). Bileşenin kendi `notice` state'i kayıt akışının mesajını taşır;
+// ikisi çakışmasın diye dışarıdan gelen sadece başlangıç değeri olur, kullanıcı bir işlem yapınca
+// (giriş/kayıt/mod değiştirme) yerini o akışın kendi mesajına bırakır.
+export default function Login({ onSuccess, notice: initialNotice = null }) {
   const [mode, setMode] = useState('login') // login | register
   const [name, setName] = useState('')
   const [email, setEmail] = useState('')
   const [role, setRole] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState(null)
-  const [notice, setNotice] = useState(null)
+  const [notice, setNotice] = useState(initialNotice)
   const [submitting, setSubmitting] = useState(false)
 
   const switchMode = (next) => {

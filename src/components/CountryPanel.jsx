@@ -101,19 +101,29 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
     return { actorIndex: actors, seriesIndex: series, countryIndex: countryList }
   }, [allCountries])
 
-  const trimmed = query.trim().toLowerCase()
+  // Denetim bulgusu B-21: burası projedeki TEK `toLowerCase()` kullanan aramaydı ve Türkçe'de
+  // sessizce yanlış sonuç veriyordu — JS'in dilden bağımsız küçültmesi "İ"yi "i̇" (i + birleşen
+  // nokta) yapar, "I"yı da "ı" yerine "i" yapar. Canlı doğrulandı:
+  //   "İstanbullu Gelin".toLowerCase().includes("istanbul")  →  false
+  //   "IRMAK".toLowerCase()  →  "irmak"  ≠  "ırmak"
+  // Yani kullanıcı "istanbul" yazdığında "İstanbullu Gelin" hiç çıkmıyordu. Diğer tüm aramalar
+  // zaten `toLocaleLowerCase('tr')` kullanıyor (ör. services/requestGuards.js) — bu da onlarla
+  // hizalandı.
+  const trimmed = query.trim().toLocaleLowerCase('tr')
   const showResults = trimmed.length >= MIN_QUERY_LENGTH
   const countryResults = showResults
-    ? countryIndex.filter((c) => c.name.toLowerCase().includes(trimmed)).slice(0, MAX_RESULTS_PER_GROUP)
+    ? countryIndex
+        .filter((c) => c.name.toLocaleLowerCase('tr').includes(trimmed))
+        .slice(0, MAX_RESULTS_PER_GROUP)
     : []
   const actorResults = showResults
     ? Array.from(actorIndex.values())
-        .filter((a) => a.name.toLowerCase().includes(trimmed))
+        .filter((a) => a.name.toLocaleLowerCase('tr').includes(trimmed))
         .slice(0, MAX_RESULTS_PER_GROUP)
     : []
   const seriesResults = showResults
     ? Array.from(seriesIndex.values())
-        .filter((s) => s.name.toLowerCase().includes(trimmed))
+        .filter((s) => s.name.toLocaleLowerCase('tr').includes(trimmed))
         .slice(0, MAX_RESULTS_PER_GROUP)
     : []
   const hasResults = countryResults.length > 0 || actorResults.length > 0 || seriesResults.length > 0

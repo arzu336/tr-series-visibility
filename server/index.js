@@ -83,6 +83,7 @@ import {
   deleteUser,
   changeUserPassword,
   verifyPassword,
+  burnPasswordVerification,
   publicUser,
 } from './users.js'
 
@@ -247,7 +248,13 @@ app.post('/api/auth/register', registerLimiter, (req, res) => {
 app.post('/api/auth/login', loginLimiter, (req, res) => {
   const { email, password } = req.body || {}
   const user = email ? findUserByEmail(email) : null
-  if (!user || !verifyPassword(password || '', user.passwordHash)) {
+  // Denetim G-10: kullanıcı yoksa scrypt hiç çalışmıyor, cevap ölçülebilir şekilde daha hızlı
+  // dönüyor ve bu tek başına "bu e-posta kayıtlı mı" sorusunu yanıtlıyordu. burnPasswordVerification
+  // var-olmayan kullanıcı yolunda da aynı scrypt maliyetini ödetir.
+  const passwordOk = user
+    ? verifyPassword(password || '', user.passwordHash)
+    : burnPasswordVerification(password)
+  if (!passwordOk) {
     return res.status(401).json({ error: 'E-posta veya şifre yanlış' })
   }
   if (user.status === 'pending') {
@@ -498,10 +505,18 @@ app.get('/api/themes', async (req, res) => {
   }
 })
 
+// Denetim bulgusu G-11: `reviewer` istek gövdesinden alınıyordu — yönetici, denetim izine
+// istediği ismi (ya da hiç isim vermeyip themes.js'teki 'anonim' fallback'ini) yazdırabiliyordu,
+// yani kürasyon kaydı sahte doldurulabilirdi. Artık YALNIZCA oturumdan geliyor; gövdedeki alan
+// tamamen yok sayılıyor. req.currentUser'ı /api middleware'i dolduruyor (bkz. G-05).
+function reviewerFrom(req) {
+  return req.currentUser?.name || req.currentUser?.email || 'bilinmeyen kullanıcı'
+}
+
 app.post('/api/themes/:seriesId/override', requireAdmin, (req, res) => {
   try {
-    const { theme, reviewer } = req.body || {}
-    const entry = setHumanOverride(req.params.seriesId, theme, reviewer)
+    const { theme } = req.body || {}
+    const entry = setHumanOverride(req.params.seriesId, theme, reviewerFrom(req))
     res.json({
       id: entry.id,
       name: entry.name,
@@ -574,8 +589,8 @@ app.get('/api/destinations', async (req, res) => {
 
 app.post('/api/destinations/:seriesId/override', requireAdmin, (req, res) => {
   try {
-    const { destinationIds, reviewer } = req.body || {}
-    const entry = setHumanTags(req.params.seriesId, destinationIds, reviewer)
+    const { destinationIds } = req.body || {}
+    const entry = setHumanTags(req.params.seriesId, destinationIds, reviewerFrom(req))
     res.json({
       id: entry.id,
       name: entry.name,
@@ -625,8 +640,8 @@ app.get('/api/media-sentiment-audit', async (req, res) => {
 
 app.post('/api/media-sentiment-audit/:id/override', requireAdmin, (req, res) => {
   try {
-    const { sentiment, reviewer } = req.body || {}
-    res.json(setSentimentOverride(req.params.id, sentiment, reviewer))
+    const { sentiment } = req.body || {}
+    res.json(setSentimentOverride(req.params.id, sentiment, reviewerFrom(req)))
   } catch (err) {
     res.status(400).json({ error: err.message })
   }

@@ -136,6 +136,28 @@ export default function Globe3D({
       resizeObserver.disconnect()
       container.removeEventListener('pointerenter', pause)
       container.removeEventListener('pointerleave', resume)
+
+      // Denetim bulgusu B-17: burası eskiden SADECE container.innerHTML = '' yapıyordu. Canvas
+      // DOM'dan çıkıyor ama WebGL context'i ve globe.gl'in requestAnimationFrame döngüsü ayakta
+      // kalıyordu; 2D/3D arasında her geçiş bir context daha sızdırıyor, tarayıcının sert sınırına
+      // (Chrome ~16 eşzamanlı context) gelince en eskiler zorla düşürülüyor ve küre kararıyordu.
+      //
+      // globe.gl 2.46.1'in _destructor()'ı animasyonu durdurup tüm katman verilerini boşaltır AMA
+      // context'i BIRAKMAZ — kurulu bundle'da ne `renderer.dispose` ne `forceContextLoss` geçiyor
+      // (doğrulandı). Bu yüzden ikisini de elle çağırmak gerekiyor; sıra önemli: önce döngüyü
+      // durdur, sonra GPU kaynaklarını bırak, en son DOM'u boşalt.
+      try {
+        world._destructor?.()
+        const renderer = world.renderer?.()
+        if (renderer) {
+          renderer.dispose()
+          renderer.forceContextLoss?.()
+        }
+      } catch (err) {
+        // Yıkım sırasındaki bir hata unmount'u kırmamalı — bileşen her hâlükârda gitmeli.
+        console.warn('[Globe3D] Küre yıkımı sırasında hata:', err?.message)
+      }
+
       container.innerHTML = ''
       globeRef.current = null
     }

@@ -85,6 +85,14 @@ gorunurluk-platformu/
 - Erişim düzeyi (Okuyucu / Analist / Yönetici), şifre sıfırlama (geçici şifre üretimi), hesap silme
 - Kendi yetkini kaldırma ve son yöneticiyi düşürme/silme sunucu tarafında engellenir
 
+> **Erişim düzeyleri hakkında (bilinen sınır).** Bu sürümde **Okuyucu (`viewer`) ve Analist
+> (`analyst`) düzeyleri operasyonel olarak ÖZDEŞTİR**: sunucu yetkilendirmesi tek bir ayrımı
+> uygular — yönetici mi, değil mi. Veri kürasyonunu değiştiren tüm uçlar (tema/destinasyon/medya
+> duygu geçersiz kılma, kullanıcı yönetimi) doğrudan **Yönetici** yetkisi ister; Okuyucu ve Analist
+> aynı okuma yetkisine sahiptir. İki düzey arasındaki fark şu an yalnızca etikettir ve ileride
+> gerçek bir ayrım tanımlanana kadar öyle kalacaktır. Ücretli dış çağrılar bu düzeylerle değil,
+> kullanıcı başına günlük kotayla sınırlanır (`SERPAPI_USER_DAILY_LIMIT`).
+
 ## Veri Kaynakları
 
 | Kaynak | Sağladığı veri | Durum | Maliyet |

@@ -1,6 +1,34 @@
-async function handle(res) {
+// Denetim bulgusu B-18: oturum düştüğünde (7 günlük TTL dolduğunda ya da sunucu oturumu iptal
+// ettiğinde — bkz. G-05) her panel kendi içinde "Giriş gerekli" hatası basıyor, kullanıcı giriş
+// ekranına DÖNMÜYORDU: ekran yarı dolu, yarı hatalı bir hâlde kalıyordu. Artık 401'i tek bir
+// yerde yakalayıp uygulamaya haber veriyoruz; App.jsx bunu dinleyip oturumu sıfırlıyor.
+let unauthorizedHandler = null
+
+/** App.jsx mount'ta bir kez kaydeder; oturum düştüğünde çağrılır. */
+export function setUnauthorizedHandler(fn) {
+  unauthorizedHandler = fn
+}
+
+async function handle(res, { isLoginAttempt = false } = {}) {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
+    // Giriş denemesinin kendisi 401 dönebilir ("E-posta veya şifre yanlış") — bu bir oturum
+    // düşmesi DEĞİL, zaten giriş ekranındayız. Yönlendirme akışını tetiklememeli.
+    if (res.status === 401 && !isLoginAttempt) {
+      // Sunucunun oturumsuz isteğe verdiği yanıt "Giriş gerekli" — bir API çağrısı için doğru ama
+      // GİRİŞ EKRANINDA gösterilecek bildirim olarak anlamsız (kullanıcı zaten oradadır). Bu tek
+      // durumda sebebi açıklayan metne çeviriyoruz; sunucunun daha spesifik mesajları (ör. hesap
+      // reddedildiğinde "Oturumunuz sonlandırıldı…") olduğu gibi geçer.
+      const serverMessage = body.error
+      const notice =
+        !serverMessage || serverMessage === 'Giriş gerekli'
+          ? 'Oturumunuz sona erdi, lütfen tekrar giriş yapın.'
+          : serverMessage
+      const err = new Error(serverMessage || notice)
+      err.status = 401
+      unauthorizedHandler?.(notice)
+      throw err
+    }
     throw new Error(body.error || `İstek başarısız (${res.status})`)
   }
   return res.json()
@@ -18,12 +46,14 @@ export async function fetchTaxonomy() {
   return handle(await fetch('/api/taxonomy'))
 }
 
-export async function submitThemeOverride(seriesId, theme, reviewer) {
+// Denetim G-11: `reviewer` artık gövdede GÖNDERİLMİYOR — sunucu denetim izi adını oturumdan
+// (req.currentUser) türetiyor, istemciden gelen bir isim kabul edilse sahte doldurulabilirdi.
+export async function submitThemeOverride(seriesId, theme) {
   return handle(
     await fetch(`/api/themes/${seriesId}/override`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ theme, reviewer }),
+      body: JSON.stringify({ theme }),
     })
   )
 }
@@ -138,7 +168,8 @@ export async function login(email, password) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email, password }),
-    })
+    }),
+    { isLoginAttempt: true }
   )
 }
 
@@ -220,12 +251,12 @@ export async function fetchDestinations() {
   return handle(await fetch('/api/destinations'))
 }
 
-export async function submitDestinationOverride(seriesId, destinationIds, reviewer) {
+export async function submitDestinationOverride(seriesId, destinationIds) {
   return handle(
     await fetch(`/api/destinations/${seriesId}/override`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ destinationIds, reviewer }),
+      body: JSON.stringify({ destinationIds }),
     })
   )
 }
@@ -238,12 +269,12 @@ export async function fetchMediaSentimentAudit() {
   return handle(await fetch('/api/media-sentiment-audit'))
 }
 
-export async function submitMediaSentimentOverride(id, sentiment, reviewer) {
+export async function submitMediaSentimentOverride(id, sentiment) {
   return handle(
     await fetch(`/api/media-sentiment-audit/${id}/override`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ sentiment, reviewer }),
+      body: JSON.stringify({ sentiment }),
     })
   )
 }

@@ -2,6 +2,17 @@ import crypto from 'node:crypto'
 import db from './db.js'
 
 const SCRYPT_KEYLEN = 64
+// Denetim bulgusu G-06: 8 karakter kuralı yalnızca changeUserPassword'de uygulanıyordu; kayıt ve
+// bootstrap tek karakterlik şifre kabul ediyordu. Artık üçü de aynı kuralı paylaşıyor.
+export const MIN_PASSWORD_LENGTH = 8
+// Yönetici hesabı paylaşılan/kurumsal bir kimlik bilgisi — rapor ≥ 12 öneriyor.
+const MIN_ADMIN_PASSWORD_LENGTH = 12
+// Denetim bulgusu G-16 — BİLİNÇLİ KARAR: `viewer` ve `analyst` bu sürümde operasyonel olarak
+// ÖZDEŞTİR. Sunucu yetkilendirmesi tek bir ayrım uygular (requireAdmin, bkz. index.js); veri
+// kürasyonunu değiştiren her uç doğrudan yönetici ister. İki düzeyin farkı şu an yalnızca
+// etikettir — yeni bir rol karmaşası eklemek yerine bu sınır belgelenmiştir (README, "Erişim
+// düzeyleri hakkında"). Ücretli dış çağrı riski erişim düzeyiyle değil, kullanıcı başına günlük
+// kotayla sınırlanır (services/liveCallQuota.js).
 export const ACCESS_LEVELS = ['viewer', 'analyst', 'admin']
 
 export function hashPassword(password) {
@@ -17,6 +28,18 @@ export function verifyPassword(password, stored) {
   const storedBuf = Buffer.from(hashHex, 'hex')
   if (hash.length !== storedBuf.length) return false
   return crypto.timingSafeEqual(hash, storedBuf)
+}
+
+// Denetim G-10 (zamanlama kanalı): kullanıcı bulunamadığında scrypt hiç çalışmıyor, cevap
+// gözle görülür şekilde daha hızlı dönüyordu — bu da tek başına bir numaralandırma kanalı.
+// Bu sabit hash'e karşı doğrulama yaparak var-olmayan kullanıcı yolunun da aynı scrypt
+// maliyetini ödemesini sağlıyoruz. Değeri önemli değil, sadece gerçek bir hash biçiminde olmalı.
+const DUMMY_PASSWORD_HASH = hashPassword(crypto.randomBytes(32).toString('hex'))
+
+/** Kullanıcı bulunamadığında çağrılır; her zaman false döner, amacı sadece süreyi eşitlemek. */
+export function burnPasswordVerification(password) {
+  verifyPassword(password || '', DUMMY_PASSWORD_HASH)
+  return false
 }
 
 function normalizeEmail(email) {
@@ -81,8 +104,19 @@ export function registerUser({ name, email, role, password }) {
   if (!name || !email || !password) {
     throw new Error('Ad, e-posta ve şifre zorunlu')
   }
+  // Denetim G-06: kayıtta da en az 8 karakter.
+  if (String(password).length < MIN_PASSWORD_LENGTH) {
+    throw new Error(`Şifre en az ${MIN_PASSWORD_LENGTH} karakter olmalı`)
+  }
+  // Denetim bulgusu G-10 (kullanıcı numaralandırma): burası eskiden "Bu e-posta ile zaten bir
+  // hesap var" hatası döndürüyordu — kimliği doğrulanmamış herkes, kayıt formunu deneyerek bir
+  // e-postanın kurumda kayıtlı olup olmadığını öğrenebiliyordu. Artık e-posta zaten kayıtlıysa
+  // İKİNCİ HESAP AÇILMAZ ama cevap yeni bir kayıtla AYNI görünür ('pending'): saldırgan iki
+  // durumu ayırt edemez. Meşru kullanıcı bir şey kaybetmez — hesabı zaten var, giriş yapabilir
+  // (ya da yöneticisi onu onay listesinde görür); kayıt zaten yönetici onayına tabi olduğu için
+  // kendi kendine servis bir "hesabım var mı" sorgusunun bir değeri yok.
   if (findUserByEmail(email)) {
-    throw new Error('Bu e-posta ile zaten bir hesap var')
+    return { status: 'pending' }
   }
   const id = 'usr_' + crypto.randomBytes(12).toString('hex')
   const entry = {
@@ -170,8 +204,6 @@ export function deleteUser(id, requestingUserId) {
   deleteStmt.run(id)
 }
 
-const MIN_PASSWORD_LENGTH = 8
-
 // E-posta altyapımız yok — "şifremi unuttum" self-servis olamıyor. Bunun yerine
 // yönetici bir kullanıcı için geçici bir şifre üretir ve bunu güvenli bir
 // kanaldan (yüz yüze, kurum içi mesajlaşma vb.) iletir. Düz metin şifre sadece
@@ -214,6 +246,19 @@ export function ensureBootstrapAdmin() {
   const password = process.env.APP_PASSWORD
   if (!password) {
     console.warn('[users] APP_PASSWORD tanımlı değil, bootstrap admin oluşturulamadı')
+    return
+  }
+  // Denetim G-06: `.env.example` `change_this_password` ile geliyor. app.db silinip yeniden
+  // oluşturulduğunda bu örnek değer SESSİZCE yöneticinin şifresi oluyordu. Artık örnek değer ve
+  // çok kısa şifreler reddediliyor — yönetici hesabı hiç açılmıyor ve sebep loglanıyor
+  // (açılışı çökertmiyoruz: sunucu ayakta kalsın, operatör logu görüp .env'i düzeltsin).
+  const PLACEHOLDER_PASSWORDS = ['change_this_password', 'changeme', 'password']
+  if (PLACEHOLDER_PASSWORDS.includes(password.toLowerCase())) {
+    console.error('[users] APP_PASSWORD örnek/varsayılan değerde — bootstrap admin OLUŞTURULMADI. .env dosyasında gerçek bir şifre tanımlayın.')
+    return
+  }
+  if (password.length < MIN_ADMIN_PASSWORD_LENGTH) {
+    console.error(`[users] APP_PASSWORD en az ${MIN_ADMIN_PASSWORD_LENGTH} karakter olmalı — bootstrap admin OLUŞTURULMADI.`)
     return
   }
   const email = normalizeEmail(process.env.ADMIN_EMAIL || 'admin@kurum.gov.tr')
