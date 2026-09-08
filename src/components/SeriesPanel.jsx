@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchImdbData, fetchSeriesEnrichment } from '../lib/api.js'
 import CastBar from './CastBar.jsx'
+import { VISIBILITY_SCORE_NOTE } from '../lib/methodologyNotes.js'
 import countryNames from '../data/country-centroids.json'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w154'
@@ -138,7 +139,7 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
       )}
 
       <h3>Yayınlandığı Ülkeler</h3>
-      <p className="dashboard__hint" title="Sağdaki sayı ülkenin genel görünürlük skorudur.">
+      <p className="dashboard__hint" title={`Sağdaki sayı ülkenin genel görünürlük skorudur. ${VISIBILITY_SCORE_NOTE}`}>
         Ülkenin genel skoru ⓘ
       </p>
       <ul className="panel__series-list">

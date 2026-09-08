@@ -1,4 +1,9 @@
 import { useEffect, useState } from 'react'
+import {
+  MARKET_SHARE_NOTE,
+  MEDIA_TONE_NOTE,
+  DESTINATION_SHARE_NOTE,
+} from '../lib/methodologyNotes.js'
 import { fetchCulturalImpact, fetchTourismImpact, fetchExportImpact, fetchBenchmark } from '../lib/api.js'
 
 function round1(n) {
@@ -10,6 +15,8 @@ function round1(n) {
 // gösterir — sayaç kendi başına ne kadar veri toplandığını değil, o verinin ne söylediğini
 // özetler. Veri henüz oluşmamışsa (ör. hiç basın taraması yapılmadıysa) o kart dürüstçe "—"
 // gösterir, sıfır ya da uydurma bir sayı değil.
+// Denetim C.5: bu dört sayı karar vericinin ilk gördüğü rakamlar ve hiçbirinin ne ölçtüğü
+// yazmıyordu. Metinler tek kaynaktan (lib/methodologyNotes.js) geliyor.
 export default function ImpactStats() {
   const [stats, setStats] = useState(null)
   const [status, setStatus] = useState('loading')
@@ -43,22 +50,28 @@ export default function ImpactStats() {
     <div className="impact-stats">
       <div className="impact-stats__card">
         <div className="impact-stats__num">{stats.totalCountries}</div>
-        <div className="impact-stats__label">Takip Edilen Ülke</div>
+        <div className="impact-stats__label" title="TMDB/JustWatch sağlayıcı verisinde en az bir Türk dizisi görünen ülke sayısı.">
+          Takip Edilen Ülke ⓘ
+        </div>
       </div>
       <div className="impact-stats__card">
         <div className="impact-stats__num">{stats.marketSharePct != null ? `%${stats.marketSharePct}` : '—'}</div>
-        <div className="impact-stats__label">TR Küresel Pazar Payı</div>
+        <div className="impact-stats__label" title={MARKET_SHARE_NOTE}>
+          TR Küresel Pazar Payı ⓘ
+        </div>
       </div>
       <div className="impact-stats__card">
         <div className="impact-stats__num">{stats.mediaTonePct != null ? `%${stats.mediaTonePct}` : '—'}</div>
-        <div className="impact-stats__label">Olumlu Medya Tonu</div>
+        <div className="impact-stats__label" title={MEDIA_TONE_NOTE}>
+          Olumlu Medya Tonu ⓘ
+        </div>
       </div>
       <div className="impact-stats__card">
         <div className="impact-stats__num">
           {stats.topDestinationSharePct != null ? `%${stats.topDestinationSharePct}` : '—'}
         </div>
-        <div className="impact-stats__label">
-          {stats.topDestinationName || 'Öncü Destinasyon'} Destinasyon Payı
+        <div className="impact-stats__label" title={DESTINATION_SHARE_NOTE}>
+          {stats.topDestinationName || 'Öncü Destinasyon'} Destinasyon Payı ⓘ
         </div>
       </div>
     </div>

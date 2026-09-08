@@ -3,6 +3,7 @@ import { CONTINENTS, groupByContinent, resolveIso2FromLabel, topSeriesInContinen
 import { computeSharePct, totalScoreOf } from '../lib/scoreShare.js'
 import { fetchTurkishLearningIndex, fetchDuolingoStats, fetchTourismSummary } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
+import { CONTINENT_SCORE_NOTE } from '../lib/methodologyNotes.js'
 
 function nameOf(iso2) {
   return countryNames[iso2]?.name || iso2
@@ -225,7 +226,7 @@ export default function ContinentSidebar({
                 </div>
 
                 <div className="sidebar__stat">
-                  <div className="sidebar__stat-label" title="Popülerlik verisine dayalı gösterge.">
+                  <div className="sidebar__stat-label" title={CONTINENT_SCORE_NOTE}>
                     Kıtasal Kültürel Erişim Skoru ⓘ
                   </div>
                   <div className="sidebar__stat-value">{round1(selected.averageScore)}</div>

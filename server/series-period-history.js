@@ -1,4 +1,4 @@
-import db from './db.js'
+import db, { inTransaction } from './db.js'
 
 // CountryPanel'deki "Yayındaki diziler" listesi şu ana kadar hep dizinin O ANKİ (canlı)
 // TMDB popülerliğine göre sıralanıyordu — burada dizi bazında (ülkeye göre DEĞİL, TMDB
@@ -56,11 +56,14 @@ export function maybeRecordSeriesSnapshot(series) {
   const lastRunAt = row ? Number(row.value) : 0
   if (now - lastRunAt < SNAPSHOT_INTERVAL_MS) return
 
-  for (const s of series) {
-    insertSnapshotStmt.run(s.id, s.popularity, now)
-    pruneStmt.run(s.id, s.id, MAX_SNAPSHOTS_PER_SERIES)
-  }
-  setMetaStmt.run(SNAPSHOT_META_KEY, String(now))
+  // Denetim B-20: ~400 dizi × 2 ifade tek transaction'da.
+  inTransaction(() => {
+    for (const s of series) {
+      insertSnapshotStmt.run(s.id, s.popularity, now)
+      pruneStmt.run(s.id, s.id, MAX_SNAPSHOTS_PER_SERIES)
+    }
+    setMetaStmt.run(SNAPSHOT_META_KEY, String(now))
+  })
 }
 
 // server/scheduler.js'in günlük tazelemesinden çağrılır — tamamlanmış ayları, ham veri
@@ -91,11 +94,13 @@ export function rollupSeriesMonthlyIfNeeded() {
     b.count += 1
   }
 
-  for (const b of buckets.values()) {
-    upsertMonthlyStmt.run(b.tmdb_id, b.year, b.month, b.sum / b.count, b.count)
-  }
-
-  setMetaStmt.run(ROLLUP_META_KEY, String(now))
+  // Denetim B-20: aylık rollup ~800 upsert'e kadar çıkabiliyor — tek transaction.
+  inTransaction(() => {
+    for (const b of buckets.values()) {
+      upsertMonthlyStmt.run(b.tmdb_id, b.year, b.month, b.sum / b.count, b.count)
+    }
+    setMetaStmt.run(ROLLUP_META_KEY, String(now))
+  })
 }
 
 function currentMonthAverages() {

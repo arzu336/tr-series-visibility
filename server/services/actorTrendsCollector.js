@@ -1,4 +1,4 @@
-import db from '../db.js'
+import db, { inTransaction } from '../db.js'
 import { getEnrichmentTargets, getTopActors } from './enrichmentTargets.js'
 import { cacheFirstSerpApi, fetchTrendsByCountryRaw, actorTrendsCacheKey, TRENDS_TTL_MS, getSerpApiUsageThisMonth } from './serpApiCache.js'
 import { resolveIso2FromLabel } from './countryLookup.js'
@@ -59,11 +59,15 @@ export async function runActorTrendsCollectionIfNeeded() {
         // Ham yanıt (result.byCountry) dünya genelinde onlarca ülke içerebilir — sadece platformun
         // ZATEN takip ettiği hedef havuzla (getEnrichmentTargets) kesişenler kalıcı tabloya yazılır,
         // uydurma/ilgisiz bir ülke listesi genişletilmez.
-        for (const entry of result.byCountry) {
-          const iso2 = resolveIso2FromLabel(entry.country)
-          if (!iso2 || !targetIso2Set.has(iso2)) continue
-          upsertStmt.run(actor.id, actor.name, iso2, entry.value, nowIso, Date.now() + TRENDS_TTL_MS)
-        }
+        // Denetim B-20: yalnızca bu İÇ döngü transaction'a alınır — dış döngüde ağ çağrısı
+        // (await) var ve onu transaction içinde tutmak kilidi saniyelerce açık bırakırdı.
+        inTransaction(() => {
+          for (const entry of result.byCountry) {
+            const iso2 = resolveIso2FromLabel(entry.country)
+            if (!iso2 || !targetIso2Set.has(iso2)) continue
+            upsertStmt.run(actor.id, actor.name, iso2, entry.value, nowIso, Date.now() + TRENDS_TTL_MS)
+          }
+        })
         if (!result.fromCache) {
           liveCalls++
           await sleep(DELAY_AFTER_LIVE_CALL_MS)

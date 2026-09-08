@@ -1,5 +1,6 @@
 import db from './db.js'
 import { purgeExpiredSessions } from './auth.js'
+import { purgeExpiredCacheEntries } from './cache.js'
 import { getEnrichedVisibility } from './data-pipeline.js'
 import { rollupMonthlyIfNeeded } from './period-history.js'
 import { rollupSeriesMonthlyIfNeeded } from './series-period-history.js'
@@ -47,6 +48,13 @@ async function runScheduledRefreshInner() {
     // sınırsız büyüyordu (denetim G-15).
     const purged = purgeExpiredSessions()
     if (purged > 0) console.log(`[scheduler] süresi geçmiş ${purged} oturum temizlendi`)
+
+    // Denetim bulgusu B-20: cache_entries'ten hiç satır silinmiyordu — süresi dolmuş kayıtlar
+    // okunmuyor ama diskte kalıyor ve içerik hash'iyle anahtarlanan girdiler her değişimde yeni
+    // satır ürettiği için tablo tek yönlü büyüyor. Oturum temizliğiyle aynı ritimde, ucuz bir
+    // DELETE. Yalnızca süresi GEÇMİŞ satırlar silinir; taze önbelleğe dokunulmaz.
+    const purgedCache = purgeExpiredCacheEntries()
+    if (purgedCache > 0) console.log(`[scheduler] süresi geçmiş ${purgedCache} önbellek kaydı temizlendi`)
 
     await getEnrichedVisibility()
     // Ham visibility_history budanmadan önce (bkz. MAX_SNAPSHOTS_PER_COUNTRY, history.js)

@@ -1,5 +1,5 @@
 import * as XLSX from 'xlsx'
-import db from '../db.js'
+import db, { inTransaction } from '../db.js'
 import { resolveIso2FromLabel } from './countryLookup.js'
 
 // Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
@@ -136,9 +136,13 @@ export async function syncTourismData() {
   const { entries, unresolvedNames } = await downloadAndParseBulletin(bulletin)
 
   const now = new Date().toISOString()
-  for (const e of entries) {
-    upsertArrivalStmt.run(e.iso2, e.year, e.month, e.visitorCount, bulletin.url, now)
-  }
+  // Denetim B-20: bülten ~90 ülke satırı içeriyor — hepsi tek transaction'da yazılır ki yarım
+  // içe aktarılmış bir bülten kalmasın. Ağ işleri (indirme/parse) bu bloğun DIŞINDA bitti.
+  inTransaction(() => {
+    for (const e of entries) {
+      upsertArrivalStmt.run(e.iso2, e.year, e.month, e.visitorCount, bulletin.url, now)
+    }
+  })
 
   if (unresolvedNames.length > 0) {
     console.warn('[tourismData] eşleşmeyen ülke adları (atlandı):', unresolvedNames.join(', '))

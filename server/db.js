@@ -370,4 +370,31 @@ if (!seriesMonthlyPk.includes('source')) {
   console.log('[db] series_popularity_monthly birincil anahtarı source ile genişletildi (B-08)')
 }
 
+// Denetim bulgusu B-20: server/ altında hiç transaction yoktu. Yüzlerce satırlık toplu yazımlar
+// (ülke/dizi anlık görüntüleri, aylık rollup, turizm bülteni) her INSERT için ayrı bir örtük
+// transaction açıyordu — yani her satır için ayrı bir disk senkronizasyonu. Bunun iki bedeli var:
+// yavaşlık ve ATOMİKLİK KAYBI (döngünün ortasında bir hata olursa yarı yazılmış bir durum kalır).
+//
+// node:sqlite'ın DatabaseSync'inde better-sqlite3'teki gibi bir db.transaction() sarmalayıcısı
+// YOK (doğrulandı) — BEGIN/COMMIT elle veriliyor.
+//
+// DİKKAT: fn SENKRON olmalıdır. İçinde `await` bulunan bir işi buraya sarmak, transaction'ı ağ
+// çağrısı boyunca açık tutar ve diğer yazarları (Python pipeline'ı dahil) kilitler. Çağrı
+// yerlerinin hepsi bu yüzden yalnızca saf DB döngülerini kapsıyor.
+export function inTransaction(fn) {
+  db.exec('BEGIN')
+  try {
+    const sonuc = fn()
+    db.exec('COMMIT')
+    return sonuc
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK')
+    } catch {
+      // Transaction zaten düşmüş olabilir; asıl hatayı gizleme.
+    }
+    throw err
+  }
+}
+
 export default db

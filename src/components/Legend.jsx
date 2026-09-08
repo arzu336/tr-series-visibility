@@ -1,4 +1,5 @@
 import { legendStops } from '../lib/scale.js'
+import { VISIBILITY_SCORE_NOTE } from '../lib/methodologyNotes.js'
 
 // caption verilmezse (madde 1 — dizi bazlı harita filtresi aktif değilken) varsayılan TMDB
 // açıklaması gösterilir; seriesFilter aktifken App.jsx buraya gerçek anlamı (Google Trends
@@ -14,7 +15,10 @@ export default function Legend({ caption }) {
         ))}
       </div>
       <span className="legend__label">Yüksek</span>
-      <p className="legend__caption" title={caption || 'Popülerlik × yayın erişimi — proxy gösterge.'}>
+      {/* Denetim C.5: varsayılan ipucu "Popülerlik × yayın erişimi — proxy gösterge." idi;
+          ne ölçtüğünü değil, ne olmadığını da söylemiyordu. Artık tek kaynaktan (lib/
+          methodologyNotes.js) gelen açık çerçeve. */}
+      <p className="legend__caption" title={caption || VISIBILITY_SCORE_NOTE}>
         {caption ? caption.split(' — ')[0] : 'Kültürel Görünürlük Skoru'} ⓘ
       </p>
     </div>

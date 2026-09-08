@@ -2537,17 +2537,159 @@ body {
    burada sadece uygulama kromunu (header/nav, dışa aktarma butonları) gizleyip
    dashboard'un kendi kaydırılabilir yüksekliğini yazdırma akışına açıyoruz; koyu
    tema renkleri de aynen basılsın diye print-color-adjust zorlanıyor. */
+/* Baskı başlığı ve sekme başlıkları YALNIZCA yazdırmada görünür (aşağıdaki @media print
+   bloğunda açılır) — ekranda yer kaplamamalı. */
+.dashboard__print-header,
+.dashboard__print-group-title {
+  display: none;
+}
+
+/* --- Denetim bulgusu B-22: yazdırma görünümü ------------------------------------------------
+   Eskiden bu blok yalnızca başlığı gizliyordu; çıktı, koyu arayüzün ekran görüntüsü gibi çıkıyor
+   ve (sekmeler koşullu mount edildiği için) tek sekme içeriyordu. Karar vericiye verilecek bir
+   PDF için iki şey değişti:
+     1) ImpactAnalysisTabs yazdırırken üç sekmeyi birden mount ediyor (bkz. printMode),
+     2) burada baskıya özel AÇIK bir tema uygulanıyor — koyu zemin hem mürekkep israfı hem de
+        çoğu yazıcıda okunaksız. Renkli veri işaretleri (korelasyon çubukları, duygu barları,
+        skor rozetleri) KORUNUR: anlam taşıyorlar, yalnızca zemin ve metin açığa çevrilir. */
 @media print {
+  @page {
+    margin: 14mm;
+  }
+
   .app__header,
-  .dashboard__export-actions {
+  .dashboard__export-actions,
+  .dashboard__tabs,
+  .app__nav {
     display: none !important;
   }
 
   html, body, #root, .app, .app__main, .dashboard {
     height: auto !important;
     overflow: visible !important;
+    background: #ffffff !important;
+    color: #111418 !important;
   }
 
+  .dashboard__print-header {
+    display: block;
+    margin-bottom: 10mm;
+    padding-bottom: 4mm;
+    border-bottom: 2px solid #111418;
+  }
+
+  .dashboard__print-header h1 {
+    font-size: 17pt;
+    margin: 0 0 2mm;
+    color: #111418;
+  }
+
+  .dashboard__print-header p {
+    margin: 0;
+    font-size: 9pt;
+    color: #444b57;
+  }
+
+  .dashboard__header-row h2 {
+    display: none;
+  }
+
+  .dashboard__print-group-title {
+    display: block;
+    font-size: 13pt;
+    margin: 0 0 4mm;
+    padding-bottom: 1.5mm;
+    border-bottom: 1px solid #9aa3b2;
+    color: #111418;
+  }
+
+  /* Bir bölüm sayfa ortasından ikiye bölünmesin. */
+  .dashboard__print-group {
+    break-inside: avoid-page;
+    margin-bottom: 8mm;
+  }
+
+  .dashboard__section {
+    background: #ffffff !important;
+    border: 1px solid #c7cdd8 !important;
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 6mm;
+  }
+
+  .dashboard__section-title,
+  .dashboard__table th,
+  .dashboard__table td,
+  .leading-signal__hero-label,
+  .leading-signal__value {
+    color: #111418 !important;
+  }
+
+  .dashboard__table th,
+  .dashboard__table td {
+    border-color: #c7cdd8 !important;
+  }
+
+  /* İkincil metinler: açık zeminde okunur bir griye çekilir (koyu temadaki #8792a8 beyazda
+     neredeyse görünmez). */
+  .dashboard__empty,
+  .leading-signal__intro,
+  .leading-signal__hero-note,
+  .leading-signal__strength,
+  .dashboard__hint {
+    color: #444b57 !important;
+  }
+
+  .leading-signal__hero {
+    background: #f3f5f9 !important;
+    border-color: #c7cdd8 !important;
+  }
+
+  .leading-signal__bar {
+    background: #e3e7ee !important;
+  }
+
+  /* Zayıf satırlar ekranda soluklaştırılıyor; baskıda o kadar soluk olursa okunmaz. */
+  .leading-signal__row--weak {
+    opacity: 0.75 !important;
+  }
+
+  /* Üstteki dört özet kartı — koyu zemin beyaz sayfada hem mürekkep israfı hem de çevresindeki
+     açık temayla tutarsızdı. */
+  .impact-stats__card {
+    background: #ffffff !important;
+    border: 1px solid #c7cdd8 !important;
+  }
+
+  .impact-stats__num,
+  .impact-stats__label {
+    color: #111418 !important;
+  }
+
+  /* Çubuk grafiklerin kategori etiketleri (#f1f3f8) ve değerleri (#8792a8) beyaz kâğıtta
+     okunmuyordu — baskı görüntüsünde gözle doğrulandı, "aşk"/"Türkiye" satırları görünmezdi. */
+  .benchmark-card__row-label,
+  .benchmark-card__row-value,
+  .benchmark-card,
+  .benchmark-card h4 {
+    color: #111418 !important;
+  }
+
+  .benchmark-card__row-bar-track {
+    background: #e3e7ee !important;
+  }
+
+  .theme-insight__ai-box {
+    background: #f3f5f9 !important;
+    border-color: #c7cdd8 !important;
+  }
+
+  .theme-insight__ai-box p,
+  .theme-insight__ai-label {
+    color: #111418 !important;
+  }
+
+  /* Renkli veri işaretleri baskıda da basılsın (tarayıcı varsayılanı bunları atar). */
   * {
     -webkit-print-color-adjust: exact !important;
     print-color-adjust: exact !important;

@@ -1,4 +1,4 @@
-import db from './db.js'
+import db, { inTransaction } from './db.js'
 
 const SNAPSHOT_INTERVAL_MS = 12 * 60 * 60 * 1000 // en az 12 saatte bir yeni anlık görüntü al
 const TARGET_WINDOW_MS = 7 * 24 * 60 * 60 * 1000 // 7 gün öncesiyle kıyaslamayı hedefle
@@ -68,16 +68,24 @@ export function maybeRecordSnapshot(history, countries) {
   const marker = history.__lastSnapshotAt || 0
   if (now - marker < SNAPSHOT_INTERVAL_MS) return
 
-  countries.forEach((c) => {
-    insertSnapshotStmt.run(c.iso2, c.score, now)
-    pruneStmt.run(c.iso2, c.iso2, MAX_SNAPSHOTS_PER_COUNTRY)
+  // Denetim B-20: ~200 ülke × 2 ifade + meta = ayrı ayrı örtük transaction'lardı. Tek blokta
+  // atomik: ya tüm anlık görüntü yazılır ya hiçbiri (yarım bir tarih damgası kalmaz).
+  inTransaction(() => {
+    countries.forEach((c) => {
+      insertSnapshotStmt.run(c.iso2, c.score, now)
+      pruneStmt.run(c.iso2, c.iso2, MAX_SNAPSHOTS_PER_COUNTRY)
+    })
+    setMetaStmt.run(String(now))
+  })
 
+  // Bellekteki geçmiş nesnesi DB yazımından sonra güncellenir — yazım başarısız olursa
+  // (transaction geri alınır) bellek de kirlenmemiş olur.
+  countries.forEach((c) => {
     if (!history[c.iso2]) history[c.iso2] = []
     history[c.iso2].push({ score: c.score, capturedAt: now })
     if (history[c.iso2].length > MAX_SNAPSHOTS_PER_COUNTRY) {
       history[c.iso2] = history[c.iso2].slice(-MAX_SNAPSHOTS_PER_COUNTRY)
     }
   })
-  setMetaStmt.run(String(now))
   history.__lastSnapshotAt = now
 }
