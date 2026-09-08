@@ -1,5 +1,5 @@
 import db from '../db.js'
-import { fetchNewsArticlesRaw } from './serpApiCache.js'
+import { fetchNewsArticlesGdeltCached } from './gdeltNews.js'
 import { analyzeMediaSentiment } from '../llm.js'
 
 // Proje raporu §4.6 "Basın/Haber Duygu Analizi". Kendi tablosu (media_sentiment, bkz. db.js) —
@@ -11,13 +11,20 @@ import { analyzeMediaSentiment } from '../llm.js'
 const NEWS_SENTIMENT_TTL_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_STORED_ARTICLES = 20
 
+// Denetim raporu D.6: haber kaynağı ücretli SerpAPI `google_news` motorundan ücretsiz GDELT
+// DOC 2.0'a taşındı (bkz. services/gdeltNews.js). Bu sabit satırın hangi sağlayıcıdan geldiğini
+// media_sentiment.source sütununa yazar; ESKİ sağlayıcıdan gelmiş bir satır, TTL'i dolmamış olsa
+// bile tazelenmesi gereken sayılır (aşağıya bakınız) — iki dönemin verisi karışmaz.
+const NEWS_SOURCE = 'gdelt'
+
 const getStmt = db.prepare('SELECT * FROM media_sentiment WHERE series_id = ? AND country_iso2 = ?')
 const upsertStmt = db.prepare(`
   INSERT INTO media_sentiment
     (series_id, country_iso2, query_used, total_news_count, positive_score, neutral_score,
-     negative_score, dominant_sentiment, llm_summary, raw_articles, created_at, expires_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+     negative_score, dominant_sentiment, llm_summary, raw_articles, created_at, expires_at, source)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
   ON CONFLICT(series_id, country_iso2) DO UPDATE SET
+    source = excluded.source,
     query_used = excluded.query_used,
     total_news_count = excluded.total_news_count,
     positive_score = excluded.positive_score,
@@ -227,7 +234,7 @@ function rowToResult(row, extra) {
 /**
  * 1. media_sentiment'te geçerli (expires_at > şimdi) bir kayıt varsa SerpAPI/LLM'e hiç
  *    gitmeden onu döner.
- * 2. Yoksa google_news'ten haber çeker; hiç haber yoksa dürüstçe "yetersiz-veri" olarak
+ * 2. Yoksa GDELT DOC 2.0'dan haber çeker; hiç haber yoksa dürüstçe "yetersiz-veri" olarak
  *    cache'ler (LLM'e hiç gitmez, boşuna prompt harcanmaz).
  * 3. Haber varsa LLM'e gönderir; LLM başarısız olursa (timeout/hata) sayısal veri yine de
  *    cache'lenir (total_news_count, raw_articles) — sadece duygu skorları/özet null kalır ve
@@ -237,7 +244,10 @@ function rowToResult(row, extra) {
 export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle, countryIso2) {
   const iso2 = countryIso2.toUpperCase()
   const existing = getStmt.get(seriesId, iso2)
-  if (existing && Date.now() <= existing.expires_at) {
+  // Süresi dolmamış OLSA BİLE, satır önceki sağlayıcıdan (SerpAPI google_news) geldiyse yeniden
+  // taranır: iki kaynağın makale kümesi ve alan yapısı farklı (GDELT özet döndürmüyor), aynı
+  // tabloda karıştırılmaları sonuçları sessizce yanıltıcı hâle getirirdi.
+  if (existing && Date.now() <= existing.expires_at && existing.source === NEWS_SOURCE) {
     return rowToResult(existing, { stale: false })
   }
 
@@ -247,9 +257,9 @@ export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle,
 
   let articles
   try {
-    articles = await fetchNewsArticlesRaw(query, iso2)
+    articles = await fetchNewsArticlesGdeltCached(query, iso2)
   } catch (err) {
-    // SerpAPI çağrısı başarısız oldu (429/ağ) — eski (süresi dolmuş) bir kayıt varsa çökmeden
+    // Haber çağrısı başarısız oldu (GDELT hız sınırı/ağ) — eski (süresi dolmuş) bir kayıt varsa çökmeden
     // onu stale:true ile döneriz, hiç kayıt yoksa hatayı olduğu gibi yukarı fırlatırız
     // (server/services/serpApiCache.js'teki cacheFirstSerpApi ile aynı dayanıklılık deseni).
     if (existing) {
@@ -263,7 +273,7 @@ export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle,
   const expiresAt = now.getTime() + NEWS_SENTIMENT_TTL_MS
 
   if (articles.length === 0) {
-    upsertStmt.run(seriesId, iso2, query, 0, null, null, null, 'yetersiz-veri', null, JSON.stringify([]), nowIso, expiresAt)
+    upsertStmt.run(seriesId, iso2, query, 0, null, null, null, 'yetersiz-veri', null, JSON.stringify([]), nowIso, expiresAt, NEWS_SOURCE)
     return rowToResult(getStmt.get(seriesId, iso2), { fromCache: false, stale: false })
   }
 
@@ -286,7 +296,8 @@ export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle,
     sentiment?.summary ?? null,
     JSON.stringify(rawArticles),
     nowIso,
-    expiresAt
+    expiresAt,
+    NEWS_SOURCE
   )
 
   return rowToResult(getStmt.get(seriesId, iso2), { fromCache: false, stale: false })

@@ -192,7 +192,10 @@ function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, sca
         <div className="dashboard__bulk-bar" style={{ marginTop: '0.6rem' }}>
           {scanResult.countriesTargeted} ülke hedeflendi — basın: {scanResult.news.scanned} tarandı ({scanResult.news.liveCalls} canlı),
           sosyal: {scanResult.social.scanned} tarandı ({scanResult.social.liveCalls} canlı).
-          {(scanResult.news.budgetExhausted || scanResult.social.budgetExhausted) && ' Aylık SerpAPI kotası sırasında doldu.'}
+          {/* Denetim raporu D.6: basın taraması artık ücretsiz GDELT'e gittiği için SerpAPI
+              kotasına TABİ DEĞİL — `news.budgetExhausted` alanı da kaldırıldı. Bu uyarı yalnızca
+              hâlâ SerpAPI kullanan sosyal tarama (YouTube + Bilgi Grafiği) için geçerli. */}
+          {scanResult.social.budgetExhausted && ' Sosyal tarama sırasında aylık SerpAPI kotası doldu (basın taraması ücretsiz kaynaktan sürer).'}
         </div>
       )}
       {scanStatus === 'error' && <div className="status status--error" style={{ marginTop: '0.6rem' }}>Tarama başarısız: {scanError}</div>}

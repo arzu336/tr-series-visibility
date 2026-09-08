@@ -20,6 +20,10 @@ const ISO2_BY_NAME = new Map(
 // eklenmiyor: haritanın/uygulamanın geri kalanı zaten o ülkeleri tanımıyor, sadece turizm
 // verisinde "çözüldü" gibi göstermek yanıltıcı olurdu.
 const NAME_ALIASES = {
+  // Denetim bulgusu B-13: Google Trends (hl=tr) bu ülkeyi tireli yazıyor, country-centroids.json'da
+  // ise tiresiz ("Bosna Hersek") — aynı ülke, sadece yazım farkı. Önbellekteki 39 trends kaydında
+  // 9 kez sessizce düşmüştü.
+  'bosna-hersek': 'BA',
   'beyaz rusya (belarus)': 'BY',
   'güney kıbrıs rum kesimi': 'CY',
   'çek cumhuriyeti (çekya)': 'CZ',

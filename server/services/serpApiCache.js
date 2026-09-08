@@ -216,8 +216,19 @@ export async function fetchTrendsByCountryRaw(seriesName) {
     data_type: 'GEO_MAP_0',
     hl: 'tr',
   })
+  // Denetim bulgusu B-13: eskiden `r.location || r.geo` idi — yani SerpAPI'nin hl=tr'ye göre
+  // YERELLEŞTİRDİĞİ ülke ADI birincil anahtardı ve aşağıda resolveIso2FromLabel ile ada göre
+  // eşleştiriliyordu. Ad eşleşmesi kırılgan: yazım farkı ("Bosna-Hersek" vs "Bosna Hersek") ya da
+  // country-centroids.json'da bulunmayan bir ülke sessizce DÜŞÜYORDU. Ölçüldü: önbellekteki 39
+  // trends kaydında 12 ülke kayboluyordu (İran 35, Türkmenistan 28, Kosova 8 kez...).
+  // `r.geo` zaten ISO2 kodudur — ad çevirisine hiç girmeden doğru anahtarı verir; `location`
+  // yalnızca geo boşsa geri düşüş olarak kalır.
+  // DİKKAT: bu tercih SADECE ülke düzeyi (GEO_MAP_0, dünya geneli) yanıtlar için doğrudur.
+  // fetchRegionalInterestRaw ülke İÇİ alt bölge döndürür ve orada `geo` "US-WY" gibi bir alt
+  // bölge kodudur; oradaki `location` (ör. "Wyoming", "Kaliforniya") doğrudan ekrana basıldığı
+  // için bilerek DEĞİŞTİRİLMEDİ.
   const byCountry = (data.interest_by_region || [])
-    .map((r) => ({ country: r.location || r.geo, value: r.extracted_value ?? r.value }))
+    .map((r) => ({ country: r.geo || r.location, value: r.extracted_value ?? r.value }))
     .filter((r) => r.country != null && r.value != null)
     .sort((a, b) => b.value - a.value)
 
@@ -406,23 +417,12 @@ export async function fetchSocialListeningRaw(seriesName) {
   return combineSocialHalves({ seriesName }, kgResult, ytResult)
 }
 
-// google_news SerpAPI motoru — server/services/newsSentiment.js tarafından kullanılır. Kendi
-// cache'i media_sentiment tablosunda (LLM analiziyle birlikte) tutulduğu için burada
-// cacheFirstSerpApi'den GEÇMİYOR, ham çağrı olarak dışa açılıyor.
-export async function fetchNewsArticlesRaw(query, countryIso2) {
-  const data = await serpapiGet({
-    engine: 'google_news',
-    q: query,
-    gl: countryIso2.toLowerCase(),
-  })
-  return (data.news_results || []).map((r) => ({
-    title: r.title,
-    source: r.source?.name || (typeof r.source === 'string' ? r.source : null),
-    date: r.date || null,
-    url: r.link || null,
-    snippet: r.snippet || null,
-  }))
-}
+// Denetim raporu D.6: `google_news` motorunu kullanan fetchNewsArticlesRaw BURADAN KALDIRILDI.
+// Haber taraması artık ücretsiz GDELT DOC 2.0 üzerinden yapılıyor (services/gdeltNews.js) —
+// rapora göre aylık ~1.875 ücretli çağrılık en büyük SerpAPI kalemi buydu. Fonksiyon dışa açık
+// bırakılsaydı ileride yanlışlıkla yeniden kullanılıp sessizce ücretli çağrı açabilirdi; ölü kod
+// olarak durmasın diye tamamen silindi. Bu dosyadaki DİĞER motorlar (google_trends, google,
+// youtube) olduğu gibi kalıyor.
 
 // --- Hibrit Yerel Skor Çarpanı ---------------------------------------------------------------
 // TMDB'nin popülerlik alanı TEK bir küresel sayı (bkz. server/series-period-history.js'teki aynı

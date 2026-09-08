@@ -1,10 +1,13 @@
 import db from './db.js'
-
-// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
-// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
-const EXTERNAL_TIMEOUT_MS = 15000
+import { serpapiGet } from './services/serpApiCache.js'
 
 const CACHE_KEY = 'turkish-learning-index'
+// Denetim bulgusu B-19: bu önbellekte hiç son kullanma yoktu — İLK başarılı çekimden sonra tablo
+// sonsuza kadar donuyordu ve "Türkçe Dil Öğrenim İlgisi" kartı yıllar önceki veriyi güncelmiş
+// gibi gösterebilirdi. Diğer Trends önbellekleriyle (serpApiCache.js TRENDS_TTL_MS) aynı ritim:
+// 30 gün. Google Trends'in kendi verisi zaten haftalık çözünürlükte, daha sık tazelemek ücretli
+// çağrıyı boşa harcar.
+const TTL_MS = 30 * 24 * 60 * 60 * 1000
 // Türkçe dizilerinin kültürel etkisini "Türkçe öğrenme ilgisi" üzerinden ölçmek için gerçek
 // Google Trends arama hacmi çekilen terimler — server/serpapi.js'teki queryTrends ile aynı
 // desen (google_trends engine, GEO_MAP_0, tek terim), tek fark burada dizi adı değil sabit
@@ -12,29 +15,25 @@ const CACHE_KEY = 'turkish-learning-index'
 const SEARCH_TERMS = ['learn Turkish', 'Türkçe kursu', 'Turkish language course']
 
 const getStmt = db.prepare('SELECT queried_at, by_country FROM turkish_learning_cache WHERE key = ?')
-const insertStmt = db.prepare(`
+// TTL geldiğine göre bu satır artık YENİDEN yazılıyor — düz INSERT ikinci tazelemede
+// `key` PRIMARY KEY'ine takılıp UNIQUE hatası verirdi (B-19'un sessiz yan etkisi).
+const upsertStmt = db.prepare(`
   INSERT INTO turkish_learning_cache (key, queried_at, by_country) VALUES (?, ?, ?)
+  ON CONFLICT(key) DO UPDATE SET queried_at = excluded.queried_at, by_country = excluded.by_country
 `)
 
-async function fetchRegionInterest(term, apiKey) {
-  const url = new URL('https://serpapi.com/search.json')
-  url.searchParams.set('engine', 'google_trends')
-  url.searchParams.set('q', term)
-  url.searchParams.set('data_type', 'GEO_MAP_0')
-  url.searchParams.set('hl', 'tr')
-  url.searchParams.set('api_key', apiKey)
-
-  const res = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
-  if (!res.ok) {
-    if (res.status === 429) {
-      throw new Error('Aylık ücretsiz kota dolmuş görünüyor (429).')
-    }
-    throw new Error(`İstek başarısız (${res.status})`)
-  }
-  const data = await res.json()
-  if (data.error) {
-    throw new Error(`İstek hatası: ${data.error}`)
-  }
+// Denetim bulgusu B-19 (ikinci yarısı): burası kendi çıplak `fetch`'ini kuruyor, SerpAPI'ye
+// doğrudan gidiyordu — yani ne AYLIK KURUM BÜTÇESİ sayacına ne de kullanıcı başına günlük kotaya
+// (G-01) yazılıyordu. Üç terim × her tazeleme = 3 ücretli çağrı, muhasebe dışı. Artık ortak
+// serpapiGet üzerinden geçiyor: rezervasyon, kota kontrolü, hata durumunda rezervasyonun geri
+// alınması ve zaman aşımı hepsi oradan geliyor (bu yüzden yerel EXTERNAL_TIMEOUT_MS de kalktı).
+async function fetchRegionInterest(term) {
+  const data = await serpapiGet({
+    engine: 'google_trends',
+    q: term,
+    data_type: 'GEO_MAP_0',
+    hl: 'tr',
+  })
 
   const byCountry = new Map()
   for (const r of data.interest_by_region || []) {
@@ -53,16 +52,29 @@ async function fetchRegionInterest(term, apiKey) {
 // tek bir sayı üreten dürüst bir birleştirme, uydurma bir normalizasyon değil.
 export async function getTurkishLearningIndex() {
   const row = getStmt.get(CACHE_KEY)
-  if (row) {
+  const ageMs = row?.queried_at ? Date.now() - new Date(row.queried_at).getTime() : null
+  if (row && ageMs != null && ageMs < TTL_MS) {
     return { queriedAt: row.queried_at, byCountry: JSON.parse(row.by_country), fromCache: true }
   }
 
-  const apiKey = process.env.SERPAPI_API_KEY
-  if (!apiKey) {
-    throw new Error('SERPAPI_API_KEY tanımlı değil (.env dosyasını kontrol et)')
+  let perTermResults
+  try {
+    perTermResults = await Promise.all(SEARCH_TERMS.map((term) => fetchRegionInterest(term)))
+  } catch (err) {
+    // Tazeleme başarısız (kota/ağ/zaman aşımı). Elde süresi geçmiş bir kayıt varsa onu dürüstçe
+    // `stale: true` ile döneriz — kartı boşaltmak yerine "eski ama var" demek daha faydalı;
+    // hiç kayıt yoksa hata yukarı çıkar (serpApiCache.js'teki aynı dayanıklılık deseni).
+    if (row) {
+      console.error(`[turkish-learning] tazeleme başarısız (${err.message}), eski önbellek dönülüyor.`)
+      return {
+        queriedAt: row.queried_at,
+        byCountry: JSON.parse(row.by_country),
+        fromCache: true,
+        stale: true,
+      }
+    }
+    throw err
   }
-
-  const perTermResults = await Promise.all(SEARCH_TERMS.map((term) => fetchRegionInterest(term, apiKey)))
 
   const allCountries = new Set(perTermResults.flatMap((m) => [...m.keys()]))
   const byCountry = [...allCountries]
@@ -78,7 +90,7 @@ export async function getTurkishLearningIndex() {
     byCountry,
   }
 
-  insertStmt.run(CACHE_KEY, entry.queriedAt, JSON.stringify(byCountry))
+  upsertStmt.run(CACHE_KEY, entry.queriedAt, JSON.stringify(byCountry))
 
   return { ...entry, fromCache: false }
 }

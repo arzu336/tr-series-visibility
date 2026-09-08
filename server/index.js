@@ -93,6 +93,15 @@ const SESSION_MAX_AGE_S = 7 * 24 * 60 * 60 // 7 gün
 
 const app = express()
 
+// Denetim bulgusu G-12: rota içi catch blokları üst servis hata metnini (SerpAPI'nin `data.error`
+// alanı, LLM'in ≤300 karakterlik ham cevap gövdesi, TMDB/OMDb durum metinleri) istemciye AYNEN
+// döndürüyordu. Bu metinler iç mimariyi, sağlayıcı adlarını, kota durumunu ve bazen sorgu
+// parametrelerini sızdırır. Ayrıntı SUNUCUDA loglanmaya devam ediyor (her 502 noktasında bir
+// console.error var — teşhis kaybı yok); istemci tek ve genel bir mesaj görür.
+// NOT: 400'ler bilerek dokunulmadı — onlar bizim kendi doğrulama mesajlarımız ("Şifre en az 8
+// karakter olmalı", "Bilinmeyen dizi" gibi), kullanıcıya dönük ve kasıtlı.
+const UPSTREAM_ERROR_MESSAGE = 'Dış veri kaynağına şu anda ulaşılamıyor. Lütfen daha sonra tekrar deneyin.'
+
 // Denetim bulgusu G-08: hicbir guvenlik basligi yoktu. helmet varsayilanlari (nosniff,
 // X-Frame-Options: SAMEORIGIN, Referrer-Policy, HSTS, X-DNS-Prefetch-Control...) + uygulamaya
 // gore ELLE daraltilmis bir CSP. Sunucu uretimde dist/'i de servis ettigi (asagida
@@ -408,7 +417,7 @@ app.get('/api/visibility', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[visibility] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -424,7 +433,7 @@ app.get('/api/history/global-periods', (req, res) => {
     res.json({ range, periods })
   } catch (err) {
     console.error('[history/global-periods] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -436,7 +445,7 @@ app.get('/api/history/:iso2/periods', (req, res) => {
     res.json({ range, iso2, periods })
   } catch (err) {
     console.error('[history/:iso2/periods] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -448,7 +457,7 @@ app.get('/api/tourism-summary', (req, res) => {
     res.json({ items: getAllLatestArrivals() })
   } catch (err) {
     console.error('[tourism-summary] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -462,7 +471,7 @@ app.get('/api/series-popularity', (req, res) => {
     res.json({ range, items: Object.fromEntries(map) })
   } catch (err) {
     console.error('[series-popularity] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -472,7 +481,7 @@ app.get('/api/theme-insight', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[theme-insight] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -501,7 +510,7 @@ app.get('/api/themes', async (req, res) => {
     res.json({ items: list })
   } catch (err) {
     console.error('[themes] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -583,7 +592,7 @@ app.get('/api/destinations', async (req, res) => {
     res.json({ items: list })
   } catch (err) {
     console.error('[destinations] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -634,7 +643,8 @@ app.get('/api/media-sentiment-audit', async (req, res) => {
     const liveSeriesById = new Map(raw.series.map((s) => [s.id, s.name]))
     res.json({ items: getMediaSentimentAuditRows(liveSeriesById) })
   } catch (err) {
-    res.status(502).json({ error: err.message })
+    console.error('[media-sentiment-audit] hata:', err.message)
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -661,7 +671,7 @@ app.get('/api/trends/series', async (req, res) => {
     res.json({ items: raw.series.map((s) => ({ id: s.id, name: s.name })) })
   } catch (err) {
     console.error('[trends/series] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -688,7 +698,7 @@ app.get('/api/trends/share-of-search', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/share-of-search] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -706,7 +716,7 @@ app.get('/api/trends/regional-breakdown', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/regional-breakdown] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -724,7 +734,7 @@ app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/timeseries] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -744,7 +754,7 @@ app.get('/api/trends/insight/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/insight] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -756,7 +766,7 @@ app.get('/api/trends/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -768,7 +778,7 @@ app.get('/api/social/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[social] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -795,7 +805,7 @@ app.post('/api/series/enrich-now/:id', requireAdmin, async (req, res) => {
     res.json({ ok: true, seriesId, seriesName: series.name, countriesTargeted: topCountries.length, news, social })
   } catch (err) {
     console.error('[series/enrich-now] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -805,7 +815,7 @@ app.get('/api/imdb/:tmdbId', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[imdb] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -819,7 +829,7 @@ app.get('/api/series-enrichment/:tmdbId', (req, res) => {
     res.json(data || { dizilah: null, imdb: null })
   } catch (err) {
     console.error('[series-enrichment] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -829,7 +839,7 @@ app.get('/api/person/:personId', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[person] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -842,7 +852,7 @@ app.get('/api/regional-interest/:seriesName/:iso2', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[regional-interest] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -868,7 +878,7 @@ app.get('/api/media-sentiment/:seriesId/:iso2', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[media-sentiment] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -882,7 +892,7 @@ app.get('/api/media-sentiment-summary/:seriesId', (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[media-sentiment-summary] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -913,7 +923,7 @@ app.get('/api/series/:tmdbId', (req, res) => {
     })
   } catch (err) {
     console.error('[series] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -929,7 +939,7 @@ app.get('/api/country-leaderboard/:iso2', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[country-leaderboard] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -939,7 +949,7 @@ app.get('/api/duolingo-stats', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[duolingo-stats] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -950,7 +960,7 @@ app.get('/api/impact', async (req, res) => {
     res.json(await buildImpactReport(data.countries, destinationRanking))
   } catch (err) {
     console.error('[impact] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -962,7 +972,7 @@ app.get('/api/impact/cultural', (req, res) => {
     res.json(buildCulturalImpact())
   } catch (err) {
     console.error('[impact/cultural] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -973,7 +983,7 @@ app.get('/api/impact/tourism', async (req, res) => {
     res.json(await buildTourismImpact(data.countries, destinationRanking))
   } catch (err) {
     console.error('[impact/tourism] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -983,7 +993,7 @@ app.get('/api/impact/export', async (req, res) => {
     res.json(await buildExportImpact(data.countries))
   } catch (err) {
     console.error('[impact/export] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -993,7 +1003,7 @@ app.get('/api/benchmark', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[benchmark] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 
@@ -1003,7 +1013,7 @@ app.get('/api/turkish-learning-index', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[turkish-learning-index] hata:', err.message)
-    res.status(502).json({ error: err.message })
+    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
   }
 })
 

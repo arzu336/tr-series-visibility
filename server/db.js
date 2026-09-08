@@ -308,6 +308,17 @@ if (!mediaSentimentColumns.some((c) => c.name === 'override_sentiment')) {
   db.exec('ALTER TABLE media_sentiment ADD COLUMN override_at TEXT')
 }
 
+// Denetim raporu D.6: haber kaynağı SerpAPI google_news'ten GDELT DOC 2.0'a taşındı. Satırın
+// HANGİ sağlayıcıdan geldiği kaydedilmezse iki dönemin verisi aynı tabloda ayırt edilemeden
+// karışırdı (kullanıcı isteği: ad alanlarını ayır — önbellek tarafında bu `gdelt:news:*`
+// öneki, kalıcı tabloda ise bu sütun). Var olan tüm satırlar tanım gereği SerpAPI dönemine ait,
+// 'serpapi' olarak işaretleniyor; newsSentiment.js farklı sağlayıcılı bir satırı süresi dolmamış
+// olsa bile "tazelenmesi gereken" sayar, böylece geçiş sessizce değil AÇIKÇA gerçekleşir.
+if (!mediaSentimentColumns.some((c) => c.name === 'source')) {
+  db.exec("ALTER TABLE media_sentiment ADD COLUMN source TEXT")
+  db.exec("UPDATE media_sentiment SET source = 'serpapi' WHERE source IS NULL")
+}
+
 // Aylık/Yıllık dönem satırları iki farklı kaynaktan gelebilir: canlı TMDB popülerlik
 // anlık görüntülerinin ortalaması (rutin, ileriye dönük) veya data-pipeline-python'daki
 // ReytingTV geriye dönük dizi sıralaması taramasının doldurduğu gerçek geçmiş veri

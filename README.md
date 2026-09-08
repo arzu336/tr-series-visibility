@@ -39,7 +39,8 @@ gorunurluk-platformu/
 │   ├── auth.js / users.js       oturum + kullanıcı onay akışı
 │   └── services/
 │       ├── serpApiCache.js         tüm SerpAPI çağrılarının tek geçiş noktası + aylık bütçe sayacı
-│       ├── newsSentiment.js        google_news + LLM basın duygu analizi (media_sentiment tablosu)
+│       ├── gdeltNews.js           GDELT DOC 2.0 haber istemcisi (ücretsiz, hız kuyruklu)
+│       ├── newsSentiment.js        GDELT + LLM basın duygu analizi (media_sentiment tablosu)
 │       ├── tourismData.js          YİGM sınır istatistikleri bülteninin (.xls) otomatik alınması
 │       ├── tourismCorrelation.js   turizm korelasyonu (Pearson + DiD) ve öncü sinyal
 │       ├── trendsShareOfSearch.js  çok terimli Google Trends karşılaştırmaları
@@ -70,6 +71,7 @@ gorunurluk-platformu/
 - Google Trends (SerpAPI) — dizi bazlı ülke dağılımı, 12 aylık zaman serisi, çok dizili karşılaştırma
 - Kıyaslama Modu — arama payı, IMDb puanı ve **ülke içi ilgi payı** (Google Trends karşılaştırmalı verisi; her ülkenin satırı %100'e tamamlanır, ülkeler arası mutlak hacim karşılaştırması yapılmaz)
 - Sosyal Dinleme — Google Bilgi Grafiği puanları + YouTube tanıtım videosu (SerpAPI)
+- Basın taraması — GDELT DOC 2.0 (ücretsiz, anahtarsız); makale başlığı + yayının alan adı
 - IMDb (OMDb API üzerinden) — puan, oy sayısı, ana karakterler
 - Hepsi talep üzerine sorgulanır ve önbelleklenir (SerpAPI aylık kotasını korumak için)
 
@@ -99,7 +101,8 @@ gorunurluk-platformu/
 |---|---|---|---|
 | TMDB API | Dizi metadata, popülerlik, yayın ülkesi/platformu (JustWatch ortaklığından) | Kullanımda | Ücretsiz |
 | SerpAPI (Google Trends) | Ülke bazlı arama ilgisi, zaman serisi, çok terimli karşılaştırma | Kullanımda | Ücretli (aylık kotalı) |
-| SerpAPI (Google / YouTube / Google News) | Bilgi Grafiği, tanıtım videosu, basın taraması | Kullanımda | Ücretli (aynı kota) |
+| SerpAPI (Google / YouTube) | Bilgi Grafiği, tanıtım videosu | Kullanımda | Ücretli (aynı kota) |
+| GDELT DOC 2.0 | Basın taraması (başlık, alan adı, kaynak ülke) | Kullanımda | **Ücretsiz, anahtarsız** |
 | OMDb API (IMDb verisi) | Puan, oy sayısı, ana karakterler | Kullanımda | Ücretsiz (düşük hacim) |
 | Dahili LLM sunucusu | Tema/destinasyon sınıflandırma, basın duygu analizi, kısa yorumlar | Kullanımda | Kurumsal, ücretsiz |
 | World Bank Açık Veri API | GSYH (kişi başı), bölge, gelir grubu — DiD kontrol ülke eşleştirmesi | Kullanımda | Ücretsiz, anahtarsız |
@@ -124,11 +127,12 @@ Node'un okuduğu tablolar: `series_mapping`, `dizilah_series`, `imdb_series`, `i
 
 ## Otomasyon ve Güvenilirlik
 
-- **Cache stratejisi**: Ham TMDB verisi 24 saat (`cache.js`); SerpAPI Trends 7 gün, zaman serisi/sosyal 30 gün, basın duygu 14 gün; OMDb 30 gün. Başarısız çağrılar "başarı" olarak önbelleklenmez.
+- **Cache stratejisi**: Ham TMDB verisi 24 saat (`cache.js`); SerpAPI Trends 7 gün, zaman serisi/sosyal 30 gün, Türkçe öğrenim ilgisi 30 gün, basın duygu 14 gün; OMDb 30 gün. Başarısız çağrılar "başarı" olarak önbelleklenmez. GDELT haber yanıtları ayrı bir ad alanında (`gdelt:news:*`) tutulur ve `media_sentiment.source` sütunu satırın hangi sağlayıcıdan geldiğini kaydeder — sağlayıcı değişince eski satırlar tazelenir, karışmaz.
 - **SerpAPI bütçe koruması**: tüm çağrılar `services/serpApiCache.js` üzerinden geçer; `meta` tablosunda atomik aylık sayaç tutulur (`SERPAPI_MONTHLY_BUDGET`, varsayılan 5000). Bütçe dolduğunda haftalık işler durur ve süresi geçmiş önbellek "stale" olarak sunulur.
 - **Zamanlanmış tazeleme** (`scheduler.js`): proje raporu §4.7'deki n8n otomasyonunun kod-içi karşılığı.
   - *Günlük*: TMDB + LLM sınıflandırma + trend anlık görüntüsü, aylık özet toplama, YİGM turizm senkronizasyonu (kendi haftalık kapısıyla).
-  - *Haftalık, SerpAPI bütçesine tabi*: basın taraması, öncü turizm sinyali, yerelleştirilmiş sosyal zenginleştirme, oyuncu trendleri — her biri kendi 7 günlük kapısını kontrol eder ve saatlere yayılır.
+  - *Haftalık, SerpAPI bütçesine tabi*: öncü turizm sinyali, yerelleştirilmiş sosyal zenginleştirme, oyuncu trendleri — her biri kendi 7 günlük kapısını kontrol eder ve saatlere yayılır.
+  - *Haftalık, ücretsiz*: basın taraması (GDELT). SerpAPI kotasından bağımsızdır. **Sınır:** GDELT'in genel ucu agresif hız sınırlıdır (belgesi 5 sn/istek der, pratikte daha katı) ve TLS el sıkışması ~10 sn sürebilir; istemci 20 sn'lik global bir kuyruk ve geri çekilmeli yeniden deneme uygular, bu yüzden soğuk bir tam tarama saatler sürebilir. Ayrıca GDELT makale ÖZETİ döndürmez — duygu analizi başlık + alan adı üzerinden çalışır, bu bilinçli bir kalite takasıdır.
 - **LLM dayanıklılığı** (`llm.js`, `themes.js`): zaman aşımı + 429/5xx için üstel geri çekilmeli yeniden deneme; kalıcı başarısızlıklar `classification_failures` tablosunda geri çekilme süresiyle işaretlenir. En fazla 5 eşzamanlı istek.
 - **Güvenlik**: scrypt + rastgele tuz ile şifreleme, `HttpOnly; SameSite=Lax` oturum çerezi (HTTPS'te `Secure`), tüm SQL parametreli, `/api` altında oturum zorunlu, yönetici uçlarında ikinci sunucu-taraflı kontrol, giriş/kayıt/genel için ayrı hız sınırları, `trust proxy`, CORS allowlist ve `helmet` güvenlik başlıkları (uygulamanın gerçekten kullandığı üç dış kaynağa göre daraltılmış CSP).
 
