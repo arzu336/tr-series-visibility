@@ -107,6 +107,49 @@ body {
   color: #8792a8;
 }
 
+/* --- Lejantın katman satırları: tahmin (dereceli turuncu) ve "veri yok" ------------------------
+   Haritada kullanılan ama lejantta hiç açıklanmayan iki renk vardı. Satırlar ana gradyanın
+   ALTINDA ve daha küçük: birincil metrik camgöbeği skalası, bunlar yardımcı katman. */
+.legend__layers {
+  margin-top: 0.55rem;
+  padding-top: 0.5rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.legend__layer {
+  display: flex;
+  align-items: center;
+  gap: 0.45rem;
+}
+
+/* Tahmin rampası ana gradyandan görsel olarak daha alçak sesli: daha kısa ve daha ince. */
+.legend__bar--mini {
+  width: 34px;
+  height: 8px;
+  margin: 0;
+  flex: none;
+}
+
+.legend__swatch {
+  width: 34px;
+  height: 8px;
+  border-radius: 4px;
+  /* "Veri yok" dolgusu zemine çok yakın olduğu için lejantta ince bir kenarla belirginleşir —
+     aksi halde kutucuk boşluk gibi görünüyor. */
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  flex: none;
+}
+
+.legend__layer-label {
+  font-size: 0.68rem;
+  color: #8792a8;
+  cursor: help;
+  line-height: 1.25;
+}
+
 .legend__caption {
   margin: 0.4rem 0 0;
   font-size: 0.7rem;

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath } from 'd3-geo'
-import { scoreToColor } from '../lib/scale.js'
+import { scoreToColor, proxyScoreToColor } from '../lib/scale.js'
 import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
@@ -16,9 +16,10 @@ const NO_DATA_COLOR = '#131c31'
 // palette'in zaten validated en canlı durağı, kıta vurgusuyla (STROKE_CONTINENT) aynı camgöbeği.
 const HIGHLIGHT_FILTER_COLOR = '#22d3ee'
 // TMDB/JustWatch'ta hiç sağlayıcı verisi olmayan, sadece Google Trends arama ilgisi TAHMİNİ
-// (server/services/proxyScore.js) olan ülkeler — gerçek verinin sıralı camgöbeği skalasından
-// KASITLI olarak ayrı, sabit bir amber tonu (Globe3D.jsx'teki aynı sabitle eşleşir).
-const PROXY_DATA_COLOR = '#b45309'
+// (server/services/proxyScore.js) olan ülkeler — gerçek verinin camgöbeği skalasından KASITLI
+// olarak ayrı bir renk ailesinde. Eskiden SABİT tek bir turuncuydu ve Afganistan'ın 100'ü ile
+// Vietnam'ın 2'si aynı görünüyordu; artık arama hacmine göre dereceli (bkz. lib/scale.js
+// proxyScoreToColor). Globe3D.jsx aynı fonksiyonu paylaşır.
 const VIEWBOX_WIDTH = 960
 const VIEWBOX_HEIGHT = 500
 const DEFAULT_ZOOM = { scale: 1, tx: 0, ty: 0 }
@@ -190,7 +191,7 @@ export default function Map2D({
                   : NO_DATA_COLOR
                 : c
                   ? c.dataSource === 'proxy'
-                    ? PROXY_DATA_COLOR
+                    ? proxyScoreToColor((c.searchInterestScore ?? 0) / 100)
                     : scoreToColor(c.t)
                   : NO_DATA_COLOR
             return (

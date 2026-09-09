@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Globe from 'globe.gl'
 import * as THREE from 'three'
-import { scoreToColor, brightenRgb } from '../lib/scale.js'
+import { scoreToColor, proxyScoreToColor, brightenRgb } from '../lib/scale.js'
 import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
@@ -22,7 +22,8 @@ const HIGHLIGHT_FILTER_COLOR = '#22d3ee'
 // (scoreToColor) KASITLI olarak ayrı, sabit bir amber tonu: skorları hep 0 olduğu için gerçek
 // skalaya girselerdi en soğuk durakla karışır, kullanıcı "gerçekten çok düşük" ile "gerçek veri
 // yok, bu bir tahmin"i ayırt edemezdi. Map2D.jsx'teki aynı sabitle eşleşir.
-const PROXY_DATA_COLOR = '#b45309'
+// Proxy ülkeler artık arama hacmine göre dereceli boyanır (bkz. lib/scale.js proxyScoreToColor);
+// sabit tek turuncu, 100 ile 2'yi ayırt edemiyordu.
 const DEFAULT_VIEW = { lat: 15, lng: 20, altitude: 2.4 }
 // Tekil ülke odaklanması — önceki 1.1 aşırı yakınlaşıyordu, ülke ve komşularının rahatça
 // görülebildiği daha gevşek bir mesafeye çekildi.
@@ -184,7 +185,7 @@ export default function Globe3D({
 
     // Ölçek (min/max) yalnızca gerçek TMDB verili ülkelerden hesaplanır — proxy ülkelerin
     // sabit 0 skoru dahil edilirse minScore her zaman 0'a çekilir ve GERÇEK ülkelerin
-    // arasındaki fark de bozulur (bkz. PROXY_DATA_COLOR tanımındaki not).
+    // arasındaki fark de bozulur (proxy ülkelerin skoru sabit 0, bkz. proxyScoreToColor notu).
     const realScores = countries.filter((c) => c.dataSource !== 'proxy').map((c) => c.score)
     const minScore = realScores.length > 0 ? Math.min(...realScores) : 0
     const maxScore = realScores.length > 0 ? Math.max(...realScores) : 1
@@ -242,7 +243,8 @@ export default function Globe3D({
         }
         const c = byIso2.get(iso2)
         if (!c) return NO_DATA_COLOR
-        const base = c.dataSource === 'proxy' ? PROXY_DATA_COLOR : scoreToColor(c.t)
+        const base =
+          c.dataSource === 'proxy' ? proxyScoreToColor((c.searchInterestScore ?? 0) / 100) : scoreToColor(c.t)
         // "Ülke rengi hafifçe parlasın" — three-globe'un WebGL materyali CSS filter kabul
         // etmiyor, bu yüzden hover'da rengi beyaza doğru hafifçe iten brightenRgb kullanılır
         // (bkz. lib/scale.js) — Map2D'deki CSS brightness() filtresinin karşılığı.
