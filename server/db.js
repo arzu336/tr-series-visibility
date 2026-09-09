@@ -20,6 +20,33 @@ db.exec('PRAGMA foreign_keys = ON')
 // 5 sn boyunca kilidin açılmasını bekler, sonra hata verir.
 db.exec('PRAGMA busy_timeout = 5000')
 
+// Denetim bulgusu B-20: server/ altında hiç transaction yoktu. Yüzlerce satırlık toplu yazımlar
+// (ülke/dizi anlık görüntüleri, aylık rollup, turizm bülteni) her INSERT için ayrı bir örtük
+// transaction açıyordu — yani her satır için ayrı bir disk senkronizasyonu. Bunun iki bedeli var:
+// yavaşlık ve ATOMİKLİK KAYBI (döngünün ortasında bir hata olursa yarı yazılmış bir durum kalır).
+//
+// node:sqlite'ın DatabaseSync'inde better-sqlite3'teki gibi bir db.transaction() sarmalayıcısı
+// YOK (doğrulandı) — BEGIN/COMMIT elle veriliyor.
+//
+// DİKKAT: fn SENKRON olmalıdır. İçinde `await` bulunan bir işi buraya sarmak, transaction'ı ağ
+// çağrısı boyunca açık tutar ve diğer yazarları (Python pipeline'ı dahil) kilitler. Çağrı
+// yerlerinin hepsi bu yüzden yalnızca saf DB döngülerini kapsıyor.
+export function inTransaction(fn) {
+  db.exec('BEGIN')
+  try {
+    const sonuc = fn()
+    db.exec('COMMIT')
+    return sonuc
+  } catch (err) {
+    try {
+      db.exec('ROLLBACK')
+    } catch {
+      // Transaction zaten düşmüş olabilir; asıl hatayı gizleme.
+    }
+    throw err
+  }
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS cache_entries (
     key TEXT PRIMARY KEY,
@@ -351,7 +378,13 @@ const seriesMonthlyPk = db
   .filter((c) => c.pk > 0)
   .map((c) => c.name)
 if (!seriesMonthlyPk.includes('source')) {
-  db.exec(`
+  // Denetim bulgusu O-1: bu dört DDL/DML ifadesi ayrı otomatik commit'lerle çalışıyordu.
+  // CREATE'den sonraki bir çökmede bir sonraki açılış "table already exists" ile düşer (sunucu
+  // hiç açılmaz); DROP'tan sonraki bir çökmede ise yukarıdaki CREATE TABLE IF NOT EXISTS boş bir
+  // tablo yaratır, PK kontrolü geçer ve VERİ `_yeni` tablosunda mahsur kalır — sessiz kayıp.
+  // SQLite'ta DDL de transactional olduğu için tek blokta atomik: ya tamamı ya hiçbiri.
+  inTransaction(() => {
+    db.exec(`
     CREATE TABLE series_popularity_monthly_yeni (
       tmdb_id INTEGER NOT NULL,
       year INTEGER NOT NULL,
@@ -366,35 +399,9 @@ if (!seriesMonthlyPk.includes('source')) {
       FROM series_popularity_monthly;
     DROP TABLE series_popularity_monthly;
     ALTER TABLE series_popularity_monthly_yeni RENAME TO series_popularity_monthly;
-  `)
+    `)
+  })
   console.log('[db] series_popularity_monthly birincil anahtarı source ile genişletildi (B-08)')
-}
-
-// Denetim bulgusu B-20: server/ altında hiç transaction yoktu. Yüzlerce satırlık toplu yazımlar
-// (ülke/dizi anlık görüntüleri, aylık rollup, turizm bülteni) her INSERT için ayrı bir örtük
-// transaction açıyordu — yani her satır için ayrı bir disk senkronizasyonu. Bunun iki bedeli var:
-// yavaşlık ve ATOMİKLİK KAYBI (döngünün ortasında bir hata olursa yarı yazılmış bir durum kalır).
-//
-// node:sqlite'ın DatabaseSync'inde better-sqlite3'teki gibi bir db.transaction() sarmalayıcısı
-// YOK (doğrulandı) — BEGIN/COMMIT elle veriliyor.
-//
-// DİKKAT: fn SENKRON olmalıdır. İçinde `await` bulunan bir işi buraya sarmak, transaction'ı ağ
-// çağrısı boyunca açık tutar ve diğer yazarları (Python pipeline'ı dahil) kilitler. Çağrı
-// yerlerinin hepsi bu yüzden yalnızca saf DB döngülerini kapsıyor.
-export function inTransaction(fn) {
-  db.exec('BEGIN')
-  try {
-    const sonuc = fn()
-    db.exec('COMMIT')
-    return sonuc
-  } catch (err) {
-    try {
-      db.exec('ROLLBACK')
-    } catch {
-      // Transaction zaten düşmüş olabilir; asıl hatayı gizleme.
-    }
-    throw err
-  }
 }
 
 export default db

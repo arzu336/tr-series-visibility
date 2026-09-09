@@ -8,8 +8,16 @@ import { getRawSeriesDataCached } from '../data-pipeline.js'
 //   2) Kullanıcı başına GÜNLÜK canlı çağrı kotası — services/liveCallQuota.js'te (o modül
 //      bilerek yalnızca db.js'e bağımlı, çünkü llm.js de ondan import ediyor).
 
-// 'ZZ' = "Unknown Region" (Intl'in kendi joker kodu) — gerçek bir ülke değil, dışlanır.
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
+
+// Denetim bulgusu D-3: `Intl.DisplayNames` yalnızca ülkeleri değil, ISO 3166-1'in "kullanıcı
+// tanımlı"/toplu kodlarını da tanır ve bunlara ad döndürür — dolayısıyla `geo=EU` gibi bir değer
+// doğrulamadan geçip ücretli bir dış çağrı açabiliyordu. Bunların hiçbiri tek bir ülke değildir:
+//   ZZ = Unknown Region (Intl'in joker kodu)   EU = Avrupa Birliği     EZ = Euro Bölgesi
+//   UN = Birleşmiş Milletler                    QO = Uzak Okyanusya (toplu bölge)
+//   XA/XB = Intl'in sözde-aksan test kodları    AC/TA = Ascension / Tristan da Cunha (dolaylı)
+// Liste bilinçli olarak KISA: amaç ülke listesini budamak değil, ülke OLMAYAN kodları elemek.
+const ULKE_OLMAYAN_KODLAR = new Set(['ZZ', 'EU', 'EZ', 'UN', 'QO', 'XA', 'XB'])
 
 /**
  * ISO-3166-1 alpha-2 doğrulaması. country-centroids.json'a bakmak yerine Intl'in kendi bölge
@@ -19,7 +27,7 @@ const regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
 export function isValidIso2(value) {
   if (typeof value !== 'string') return false
   const code = value.trim().toUpperCase()
-  if (!/^[A-Z]{2}$/.test(code) || code === 'ZZ') return false
+  if (!/^[A-Z]{2}$/.test(code) || ULKE_OLMAYAN_KODLAR.has(code)) return false
   try {
     return regionNames.of(code) !== code
   } catch {

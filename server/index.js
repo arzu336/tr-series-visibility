@@ -60,7 +60,7 @@ import { enrichSeriesNewsNow } from './services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from './services/socialEnricher.js'
 import { getCached } from './cache.js'
 import { isValidIso2, normalizeIso2, resolveKnownSeriesName, resolveKnownSeriesNames } from './services/requestGuards.js'
-import { runWithUserContext, getUserLiveCallUsage } from './services/liveCallQuota.js'
+import { runWithUserContext } from './services/liveCallQuota.js'
 import {
   COOKIE_NAME,
   createSession,
@@ -1047,6 +1047,17 @@ app.get('/api/turkish-learning-index', async (req, res) => {
 
 // Prod: build edilmiş frontend'i de servis et
 const distPath = path.join(__dirname, '..', 'dist')
+// Denetim bulgusu D-16: varsayılan `maxAge: 0` ile 2 MB'lık küre dokuları ve 488 KB'lık ülke
+// GeoJSON'u HER açılışta yeniden doğrulanıyordu (koşullu istek + ağ gidiş-dönüşü). Bu dosyalar
+// depoya alınmış, sürüm kontrollü ve İÇERİĞİ DEĞİŞMEYEN varlıklar (bkz. public/map/) — değişmeleri
+// gerekirse yeni bir dağıtımla gelirler. `immutable`, tarayıcıya "süre dolana kadar sormaya bile
+// gerek yok" der; intranet gibi düşük bant genişlikli ortamda açılış maliyetini doğrudan düşürür.
+app.use(
+  '/map',
+  express.static(path.join(distPath, 'map'), { maxAge: '30d', immutable: true })
+)
+// Geri kalan build çıktısı (index.html ve hash'li asset'ler) varsayılan davranışta kalır:
+// index.html asla önbelleklenmemeli, hash'li dosyalar zaten adlarıyla sürümlenir.
 app.use(express.static(distPath))
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next()

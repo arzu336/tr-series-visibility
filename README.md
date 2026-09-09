@@ -82,7 +82,7 @@ gorunurluk-platformu/
 - **Yükselen Ülkeler**: trend geçmişine dayalı gerçek yükseliş tespiti (uydurma yön göstermez) + otomatik önerilen DiD kontrol ülkesi
 - **Turizm Korelasyonu**: YİGM sınır istatistikleri bülteni otomatik indirilip `tourist_arrivals` tablosuna yazılır; Pearson + %95 güven aralığı + DiD hesaplanır. **Sınır:** elde yalnızca en son bültenin aynı ayı × 3 yıl verisi olduğu için tek bir önce/sonra çifti kullanılır, paralel-trend kontrolü yoktur — sonuçlar nedensellik değil, işaret niteliğindedir.
 - **İhracat**: TMDB popülerlik payına dayalı kıyaslama; parasal ihracat/lisans verisi henüz yoktur.
-- PDF olarak yazdırma (tarayıcının native print'i; yalnızca açık olan sekme basılır)
+- PDF olarak yazdırma — üç etki sekmesi de alt alta basılır (bkz. yukarıdaki "PDF Olarak Yazdır")
 
 ### Kullanıcılar (yalnızca yönetici)
 - Kayıt olan hesaplar yönetici onayına kadar "pending" kalır; onay / red
@@ -139,7 +139,7 @@ Node'un okuduğu tablolar: `series_mapping`, `dizilah_series`, `imdb_series`, `i
 - **LLM dayanıklılığı** (`llm.js`, `themes.js`): zaman aşımı + 429/5xx için üstel geri çekilmeli yeniden deneme; kalıcı başarısızlıklar `classification_failures` tablosunda geri çekilme süresiyle işaretlenir. En fazla 5 eşzamanlı istek.
 - **Metodoloji şeffaflığı**: harita lejandı, kıta/ülke skorları ve etki paneli metriklerinin tamamı, ne ölçtüklerini ve ne ÖLÇMEDİKLERİNİ söyleyen bilgi ipuçları taşır (tek kaynak: `src/lib/methodologyNotes.js`). Görünürlük skoru fiili izlenmeyi değil, yayında olan yapımların küresel katalog popülerliğini yansıtır; nüfus/dil için normalize edilmemiştir.
 - **Veri bütünlüğü**: toplu yazımlar (ülke/dizi anlık görüntüleri, aylık rollup, turizm bülteni) tek transaction içinde atomiktir; süresi geçmiş `cache_entries` ve `sessions` satırları zamanlanmış işte temizlenir.
-- **Güvenlik**: scrypt + rastgele tuz ile şifreleme, `HttpOnly; SameSite=Lax` oturum çerezi (HTTPS'te `Secure`), tüm SQL parametreli, `/api` altında oturum zorunlu, yönetici uçlarında ikinci sunucu-taraflı kontrol, giriş/kayıt/genel için ayrı hız sınırları, `trust proxy`, CORS allowlist ve `helmet` güvenlik başlıkları (uygulamanın gerçekten kullandığı üç dış kaynağa göre daraltılmış CSP).
+- **Güvenlik**: scrypt + rastgele tuz ile şifreleme, `HttpOnly; SameSite=Lax` oturum çerezi (HTTPS'te `Secure`), tüm SQL parametreli, `/api` altında oturum zorunlu, yönetici uçlarında ikinci sunucu-taraflı kontrol, giriş/kayıt/genel için ayrı hız sınırları, `TRUST_PROXY` ile açıkça beyan edilen ters proxy desteği (varsayılan kapalı), CORS allowlist ve `helmet` güvenlik başlıkları. CSP `'self'` temellidir; çalışma zamanında izinli TEK dış kaynak `image.tmdb.org` (dizi afişleri) — küre dokuları ve ülke sınırı GeoJSON'u depoya alındığı için (`public/map/`) dışarıya çıkmaz.
 
 ## Bilinen Sınırlamalar
 
@@ -147,8 +147,8 @@ Node'un okuduğu tablolar: `series_mapping`, `dizilah_series`, `imdb_series`, `i
 - Google Trends değerleri sorgu başına 0-100 **göreli**dir; farklı sorguların değerleri birebir karşılaştırılamaz.
 - Turizm korelasyonu tek bir önce/sonra çiftine dayanır; paralel-trend kontrolü ve gecikme analizi yoktur.
 - Parasal ihracat/lisans verisi hiç yoktur; "pazar payı" TMDB popülerlik payıdır.
-- Haftalık toplanan bazı sinyaller (öncü turizm sinyali, oyuncu trendleri) henüz arayüzde gösterilmez.
-- Ülke koordinat/isim listesi 147 ülkeyi kapsar; listede olmayan ülkeler haritada adlandırılamaz.
+- Oyuncu trend taraması ve yerelleştirilmiş sosyal zenginleştirme varsayılan olarak **kapalıdır** (`ENABLE_ACTOR_TRENDS` / `ENABLE_SOCIAL_ENRICHMENT`): topladıkları veri arayüzde hiçbir yerde gösterilmiyordu, boşa kota harcamamak için durduruldu. Öncü turizm sinyali ise artık Turizm sekmesinde gösteriliyor.
+- Ülke koordinat/isim listesi 157 ülkeyi kapsar; listede olmayan ülkeler haritada adlandırılamaz.
 - Globe3D bundle'ı büyük (~1.9 MB) ama `React.lazy` ile ayrı chunk'ta, yalnızca talep üzerine yüklenir.
 
 ## Kurulum
