@@ -1,12 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath } from 'd3-geo'
 import { scoreToColor } from '../lib/scale.js'
-import { fetchCountryGeoJSON, featureIso2 } from '../lib/geo.js'
+import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
 
 function displayName(feat) {
-  return turkishNames[featureIso2(feat)]?.name || feat.properties.NAME
+  return featureDisplayName(feat, turkishNames)
 }
 
 // Lowy Institute paleti: koyu mat lacivert taban (veri yoksa) — koyu okyanus zemininden

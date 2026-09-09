@@ -20,12 +20,18 @@ import { queryTrends } from '../serpapi.js'
 // İngilizce aramıyor. Terim listesi bu yüzden dile göre genişletildi.
 //
 // Terim seçimi bilinçli olarak DAR: her ülke/dizi için ayrı sorgu atmak yerine, farklı dil
-// ailelerini kapsayan az sayıda jenerik terim kullanılıyor. Maliyet günde 3 SerpAPI çağrısı
-// (~90/ay) — haber taramasının GDELT'e taşınmasıyla açılan bütçenin çok küçük bir kısmı.
+// ailelerini kapsayan az sayıda jenerik terim kullanılıyor. Maliyet günde 4 SerpAPI çağrısı
+// (~120/ay) — haber taramasının GDELT'e taşınmasıyla açılan ~1.875/ay bütçenin küçük bir kısmı.
+// Her terim ölçülerek eklendi; "kapsama kazandırmayan terim eklenmez" kuralı bilinçli:
+// her terim günde 1 ek SerpAPI çağrısı demek.
+//   Fransızca "séries turques" ÖLÇÜLDÜ ve EKLENMEDİ: 4 ülkede sinyal verdi (Cezayir 100,
+//   Fransa 50, Fas 50, Belçika 25) ama dördünün de zaten TMDB verisi var — boş kalan
+//   ülkelerden hiçbirini kazandırmadı. Batı/Orta Afrika hattı beklenenin aksine boş çıktı.
 const FALLBACK_QUERY_TERMS = [
   'Turkish series', // İngilizce — en geniş kapsam (86 ülke)
-  'مسلسلات تركية', // Arapça — Orta Doğu / Kuzey Afrika
-  'турецкие сериалы', // Rusça — Orta Asya / Kafkasya / BDT
+  'مسلسلات تركية', // Arapça — Orta Doğu / Kuzey Afrika (kazandırdı: Suriye)
+  'турецкие сериалы', // Rusça — Orta Asya / Kafkasya (Kırgızistan, Tacikistan, Türkmenistan)
+  'سریال‌های ترکی', // Farsça — Afganistan (terimin EN YÜKSEK ülkesi: 100) ve İran
 ]
 
 /**

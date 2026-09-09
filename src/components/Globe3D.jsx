@@ -2,12 +2,12 @@ import { useEffect, useRef, useState } from 'react'
 import Globe from 'globe.gl'
 import * as THREE from 'three'
 import { scoreToColor, brightenRgb } from '../lib/scale.js'
-import { fetchCountryGeoJSON, featureIso2 } from '../lib/geo.js'
+import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
 
 function displayName(feat) {
-  return turkishNames[featureIso2(feat)]?.name || feat.properties.NAME
+  return featureDisplayName(feat, turkishNames)
 }
 
 const MIN_ALTITUDE = 0.006

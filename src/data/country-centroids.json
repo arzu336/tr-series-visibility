@@ -34,6 +34,11 @@
     "lat": -11.2,
     "lng": 17.87
   },
+  "AQ": {
+    "name": "Antarktika",
+    "lat": -80.52,
+    "lng": 21.28
+  },
   "AR": {
     "name": "Arjantin",
     "lat": -38.42,
@@ -89,10 +94,25 @@
     "lat": 26.07,
     "lng": 50.56
   },
+  "BI": {
+    "name": "Burundi",
+    "lat": -3.38,
+    "lng": 29.91
+  },
+  "BJ": {
+    "name": "Benin",
+    "lat": 9.65,
+    "lng": 2.34
+  },
   "BM": {
     "name": "Bermuda",
     "lat": 32.32,
     "lng": -64.75
+  },
+  "BN": {
+    "name": "Brunei",
+    "lat": 4.69,
+    "lng": 114.92
   },
   "BO": {
     "name": "Bolivya",
@@ -108,6 +128,16 @@
     "name": "Bahamalar",
     "lat": 24.25,
     "lng": -76
+  },
+  "BT": {
+    "name": "Butan",
+    "lat": 27.43,
+    "lng": 90.47
+  },
+  "BW": {
+    "name": "Botsvana",
+    "lat": -22.1,
+    "lng": 23.77
   },
   "BY": {
     "name": "Belarus",
@@ -128,6 +158,16 @@
     "name": "Kongo Demokratik Cumhuriyeti",
     "lat": -4.04,
     "lng": 21.76
+  },
+  "CF": {
+    "name": "Orta Afrika Cumhuriyeti",
+    "lat": 6.54,
+    "lng": 20.37
+  },
+  "CG": {
+    "name": "Kongo Cumhuriyeti",
+    "lat": -0.84,
+    "lng": 15.13
   },
   "CH": {
     "name": "İsviçre",
@@ -189,6 +229,11 @@
     "lat": 51.17,
     "lng": 10.45
   },
+  "DJ": {
+    "name": "Cibuti",
+    "lat": 11.77,
+    "lng": 42.5
+  },
   "DK": {
     "name": "Danimarka",
     "lat": 56.26,
@@ -219,6 +264,16 @@
     "lat": 26.82,
     "lng": 30.8
   },
+  "EH": {
+    "name": "Batı Sahra",
+    "lat": 24.29,
+    "lng": -12.14
+  },
+  "ER": {
+    "name": "Eritre",
+    "lat": 15.43,
+    "lng": 38.68
+  },
   "ES": {
     "name": "İspanya",
     "lat": 40.46,
@@ -239,10 +294,20 @@
     "lat": -17.71,
     "lng": 178.07
   },
+  "FK": {
+    "name": "Falkland Adaları",
+    "lat": -51.71,
+    "lng": -59.42
+  },
   "FR": {
     "name": "Fransa",
     "lat": 46.23,
     "lng": 2.21
+  },
+  "GA": {
+    "name": "Gabon",
+    "lat": -0.65,
+    "lng": 11.69
   },
   "GB": {
     "name": "Birleşik Krallık",
@@ -279,6 +344,16 @@
     "lat": 74.77,
     "lng": -41.5
   },
+  "GM": {
+    "name": "Gambiya",
+    "lat": 13.48,
+    "lng": -15.43
+  },
+  "GN": {
+    "name": "Gine",
+    "lat": 10.45,
+    "lng": -11.06
+  },
   "GQ": {
     "name": "Ekvator Ginesi",
     "lat": 1.65,
@@ -293,6 +368,11 @@
     "name": "Guatemala",
     "lat": 15.78,
     "lng": -90.23
+  },
+  "GW": {
+    "name": "Gine-Bissau",
+    "lat": 12.02,
+    "lng": -15.11
   },
   "GY": {
     "name": "Guyana",
@@ -313,6 +393,11 @@
     "name": "Hırvatistan",
     "lat": 45.1,
     "lng": 15.2
+  },
+  "HT": {
+    "name": "Haiti",
+    "lat": 18.9,
+    "lng": -72.66
   },
   "HU": {
     "name": "Macaristan",
@@ -384,6 +469,16 @@
     "lat": 41.51,
     "lng": 74.62
   },
+  "KH": {
+    "name": "Kamboçya",
+    "lat": 12.68,
+    "lng": 104.88
+  },
+  "KP": {
+    "name": "Kuzey Kore",
+    "lat": 40.14,
+    "lng": 127.17
+  },
   "KR": {
     "name": "Güney Kore",
     "lat": 35.91,
@@ -398,6 +493,11 @@
     "name": "Kazakistan",
     "lat": 48.02,
     "lng": 66.92
+  },
+  "LA": {
+    "name": "Laos",
+    "lat": 18.44,
+    "lng": 103.75
   },
   "LB": {
     "name": "Lübnan",
@@ -418,6 +518,16 @@
     "name": "Sri Lanka",
     "lat": 7.87,
     "lng": 80.77
+  },
+  "LR": {
+    "name": "Liberya",
+    "lat": 6.43,
+    "lng": -9.41
+  },
+  "LS": {
+    "name": "Lesotho",
+    "lat": -29.63,
+    "lng": 28.17
   },
   "LT": {
     "name": "Litvanya",
@@ -474,6 +584,21 @@
     "lat": 17.57,
     "lng": -3.99
   },
+  "MM": {
+    "name": "Myanmar",
+    "lat": 21.02,
+    "lng": 96.51
+  },
+  "MN": {
+    "name": "Moğolistan",
+    "lat": 46.82,
+    "lng": 102.95
+  },
+  "MR": {
+    "name": "Moritanya",
+    "lat": 20.21,
+    "lng": -10.33
+  },
   "MT": {
     "name": "Malta",
     "lat": 35.94,
@@ -503,6 +628,16 @@
     "name": "Mozambik",
     "lat": -18.67,
     "lng": 35.53
+  },
+  "NA": {
+    "name": "Namibya",
+    "lat": -22.1,
+    "lng": 17.16
+  },
+  "NC": {
+    "name": "Yeni Kaledonya",
+    "lat": -21.26,
+    "lng": 165.53
   },
   "NE": {
     "name": "Nijer",
@@ -619,15 +754,30 @@
     "lat": 61.52,
     "lng": 105.32
   },
+  "RW": {
+    "name": "Ruanda",
+    "lat": -2.01,
+    "lng": 29.92
+  },
   "SA": {
     "name": "Suudi Arabistan",
     "lat": 23.89,
     "lng": 45.08
   },
+  "SB": {
+    "name": "Solomon Adaları",
+    "lat": -7.9,
+    "lng": 159.1
+  },
   "SC": {
     "name": "Seyşeller",
     "lat": -4.68,
     "lng": 55.49
+  },
+  "SD": {
+    "name": "Sudan",
+    "lat": 15.99,
+    "lng": 29.86
   },
   "SE": {
     "name": "İsveç",
@@ -649,6 +799,11 @@
     "lat": 48.67,
     "lng": 19.7
   },
+  "SL": {
+    "name": "Sierra Leone",
+    "lat": 8.53,
+    "lng": -11.8
+  },
   "SM": {
     "name": "San Marino",
     "lat": 43.94,
@@ -658,6 +813,21 @@
     "name": "Senegal",
     "lat": 14.5,
     "lng": -14.45
+  },
+  "SO": {
+    "name": "Somali",
+    "lat": 4.75,
+    "lng": 45.73
+  },
+  "SR": {
+    "name": "Surinam",
+    "lat": 4.12,
+    "lng": -55.91
+  },
+  "SS": {
+    "name": "Güney Sudan",
+    "lat": 7.29,
+    "lng": 30.2
   },
   "SV": {
     "name": "El Salvador",
@@ -669,6 +839,11 @@
     "lat": 34.8,
     "lng": 38.99
   },
+  "SZ": {
+    "name": "Esvatini",
+    "lat": -26.49,
+    "lng": 31.4
+  },
   "TC": {
     "name": "Turks ve Caicos Adaları",
     "lat": 21.69,
@@ -679,6 +854,16 @@
     "lat": 15.45,
     "lng": 18.73
   },
+  "TF": {
+    "name": "Fransız Güney Toprakları",
+    "lat": -49.31,
+    "lng": 69.53
+  },
+  "TG": {
+    "name": "Togo",
+    "lat": 8.44,
+    "lng": 1
+  },
   "TH": {
     "name": "Tayland",
     "lat": 15.87,
@@ -688,6 +873,11 @@
     "name": "Tacikistan",
     "lat": 38.58,
     "lng": 71.03
+  },
+  "TL": {
+    "name": "Doğu Timor",
+    "lat": -8.77,
+    "lng": 125.97
   },
   "TM": {
     "name": "Türkmenistan",
@@ -758,6 +948,11 @@
     "name": "Vietnam",
     "lat": 14.06,
     "lng": 108.28
+  },
+  "VU": {
+    "name": "Vanuatu",
+    "lat": -15.22,
+    "lng": 166.91
   },
   "XK": {
     "name": "Kosova",

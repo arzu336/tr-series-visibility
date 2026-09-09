@@ -30,6 +30,27 @@ export function featureIso2(feature) {
   return ADM0_A3_TO_ISO2[a3] || null
 }
 
+// ISO2 kodu OLMAYAN iki sınır (KKTC ve Somaliland) haritada çizilir ama hiçbir ülke verisiyle
+// eşleşmez — bu bilinçli (yukarıdaki not). Ancak etiketleri de country-centroids.json'a
+// düşemediği için GeoJSON'un İNGİLİZCE adına geri düşüyorlardı: haritada "N. Cyprus" yazıyordu.
+// Bu bir veri sorunu değil, etiket sorunu; kod uydurmadan, ADM0_A3 üzerinden Türkçe ad veriliyor.
+const ADM0_A3_TO_AD = {
+  CYN: 'Kuzey Kıbrıs Türk Cumhuriyeti',
+  SOL: 'Somaliland',
+}
+
+/**
+ * Bir feature için gösterilecek Türkçe ad. Önce ISO2 üzerinden country-centroids.json,
+ * sonra ISO2'si olmayanlar için ADM0_A3 tablosu, en son GeoJSON'un kendi adı.
+ * İki harita bileşeni de bunu paylaşır — biri güncellenip diğeri eski kalmasın.
+ */
+export function featureDisplayName(feature, turkishNames) {
+  const iso2 = featureIso2(feature)
+  if (iso2 && turkishNames[iso2]?.name) return turkishNames[iso2].name
+  const a3 = feature?.properties?.ADM0_A3
+  return ADM0_A3_TO_AD[a3] || feature?.properties?.NAME || iso2 || '—'
+}
+
 export async function fetchCountryGeoJSON() {
   const res = await fetch(COUNTRIES_GEOJSON_URL)
   if (!res.ok) throw new Error(`Ülke sınırı verisi alınamadı (${res.status})`)

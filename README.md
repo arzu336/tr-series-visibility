@@ -148,7 +148,7 @@ Node'un okuduğu tablolar: `series_mapping`, `dizilah_series`, `imdb_series`, `i
 - Turizm korelasyonu tek bir önce/sonra çiftine dayanır; paralel-trend kontrolü ve gecikme analizi yoktur.
 - Parasal ihracat/lisans verisi hiç yoktur; "pazar payı" TMDB popülerlik payıdır.
 - Oyuncu trend taraması ve yerelleştirilmiş sosyal zenginleştirme varsayılan olarak **kapalıdır** (`ENABLE_ACTOR_TRENDS` / `ENABLE_SOCIAL_ENRICHMENT`): topladıkları veri arayüzde hiçbir yerde gösterilmiyordu, boşa kota harcamamak için durduruldu. Öncü turizm sinyali ise artık Turizm sekmesinde gösteriliyor.
-- Ülke koordinat/isim listesi 157 ülkeyi kapsar; listede olmayan ülkeler haritada adlandırılamaz.
+- Ülke koordinat/isim listesi 196 ülkeyi kapsar ve haritada çizilen 175 ülkenin **tamamını** adlandırır; ISO2 kodu olmayan iki sınır (KKTC, Somaliland) ADM0_A3 üzerinden Türkçe etiketlenir. Adlandırma veri anlamına gelmez: sinyali olmayan ülkeler haritada boş kalmaya devam eder.
 - Globe3D bundle'ı büyük (~1.9 MB) ama `React.lazy` ile ayrı chunk'ta, yalnızca talep üzerine yüklenir.
 
 ## Kurulum
