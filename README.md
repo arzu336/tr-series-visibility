@@ -75,7 +75,9 @@ gorunurluk-platformu/
 - IMDb (OMDb API üzerinden) — puan, oy sayısı, ana karakterler
 - Hepsi talep üzerine sorgulanır ve önbelleklenir (SerpAPI aylık kotasını korumak için)
 
-### Etki & İhracat Analizi
+### Etki & İhracat Analizi (yalnızca yönetici)
+
+Bu bölüm üç sekmede 11 analiz bölümü taşır; sıradan kullanıcının panelinde bu ayrıntıya ihtiyaç olmadığı için yönetici görünümüne alınmıştır. Sekme yönetici olmayanlara gösterilmez ve `/api/impact*` uçları da sunucu tarafında `requireAdmin` ile korunur — yalnızca düğmeyi gizlemek görsel bir önlem olurdu. İçerik silinmedi: PDF raporunda tam hâliyle basılır.
 - Donut grafiklerle görünürlük skoruna göre en öndeki ülkeler ve en çok görünürlük kazanan destinasyonlar
 - **PDF Olarak Yazdır**: üç etki sekmesini de (Kültürel / Turizm / İhracat) alt alta, baskıya özel açık temayla ve rapor başlığı + tarihle basar. Veriler yüklenene kadar bekler, sonra yazdırır.
 - **Erken Seyahat Talep Sinyali**: bir dizinin ülke bazlı arama ilgisi ile aynı ülkeden gelen seyahat aramalarının 16 hafta gecikmeli korelasyonu. Her sinyal örneklem büyüklüğüne göre bir anlamlılık eşiğiyle (|r| ≥ ~0,33, n=36) karşılaştırılır; eşiği geçmeyenler "zayıf" olarak işaretlenir ve hiç anlamlı sinyal yoksa öne çıkarılan bir değer gösterilmez. Korelasyon nedensellik değildir.

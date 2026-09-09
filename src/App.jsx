@@ -132,6 +132,15 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [showProfileMenu])
 
+  // Yönetici görünümleri (Analist Paneli, Etki & İhracat, Kullanıcılar) yalnızca yöneticiye
+  // render ediliyor. Yönetici olmayan biri bir şekilde bu görünümlerden birinde kalırsa
+  // (ör. oturum sırasında yetkisi düşürülürse) ana alan tamamen BOŞ kalırdı — düğmeler gizli
+  // olduğu için geri dönecek bir yol da yok. Bu durumda haritaya düşülür.
+  useEffect(() => {
+    const YONETICI_GORUNUMLERI = ['dashboard', 'impact', 'admin']
+    if (!user?.isAdmin && YONETICI_GORUNUMLERI.includes(view)) setView('map')
+  }, [user?.isAdmin, view])
+
   useEffect(() => {
     if (!user?.isAdmin) return
     const loadPendingApprovals = () => {
@@ -466,13 +475,21 @@ export default function App() {
             >
               Arama İlgisi
             </button>
-            <button
-              className={view === 'impact' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
-              onClick={() => setView('impact')}
-              title="Ekonomik, Kültürel ve İhracat Etkisi"
-            >
-              Etki & İhracat Analizi
-            </button>
+            {/* Etki & İhracat Analizi artık yalnızca YÖNETİCİ görünümü: karar destek panelinin bu
+                bölümü 11 ayrı analiz bölümü ve ~5900px içerik taşıyor (medya algısı tablosu tek
+                başına 30 satır). Sıradan kullanıcının kendi panelinde bu ayrıntıya ihtiyacı yok;
+                içerik silinmedi, yönetici görünümüne alındı ve PDF raporunda tam hâliyle duruyor.
+                Sunucu tarafında da /api/impact* uçları requireAdmin ile korunuyor — düğmeyi
+                gizlemek tek başına yalnızca görsel bir önlem olurdu. */}
+            {user?.isAdmin && (
+              <button
+                className={view === 'impact' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
+                onClick={() => setView('impact')}
+                title="Ekonomik, Kültürel ve İhracat Etkisi"
+              >
+                Etki & İhracat Analizi
+              </button>
+            )}
             {user?.isAdmin && (
               <button
                 className={view === 'admin' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
@@ -528,7 +545,7 @@ export default function App() {
             />
           )}
           {view === 'trends' && <TrendsExplorer onShowOnMap={handleShowSeriesOnMap} />}
-          {view === 'impact' && (
+          {view === 'impact' && user?.isAdmin && (
             <ImpactAnalysisTabs onSelectCountry={handleSelectCountryFromReport} />
           )}
           {view === 'admin' && user?.isAdmin && <AdminUsersPanel currentUserId={user.id} />}

@@ -981,7 +981,10 @@ app.get('/api/duolingo-stats', async (req, res) => {
   }
 })
 
-app.get('/api/impact', async (req, res) => {
+// Etki & İhracat analizi YÖNETİCİ görünümüne alındı (arayüzde sekme yalnızca yöneticiye
+// gösteriliyor). Uçların da korunması şart: yalnızca düğmeyi gizlemek, oturumu olan herkesin
+// /api/impact* adreslerini doğrudan çağırabildiği anlamına gelirdi — yani görsel bir önlem.
+app.get('/api/impact', requireAdmin, async (req, res) => {
   try {
     const { data, raw, destinationStore } = await getEnrichedVisibility()
     const destinationRanking = buildDestinationRanking(data.countries, raw.series, destinationStore)
@@ -995,7 +998,7 @@ app.get('/api/impact', async (req, res) => {
 // "Etki & İhracat Analizi" ekranının 3 sekmesi (Kültürel/Turizm/İhracat) — /api/impact geriye
 // dönük uyumluluk için aynen duruyor, ama yeni önyüz (ImpactAnalysisTabs.jsx) artık sadece
 // aktif sekmenin ihtiyaç duyduğu veriyi çekiyor.
-app.get('/api/impact/cultural', (req, res) => {
+app.get('/api/impact/cultural', requireAdmin, (req, res) => {
   try {
     res.json(buildCulturalImpact())
   } catch (err) {
@@ -1004,7 +1007,7 @@ app.get('/api/impact/cultural', (req, res) => {
   }
 })
 
-app.get('/api/impact/tourism', async (req, res) => {
+app.get('/api/impact/tourism', requireAdmin, async (req, res) => {
   try {
     const { data, raw, destinationStore } = await getEnrichedVisibility()
     const destinationRanking = buildDestinationRanking(data.countries, raw.series, destinationStore)
@@ -1015,7 +1018,7 @@ app.get('/api/impact/tourism', async (req, res) => {
   }
 })
 
-app.get('/api/impact/export', async (req, res) => {
+app.get('/api/impact/export', requireAdmin, async (req, res) => {
   try {
     const { data } = await getEnrichedVisibility()
     res.json(await buildExportImpact(data.countries))
