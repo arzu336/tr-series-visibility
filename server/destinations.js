@@ -1,4 +1,5 @@
 import db from './db.js'
+import { runWithUserContext } from './services/liveCallQuota.js'
 import { classifyDestinationsWithLLM } from './llm.js'
 import { mapWithConcurrency } from './utils/concurrency.js'
 
@@ -99,7 +100,19 @@ function rowToEntry(row) {
 // devreye giren bir yedek. 'llm' ile başarıyla sınıflandırılmış kayıtlar bir daha denenmez;
 // 'keyword' (yedek) ile kaydedilenler her çağrıda (retry backoff'a uyarak) yeniden LLM'e
 // denenir — themes.js'teki classification_failures deseniyle birebir aynı mantık.
-export async function ensureDetected(series) {
+// Denetim bulgusu O-4: index.js her `/api` isteğini `runWithUserContext(userId, …)` içinde
+// çalıştırıyor. TMDB'nin 24 saatlik önbelleği dolduğunda, o an gelen İLK kullanıcı isteği bu
+// katalog geneli sınıflandırmayı tetikliyor ve BEKLEYEN TÜM dizilerin LLM çağrıları o kullanıcının
+// 150'lik günlük kotasına yazılıyordu. Soğuk bir veritabanında bu yüzlerce çağrı demek: kullanıcı
+// hiçbir şey yapmadan kotasını tüketiyor, kota dolunca da themes.js kalan dizileri üstel geri
+// çekilmeli "hata" olarak kaydediyor — yani BİR kullanıcının kotası KURUM kataloğunun verisini
+// bozuyordu. Bu iş kimin tetiklediğinden bağımsız, kurumsal bir arka plan işidir: kullanıcı
+// bağlamı dışında (userId=null) çalıştırılır, böylece kotaya hiç yazılmaz.
+export function ensureDetected(series) {
+  return runWithUserContext(null, () => ensureDetectedInner(series))
+}
+
+async function ensureDetectedInner(series) {
   const existingRows = new Map(selectAllStmt.all().map((r) => [r.id, r]))
   const now = Date.now()
   const pending = series.filter((s) => {

@@ -54,47 +54,60 @@ async function callLLMForJson(prompt, maxTokens = 300) {
   // kaynak. Yeniden denemeler tek bir mantıksal çağrı sayılır — döngünün DIŞINDA bir kez ücret
   // işlenir. Scheduler gibi kullanıcısız bağlamlarda bu bir no-op'tur.
   const releaseUserCall = chargeCurrentUserForLiveCall()
+  // Denetim bulgusu O-5: `releaseUserCall` alınıyor ama HİÇBİR hata yolunda çağrılmıyordu —
+  // zaman aşımına uğrayan ya da 5xx dönen her LLM çağrısı kullanıcının günlük kotasından
+  // düşüyordu. Bu, liveCallQuota.js'in kendi sözleşmesine ("başarısız çağrı kotadan düşmez") ve
+  // serpApiCache.js'in davranışına aykırıydı. Tek tek `throw` noktalarına eklemek yerine
+  // `finally` kullanılıyor: ileride eklenecek bir çıkış yolu da otomatik olarak kapsanır.
+  let basariyla = false
+  try {
+    let lastError
+    for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
+      try {
+        const res = await fetch(`${baseUrl}/chat/completions`, {
+          method: 'POST',
+          signal: controller.signal,
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${apiKey || 'not-needed'}`,
+          },
+          body: JSON.stringify({
+            model,
+            messages: [{ role: 'user', content: prompt }],
+            max_tokens: maxTokens,
+            temperature: 0.2,
+            chat_template_kwargs: { enable_thinking: false },
+          }),
+        })
 
-  let lastError
-  for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS)
-    try {
-      const res = await fetch(`${baseUrl}/chat/completions`, {
-        method: 'POST',
-        signal: controller.signal,
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${apiKey || 'not-needed'}`,
-        },
-        body: JSON.stringify({
-          model,
-          messages: [{ role: 'user', content: prompt }],
-          max_tokens: maxTokens,
-          temperature: 0.2,
-          chat_template_kwargs: { enable_thinking: false },
-        }),
-      })
-
-      if (!res.ok) {
-        const text = await res.text().catch(() => '')
-        lastError = new Error(`LLM isteği başarısız (${res.status}): ${text.slice(0, 300)}`)
-        if (!RETRYABLE_STATUSES.has(res.status) || attempt === MAX_RETRIES) throw lastError
-      } else {
-        const data = await res.json()
-        const content = data.choices?.[0]?.message?.content
-        if (!content) throw new Error('LLM boş cevap döndü')
-        return extractJson(content)
+        if (!res.ok) {
+          const text = await res.text().catch(() => '')
+          lastError = new Error(`LLM isteği başarısız (${res.status}): ${text.slice(0, 300)}`)
+          if (!RETRYABLE_STATUSES.has(res.status) || attempt === MAX_RETRIES) throw lastError
+        } else {
+          const data = await res.json()
+          const content = data.choices?.[0]?.message?.content
+          if (!content) throw new Error('LLM boş cevap döndü')
+          const sonuc = extractJson(content)
+          // Ayrıştırma da başarılı olduktan SONRA çağrı "gerçekten oldu" sayılır; extractJson
+          // fırlatırsa kota iade edilir.
+          basariyla = true
+          return sonuc
+        }
+      } catch (err) {
+        lastError = err.name === 'AbortError' ? new Error(`LLM isteği ${LLM_TIMEOUT_MS / 1000} saniyede zaman aşımına uğradı`) : err
+        if (attempt === MAX_RETRIES) throw lastError
+      } finally {
+        clearTimeout(timer)
       }
-    } catch (err) {
-      lastError = err.name === 'AbortError' ? new Error(`LLM isteği ${LLM_TIMEOUT_MS / 1000} saniyede zaman aşımına uğradı`) : err
-      if (attempt === MAX_RETRIES) throw lastError
-    } finally {
-      clearTimeout(timer)
+      await wait(750 * 2 ** attempt)
     }
-    await wait(750 * 2 ** attempt)
+    throw lastError
+  } finally {
+    if (!basariyla) releaseUserCall()
   }
-  throw lastError
 }
 
 // Dizi özetinden tema/güven skoru çıkarır.

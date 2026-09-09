@@ -29,6 +29,13 @@ export default function MediaSentimentCard({ seriesId, iso2, seriesName }) {
     setState({ status: 'loading', data: null, error: null })
     fetchMediaSentiment(seriesId, iso2)
       .then((data) => {
+        // Denetim Y-2: "bu ülke desteklenmiyor" ile "haber bulunamadı" AYRI durumlar. İlkinde
+        // tekrar taramak hiçbir şeyi değiştirmez (kapsama sınırı), o yüzden "Şimdi Tara" da
+        // gösterilmez — kullanıcıyı sonuçsuz bir eyleme yönlendirmemek için.
+        if (data.unsupported) {
+          setState({ status: 'unsupported', data, error: null })
+          return
+        }
         const hasSignal = data.totalNewsCount > 0 && data.dominantSentiment !== 'yetersiz-veri'
         setState({ status: hasSignal ? 'ready' : 'empty', data, error: null })
       })
@@ -45,6 +52,17 @@ export default function MediaSentimentCard({ seriesId, iso2, seriesName }) {
         <div className="media-sentiment__skel-bar" />
         <div className="media-sentiment__skel-line" />
         <div className="media-sentiment__skel-line media-sentiment__skel-line--short" />
+      </div>
+    )
+  }
+
+  if (state.status === 'unsupported') {
+    return (
+      <div className="media-sentiment media-sentiment--empty">
+        <p className="dashboard__empty">
+          Bu ülke için basın taraması desteklenmiyor — haber kaynağımız (GDELT) bu ülkeyi ayrı bir
+          yayın ülkesi olarak sınıflandırmıyor.
+        </p>
       </div>
     )
   }

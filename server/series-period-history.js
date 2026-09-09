@@ -27,7 +27,16 @@ const pruneStmt = db.prepare(`
   )
 `)
 const selectRawStmt = db.prepare('SELECT tmdb_id, popularity, captured_at FROM series_popularity_history')
-const selectMonthlyKeysStmt = db.prepare('SELECT tmdb_id, year, month FROM series_popularity_monthly')
+// Denetim bulgusu Y-1 (B-08 düzeltmesinin yan etkisi): bu sorgu `source` süzmediği için
+// `alreadyRolled` anahtarı `tmdb_id:yıl:ay` idi. Python'un ReytingTV satırı olan her (dizi, ay)
+// Node tarafından "zaten toplanmış" sayılıyor ve o ayın TMDB satırı HİÇ yazılmıyordu; ham anlık
+// görüntüler MAX_SNAPSHOTS_PER_SERIES=60 ile budandığından ölçüm kalıcı olarak kayboluyordu.
+// Ölçüldü: 305 (dizi, yıl, ay) kombinasyonunda ReytingTV satırı vardı ve HİÇBİRİNDE TMDB
+// karşılığı yoktu — yani atlama tamdı. B-08 ezmeyi önledi, yerine sessiz atlama koymuştu.
+// Bu rollup yalnızca kendi kaynağını (tmdb_snapshot) yazar, dolayısıyla yalnızca onu sormalı.
+const selectMonthlyKeysStmt = db.prepare(
+  "SELECT tmdb_id, year, month FROM series_popularity_monthly WHERE source = 'tmdb_snapshot'"
+)
 const upsertMonthlyStmt = db.prepare(`
   INSERT INTO series_popularity_monthly (tmdb_id, year, month, avg_popularity, sample_count, source)
   VALUES (?, ?, ?, ?, ?, 'tmdb_snapshot')

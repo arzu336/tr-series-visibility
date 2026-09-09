@@ -1,4 +1,5 @@
 import db from './db.js'
+import { runWithUserContext } from './services/liveCallQuota.js'
 import { classifyWithLLM } from './llm.js'
 import { mapWithConcurrency } from './utils/concurrency.js'
 
@@ -56,7 +57,19 @@ function rowToEntry(row) {
 // sadece henüz sınıflandırılmamış (yeni) diziler için, en fazla
 // CLASSIFY_CONCURRENCY kadar eşzamanlı istekle (TMDB'nin top-200 listesi
 // rotasyon yaptığında onlarca yeni dizi birden sıraya girebiliyor).
-export async function ensureClassified(series) {
+// Denetim bulgusu O-4: index.js her `/api` isteğini `runWithUserContext(userId, …)` içinde
+// çalıştırıyor. TMDB'nin 24 saatlik önbelleği dolduğunda, o an gelen İLK kullanıcı isteği bu
+// katalog geneli sınıflandırmayı tetikliyor ve BEKLEYEN TÜM dizilerin LLM çağrıları o kullanıcının
+// 150'lik günlük kotasına yazılıyordu. Soğuk bir veritabanında bu yüzlerce çağrı demek: kullanıcı
+// hiçbir şey yapmadan kotasını tüketiyor, kota dolunca da themes.js kalan dizileri üstel geri
+// çekilmeli "hata" olarak kaydediyor — yani BİR kullanıcının kotası KURUM kataloğunun verisini
+// bozuyordu. Bu iş kimin tetiklediğinden bağımsız, kurumsal bir arka plan işidir: kullanıcı
+// bağlamı dışında (userId=null) çalıştırılır, böylece kotaya hiç yazılmaz.
+export function ensureClassified(series) {
+  return runWithUserContext(null, () => ensureClassifiedInner(series))
+}
+
+async function ensureClassifiedInner(series) {
   const existingIds = new Set(selectAllStmt.all().map((r) => r.id))
   const now = Date.now()
   const pending = series.filter((s) => {

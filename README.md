@@ -196,6 +196,17 @@ NODE_ENV=production npm start
 
 `npm start` hem `/api/*` uçlarını hem de build edilmiş frontend'i tek sunucudan (`server/index.js`) servis eder.
 
+### Dağıtım topolojisi (önemli)
+
+İki ayar dağıtım şekline göre verilmelidir; ikisi de **varsayılan olarak güvenli tarafta** durur:
+
+| Ayar | Ne zaman | Neden |
+|:--|:--|:--|
+| `TRUST_PROXY` | Yalnızca ters proxy (nginx / IIS / Traefik) **arkasındaysanız** `true` (ya da hop sayısı, ör. `2`) | Kapalıyken hız sınırları isteğin gerçek IP'siyle çalışır. Proxy yokken açılırsa istemci sahte `X-Forwarded-For` gönderip giriş/kayıt/genel sınırların üçünü de sürekli sıfırlayabilir. |
+| — | Çerezin `Secure` bayrağı **ayar gerektirmez** | İsteğin kendi protokolünden türetilir (`req.secure` veya `X-Forwarded-Proto`). Böylece HTTPS'te `Secure` eklenir, **düz HTTP üzerinden yayınlanan kurum içi kurulumda eklenmez ve giriş çalışır**. Daha önce `NODE_ENV`'e bağlıydı ve bu, HTTP dağıtımında girişi tamamen kilitliyordu. |
+
+TLS'i proxy sonlandırıyorsa `TRUST_PROXY=true` verin: hem hız sınırı doğru IP'yi görür hem de `Secure` bayrağı `X-Forwarded-Proto`'dan doğru türetilir.
+
 ## Testler
 
 ```bash

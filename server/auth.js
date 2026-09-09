@@ -56,14 +56,35 @@ export function parseCookies(header) {
   return result
 }
 
-// Secure bayrağı SADECE production'da eklenir — yerel geliştirmede (http://localhost) tarayıcı
-// Secure çerezleri düz HTTP üzerinden zaten KABUL ETMEZ, koşulsuz eklenseydi giriş localhost'ta
-// hiç çalışmazdı. Production'da (NODE_ENV=production, gerçek dağıtım HTTPS arkasında) çerez asla
-// düz HTTP'ye sızmaz.
-export function sessionCookieHeader(token, maxAgeSeconds) {
+/**
+ * Denetim bulgusu O-3 — DAĞITIM ENGELİYDİ: Secure bayrağı `NODE_ENV === 'production'` şartına
+ * bağlıydı. `.env.example` de `NODE_ENV=production` ile geldiği için, düz HTTP üzerinden yayınlanan
+ * bir kurum içi dağıtımda sunucu 200 dönüyor ama tarayıcı `Secure` çerezi HTTP'de sessizce ATIYOR:
+ * hiç kimse giriş yapamıyor ve tekrar denemeler giriş hız sınırına takılıyor. (CSP'de
+ * `upgradeInsecureRequests` zaten "kurum içi HTTP dağıtımını kırmasın" diye kapalı — yani proje
+ * HTTP dağıtımı destekliyor, çerez bunu desteklemiyordu.)
+ *
+ * Doğru bağ ortam değişkeni değil, İSTEĞİN KENDİ PROTOKOLÜ: HTTPS ise Secure eklenir, düz HTTP ise
+ * eklenmez. `req.secure`, `app.set('trust proxy', …)` açıkken `X-Forwarded-Proto`'yu zaten hesaba
+ * katar; başlık ayrıca elle de kontrol ediliyor ki trust proxy kapalıyken TLS sonlandıran bir
+ * proxy'nin arkasında da doğru çalışsın.
+ *
+ * `req` verilmezse (test/çağrı yeri unutulmuş) Secure EKLENMEZ — yanlış tarafa düşmek, çerezin
+ * hiç ulaşmaması yerine yalnızca HTTP'de daha zayıf olması demektir; sessiz kilitlenmeden iyidir.
+ */
+export function sessionCookieHeader(token, maxAgeSeconds, req) {
   const parts = [`${COOKIE_NAME}=${token}`, 'HttpOnly', 'Path=/', 'SameSite=Lax', `Max-Age=${maxAgeSeconds}`]
-  if (process.env.NODE_ENV === 'production') parts.push('Secure')
+  if (isSecureRequest(req)) parts.push('Secure')
   return parts.join('; ')
+}
+
+/** İsteğin gerçekten HTTPS üzerinden geldiği mi (doğrudan ya da TLS sonlandıran bir proxy ile). */
+export function isSecureRequest(req) {
+  if (!req) return false
+  if (req.secure) return true
+  const proto = req.headers?.['x-forwarded-proto']
+  // Proxy zinciri virgülle birden çok değer gönderebilir; ilki istemciye en yakın olandır.
+  return String(proto || '').split(',')[0].trim().toLowerCase() === 'https'
 }
 
 /**

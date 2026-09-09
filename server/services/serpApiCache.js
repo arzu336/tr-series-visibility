@@ -167,7 +167,12 @@ export async function serpapiGet(params) {
   const reserved = reserveUsageStmt.get(monthKey).value
   if (reserved > budget) {
     releaseUsageStmt.run(monthKey)
-    throw new Error(`Aylık kota dolmuş görünüyor (429). (${reserved - 1}/${budget})`)
+    // Kota hataları rota katmanında jenerik 502'ye dönüşmesin diye açıkça işaretleniyor
+    // (bkz. index.js sendUpstreamError): kullanıcı "dış servise ulaşılamıyor" değil, "kota doldu"
+    // görmeli — ikisi tamamen farklı eylemler gerektirir.
+    const kotaHatasi = new Error(`Aylık kota dolmuş görünüyor (429). (${reserved - 1}/${budget})`)
+    kotaHatasi.status = 429
+    throw kotaHatasi
   }
 
   // Kurum bütçesinin yanına KULLANICI BAŞINA günlük sınır (denetim G-01/B-15). Buraya
@@ -189,7 +194,9 @@ export async function serpapiGet(params) {
     const res = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
     if (!res.ok) {
       if (res.status === 429) {
-        throw new Error('Aylık kota dolmuş görünüyor (429).')
+        const kotaHatasi = new Error('Aylık kota dolmuş görünüyor (429).')
+        kotaHatasi.status = 429
+        throw kotaHatasi
       }
       throw new Error(`İstek başarısız (${res.status})`)
     }

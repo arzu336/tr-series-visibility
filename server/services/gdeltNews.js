@@ -120,14 +120,56 @@ async function gdeltGet(query) {
 // `sourcecountry` alanı (tam İngilizce ülke adı — canlı doğrulandı) beklenen ülke adıyla
 // karşılaştırılıyor ve tutmayan makaleler ATILIYOR. Kod yanlışsa sonuç boş kalır; BAŞKA bir
 // ülkenin haberleri asla bu ülkenin basın algısı olarak kaydedilmez.
-const ISO2_TO_FIPS = {
-  AE: 'AE', AR: 'AR', AT: 'AU', AU: 'AS', AZ: 'AJ', BA: 'BK', BE: 'BE', BG: 'BU', BR: 'BR',
-  CA: 'CA', CH: 'SZ', CL: 'CI', CN: 'CH', CZ: 'EZ', DE: 'GM', DK: 'DA', DZ: 'AG', EG: 'EG',
-  ES: 'SP', FR: 'FR', GB: 'UK', GR: 'GR', HR: 'HR', HU: 'HU', ID: 'ID', IN: 'IN', IQ: 'IZ',
-  IR: 'IR', IT: 'IT', JO: 'JO', JP: 'JA', KG: 'KG', KR: 'KS', KZ: 'KZ', LB: 'LE', MA: 'MO',
-  MX: 'MX', MY: 'MY', NL: 'NL', NO: 'NO', PK: 'PK', PL: 'PL', PT: 'PO', RO: 'RO', RS: 'RI',
-  RU: 'RS', SA: 'SA', SE: 'SW', TJ: 'TI', TM: 'TX', TN: 'TS', TR: 'TU', UA: 'UP', US: 'US',
-  UZ: 'UZ', VE: 'VE', ZA: 'SF',
+// FIPS 10-4 kodları. DİKKAT: ISO2 ile FIPS sık sık AYRIŞIR ve bazı çiftler tuzaktır —
+// CH(İsviçre)→SZ ama SZ(Esvatini)→WZ; ZA(G.Afrika)→SF ama ZM(Zambiya)→ZA; SN(Senegal)→SG ama
+// SG(Singapur)→SN; CL(Şili)→CI ama CI(Fildişi)→IV. Bu yüzden tablo tek başına güvenlik değildir:
+// dönen `sourcecountry` beklenen ülkeyle DOĞRULANIR (aşağıda), kod yanlışsa sonuç boş kalır,
+// asla başka bir ülkenin haberi kaydedilmez.
+//
+// Denetim bulgusu Y-2: tablo yalnızca 57 ülke içeriyordu; country-centroids.json'daki 157 koddan
+// 100'ü eksikti ve HAFTALIK TARAMA HEDEFLERİNDEN Peru (PE) ile Bolivya (BO) de bunlara dahildi.
+// Eksik ülkede sorgu `sourcecountry:` olmadan KÜRESEL gidiyor, ad doğrulaması her şeyi eliyor ve
+// bu boş sonuç 14 gün önbelleğe "yetersiz-veri" olarak yazılıyordu — yani sessiz kapsama kaybı
+// rapora "veri yok" diye yansıyordu. Tablo tamamlandı; kalan istisnalar artık açıkça
+// `unsupported` döner (bkz. isGdeltSupportedCountry).
+// Test edilebilir olsun diye dışa açık: yanlış bir FIPS kodu sessizce BOŞ sonuç üretir
+// (ad doğrulaması yanlış veriyi engeller ama boşluğu açıklamaz), bu yüzden karıştırılması kolay
+// çiftler birim testiyle sabitleniyor.
+export const ISO2_TO_FIPS = {
+  AD: 'AN', AE: 'AE', AF: 'AF', AG: 'AC', AL: 'AL', AM: 'AM', AO: 'AO', AR: 'AR', AT: 'AU',
+  AU: 'AS', AZ: 'AJ', BA: 'BK', BB: 'BB', BD: 'BG', BE: 'BE', BF: 'UV', BG: 'BU', BH: 'BA',
+  BI: 'BY', BJ: 'BN', BN: 'BX', BO: 'BL', BR: 'BR', BS: 'BF', BT: 'BT', BW: 'BC', BY: 'BO',
+  BZ: 'BH', CA: 'CA', CD: 'CG', CF: 'CT', CG: 'CF', CH: 'SZ', CI: 'IV', CL: 'CI', CM: 'CM',
+  CN: 'CH', CO: 'CO', CR: 'CS', CU: 'CU', CV: 'CV', CY: 'CY', CZ: 'EZ', DE: 'GM', DJ: 'DJ',
+  DK: 'DA', DO: 'DR', DZ: 'AG', EC: 'EC', EE: 'EN', EG: 'EG', ER: 'ER', ES: 'SP', ET: 'ET',
+  FI: 'FI', FJ: 'FJ', FR: 'FR', GA: 'GB', GB: 'UK', GE: 'GG', GH: 'GH', GL: 'GL', GM: 'GA',
+  GN: 'GV', GQ: 'EK', GR: 'GR', GT: 'GT', GW: 'PU', GY: 'GY', HN: 'HO', HR: 'HR', HT: 'HA',
+  HU: 'HU', ID: 'ID', IE: 'EI', IL: 'IS', IN: 'IN', IQ: 'IZ', IR: 'IR', IS: 'IC', IT: 'IT',
+  JM: 'JM', JO: 'JO', JP: 'JA', KE: 'KE', KG: 'KG', KH: 'CB', KM: 'CN', KP: 'KN', KR: 'KS',
+  KW: 'KU', KZ: 'KZ', LA: 'LA', LB: 'LE', LK: 'CE', LR: 'LI', LS: 'LT', LT: 'LH', LU: 'LU',
+  LV: 'LG', LY: 'LY', MA: 'MO', MD: 'MD', ME: 'MJ', MG: 'MA', MK: 'MK', ML: 'ML', MM: 'BM',
+  MN: 'MG', MR: 'MR', MT: 'MT', MU: 'MP', MV: 'MV', MW: 'MI', MX: 'MX', MY: 'MY', MZ: 'MZ',
+  NA: 'WA', NE: 'NG', NG: 'NI', NI: 'NU', NL: 'NL', NO: 'NO', NP: 'NP', NZ: 'NZ', OM: 'MU',
+  PA: 'PM', PE: 'PE', PG: 'PP', PH: 'RP', PK: 'PK', PL: 'PL', PR: 'RQ', PT: 'PO', PY: 'PA',
+  QA: 'QA', RO: 'RO', RS: 'RI', RU: 'RS', RW: 'RW', SA: 'SA', SD: 'SU', SE: 'SW', SG: 'SN',
+  SI: 'SI', SK: 'LO', SL: 'SL', SN: 'SG', SO: 'SO', SR: 'NS', SS: 'OD', SV: 'ES', SY: 'SY',
+  SZ: 'WZ', TD: 'CD', TG: 'TO', TH: 'TH', TJ: 'TI', TM: 'TX', TN: 'TS', TR: 'TU', TT: 'TD',
+  TW: 'TW', TZ: 'TZ', UA: 'UP', UG: 'UG', US: 'US', UY: 'UY', UZ: 'UZ', VE: 'VE', VN: 'VM',
+  XK: 'KV', YE: 'YM', ZA: 'SF', ZM: 'ZA', ZW: 'ZI',
+  // Bağımlı bölgeler ve mikrodevletler — country-centroids.json'da var, haftalık taramada yok.
+  BM: 'BD', GF: 'FG', GG: 'GK', GI: 'GI', HK: 'HK', LC: 'ST', LI: 'LS', MC: 'MN', PF: 'FP',
+  SC: 'SE', SM: 'SM', TC: 'TK', VA: 'VT',
+  // Filistin BİLEREK dışarıda: GDELT'te tek kod yok, FIPS ayrımı WE (Batı Şeria) / GZ (Gazze).
+  // Uydurma bir kod yazmak yerine `unsupported` dönülüyor — bu projedeki dürüstlük kuralı.
+}
+
+/**
+ * Bu ülke için basın taraması yapılabilir mi? FIPS kodu bilinmiyorsa GDELT'e ülke filtresi
+ * gönderilemez; filtresiz sorgu küresel gelir ve ad doğrulamasından hiçbir şey geçmez. Böyle bir
+ * durumu "haber yok" gibi kaydetmek yanlış olur — çağıran taraf bunu ayrı ele almalı.
+ */
+export function isGdeltSupportedCountry(iso2) {
+  return Boolean(ISO2_TO_FIPS[String(iso2).toUpperCase()])
 }
 
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
@@ -241,18 +283,29 @@ export async function fetchNewsArticlesGdelt(query, countryIso2) {
   const iso2 = String(countryIso2).toUpperCase()
   const fips = ISO2_TO_FIPS[iso2]
 
-  const parcalar = [`"${String(query).trim()}"`]
-  if (fips) parcalar.push(`sourcecountry:${fips}`)
-  const data = await gdeltGet(parcalar.join(' '))
-  return normalizeGdeltArticles(data.articles, iso2)
+  // Denetim Y-2: FIPS kodu yoksa `sourcecountry:` eklenemez ve sorgu KÜRESEL gider; ad
+  // doğrulaması da haklı olarak her şeyi eler. Eskiden bu, boş bir sonuç olarak dönüp "haber yok"
+  // diye 14 gün önbelleğe yazılıyordu. Artık dış çağrı HİÇ yapılmıyor (boşuna hız sınırı da
+  // yenmiyor) ve durum açıkça ayırt ediliyor: "veri yok" ile "bu ülke desteklenmiyor" farklı
+  // şeylerdir ve panoda farklı gösterilmeleri gerekir.
+  if (!fips) {
+    return { unsupported: true, news: [] }
+  }
+
+  const data = await gdeltGet(`"${String(query).trim()}" sourcecountry:${fips}`)
+  return { unsupported: false, news: normalizeGdeltArticles(data.articles, iso2) }
 }
 
 /** 14 günlük önbellek katmanı — `gdelt:news:*` ad alanında (bkz. gdeltNewsCacheKey). */
 export async function fetchNewsArticlesGdeltCached(query, countryIso2) {
   const key = gdeltNewsCacheKey(query, countryIso2)
   const cached = getCached(key)
-  if (cached) return cached
-  const articles = await fetchNewsArticlesGdelt(query, countryIso2)
-  setCached(key, articles, NEWS_TTL_MS)
-  return articles
+  // Eski şema (düz dizi) kalmış olabilir — yeni sözleşmeye çevrilerek okunur.
+  if (cached) return Array.isArray(cached) ? { unsupported: false, news: cached } : cached
+
+  const sonuc = await fetchNewsArticlesGdelt(query, countryIso2)
+  // Desteklenmeyen ülke ÖNBELLEĞE YAZILMAZ: bu bir veri sonucu değil, bir kapsama sınırı.
+  // 14 gün boyunca dondurmak, tabloya ülke eklendiğinde iki hafta boyunca eski cevabı verirdi.
+  if (!sonuc.unsupported) setCached(key, sonuc, NEWS_TTL_MS)
+  return sonuc
 }

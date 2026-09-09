@@ -102,6 +102,17 @@ const app = express()
 // karakter olmalı", "Bilinmeyen dizi" gibi), kullanıcıya dönük ve kasıtlı.
 const UPSTREAM_ERROR_MESSAGE = 'Dış veri kaynağına şu anda ulaşılamıyor. Lütfen daha sonra tekrar deneyin.'
 
+// G-12 (üst servis metnini gizle) ile G-01 (kullanıcı kotası) ayrı paketlerde doğruydu ama
+// BİRLİKTE bir kör nokta üretti: kota aşımı da jenerik 502'ye dönüşüyordu ve kullanıcı günlük
+// sınırına ulaştığını HİÇ öğrenemiyordu — "dış kaynağa ulaşılamıyor" deyip duruyordu.
+// Kota hataları `status = 429` taşır (services/liveCallQuota.js kullanıcı sınırı,
+// services/serpApiCache.js aylık kurum bütçesi) ve bu mesajlar BİZE ait, kullanıcıya dönük ve
+// güvenlidir — üst servisten gelen ham metin değildir, o yüzden aynen iletilir.
+function sendUpstreamError(res, err) {
+  if (err?.status === 429) return res.status(429).json({ error: err.message })
+  return res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+}
+
 // Denetim bulgusu G-08: hicbir guvenlik basligi yoktu. helmet varsayilanlari (nosniff,
 // X-Frame-Options: SAMEORIGIN, Referrer-Policy, HSTS, X-DNS-Prefetch-Control...) + uygulamaya
 // gore ELLE daraltilmis bir CSP. Sunucu uretimde dist/'i de servis ettigi (asagida
@@ -111,8 +122,10 @@ const UPSTREAM_ERROR_MESSAGE = 'Dış veri kaynağına şu anda ulaşılamıyor.
 // Kure dokulari (unpkg) ve ulke sinirlari GeoJSON'u (GitHub raw) B-06 kapsaminda public/map/
 // altina alindi; artik kendi origin'imizden geliyorlar, bu yuzden CSP'den cikarildilar.
 // styleSrc'ta 'unsafe-inline': React'in style={{...}} nitelikleri; scriptSrc'ta YOK.
-// upgradeInsecureRequests kapali: kurum ici HTTP dagitimini kirmasin (Secure cerez zaten
-// req.secure'a bagli, bkz. auth.js).
+// upgradeInsecureRequests kapali: kurum ici HTTP dagitimini kirmasin. Cerez tarafi da bununla
+// tutarli: Secure bayragi artik ISTEGIN protokolunden turetiliyor (auth.js isSecureRequest) —
+// bu yorum daha once "zaten req.secure'a bagli" diyordu ama kod NODE_ENV'e bakiyordu (denetim
+// O-3); iddia ile kod artik ayni.
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -143,9 +156,24 @@ app.use(
 
 // Ters proxy (nginx/IIS) arkasında express-rate-limit her isteği proxy'nin IP'siyle görüyordu:
 // herhangi birinin 10 hatalı girişi TÜM kurumun girişini kilitliyor, 300 istek/15 dk kurum
-// geneline bölünüyordu (denetim G-02/B-07 — kendi kendine DoS). 1 hop varsayılıyor; proxy
-// yoksa X-Forwarded-For gelmeyeceği için davranış değişmez.
-app.set('trust proxy', 1)
+// geneline bölünüyordu (denetim G-02/B-07 — kendi kendine DoS).
+//
+// Denetim bulgusu O-2: bu ayar KOŞULSUZDU ve buradaki eski yorum "proxy yoksa X-Forwarded-For
+// gelmeyeceği için davranış değişmez" diyordu — bu YANLIŞ. Proxy olmadan da istemci bu başlığı
+// kendisi uydurabilir; Express onu `req.ip` olarak kabul eder ve saldırgan her istekte farklı bir
+// sahte IP göndererek giriş/kayıt/genel hız sınırlarının ÜÇÜNÜ de sürekli sıfırlar. Yani G-02'yi
+// düzeltmek için eklenen satır, proxy'siz kurulumda G-02'nin koruduğu şeyi deliyordu.
+//
+// Artık dağıtım topolojisi açıkça beyan ediliyor. Varsayılan KAPALI: doğrudan çalıştırma
+// (README'deki `npm start`) güvenli tarafta kalır; ters proxy arkasına konurken TRUST_PROXY=true
+// verilir. Değer hop sayısı da olabilir (ör. TRUST_PROXY=2).
+const trustProxyEnv = String(process.env.TRUST_PROXY || '').trim().toLowerCase()
+if (trustProxyEnv && trustProxyEnv !== 'false' && trustProxyEnv !== '0') {
+  // Sayı verildiyse hop sayısı, 'true' verildiyse tek hop.
+  const hop = Number(trustProxyEnv)
+  app.set('trust proxy', Number.isInteger(hop) && hop > 0 ? hop : 1)
+  console.log(`[server] trust proxy açık (${Number.isInteger(hop) && hop > 0 ? hop : 1} hop)`)
+}
 
 // CORS artık her origin'i credential ile yansıtmıyor (denetim G-03): üretimde yalnızca
 // APP_ORIGIN (+ isteğin kendi origin'i), geliştirmede yerel/LAN origin'leri. Vite dev sunucusu
@@ -273,7 +301,7 @@ app.post('/api/auth/login', loginLimiter, (req, res) => {
     return res.status(403).json({ error: 'Hesabınız onaylanmadı' })
   }
   const token = createSession(user.id)
-  res.setHeader('Set-Cookie', sessionCookieHeader(token, SESSION_MAX_AGE_S))
+  res.setHeader('Set-Cookie', sessionCookieHeader(token, SESSION_MAX_AGE_S, req))
   res.json({ ok: true })
 })
 
@@ -285,7 +313,7 @@ app.get('/api/auth/status', (req, res) => {
 
 app.post('/api/auth/logout', (req, res) => {
   deleteSession(req.cookies[COOKIE_NAME])
-  res.setHeader('Set-Cookie', sessionCookieHeader('', 0))
+  res.setHeader('Set-Cookie', sessionCookieHeader('', 0, req))
   res.json({ ok: true })
 })
 
@@ -301,7 +329,7 @@ app.post('/api/auth/change-password', (req, res) => {
     // taze bir oturum verilir ki kullanıcı kendi kendini dışarı atmasın.
     deleteSessionsForUser(userId)
     const token = createSession(userId)
-    res.setHeader('Set-Cookie', sessionCookieHeader(token, SESSION_MAX_AGE_S))
+    res.setHeader('Set-Cookie', sessionCookieHeader(token, SESSION_MAX_AGE_S, req))
     res.json({ ok: true })
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -319,7 +347,7 @@ app.use('/api', (req, res, next) => {
   const user = getUser(userId)
   if (!user || user.status !== 'approved') {
     deleteSessionsForUser(userId)
-    res.setHeader('Set-Cookie', sessionCookieHeader('', 0))
+    res.setHeader('Set-Cookie', sessionCookieHeader('', 0, req))
     return res.status(401).json({ error: 'Oturumunuz sonlandırıldı, lütfen tekrar giriş yapın' })
   }
 
@@ -417,7 +445,7 @@ app.get('/api/visibility', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[visibility] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -433,7 +461,7 @@ app.get('/api/history/global-periods', (req, res) => {
     res.json({ range, periods })
   } catch (err) {
     console.error('[history/global-periods] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -445,7 +473,7 @@ app.get('/api/history/:iso2/periods', (req, res) => {
     res.json({ range, iso2, periods })
   } catch (err) {
     console.error('[history/:iso2/periods] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -457,7 +485,7 @@ app.get('/api/tourism-summary', (req, res) => {
     res.json({ items: getAllLatestArrivals() })
   } catch (err) {
     console.error('[tourism-summary] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -471,7 +499,7 @@ app.get('/api/series-popularity', (req, res) => {
     res.json({ range, items: Object.fromEntries(map) })
   } catch (err) {
     console.error('[series-popularity] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -481,7 +509,7 @@ app.get('/api/theme-insight', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[theme-insight] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -510,7 +538,7 @@ app.get('/api/themes', async (req, res) => {
     res.json({ items: list })
   } catch (err) {
     console.error('[themes] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -592,7 +620,7 @@ app.get('/api/destinations', async (req, res) => {
     res.json({ items: list })
   } catch (err) {
     console.error('[destinations] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -644,7 +672,7 @@ app.get('/api/media-sentiment-audit', async (req, res) => {
     res.json({ items: getMediaSentimentAuditRows(liveSeriesById) })
   } catch (err) {
     console.error('[media-sentiment-audit] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -671,7 +699,7 @@ app.get('/api/trends/series', async (req, res) => {
     res.json({ items: raw.series.map((s) => ({ id: s.id, name: s.name })) })
   } catch (err) {
     console.error('[trends/series] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -698,7 +726,7 @@ app.get('/api/trends/share-of-search', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/share-of-search] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -716,7 +744,7 @@ app.get('/api/trends/regional-breakdown', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/regional-breakdown] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -734,7 +762,7 @@ app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/timeseries] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -754,7 +782,7 @@ app.get('/api/trends/insight/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends/insight] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -766,7 +794,7 @@ app.get('/api/trends/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[trends] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -778,7 +806,7 @@ app.get('/api/social/:seriesName', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[social] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -805,7 +833,7 @@ app.post('/api/series/enrich-now/:id', requireAdmin, async (req, res) => {
     res.json({ ok: true, seriesId, seriesName: series.name, countriesTargeted: topCountries.length, news, social })
   } catch (err) {
     console.error('[series/enrich-now] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -815,7 +843,7 @@ app.get('/api/imdb/:tmdbId', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[imdb] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -829,7 +857,7 @@ app.get('/api/series-enrichment/:tmdbId', (req, res) => {
     res.json(data || { dizilah: null, imdb: null })
   } catch (err) {
     console.error('[series-enrichment] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -839,7 +867,7 @@ app.get('/api/person/:personId', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[person] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -852,7 +880,7 @@ app.get('/api/regional-interest/:seriesName/:iso2', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[regional-interest] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -878,7 +906,7 @@ app.get('/api/media-sentiment/:seriesId/:iso2', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[media-sentiment] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -892,7 +920,7 @@ app.get('/api/media-sentiment-summary/:seriesId', (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[media-sentiment-summary] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -923,7 +951,7 @@ app.get('/api/series/:tmdbId', (req, res) => {
     })
   } catch (err) {
     console.error('[series] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -939,7 +967,7 @@ app.get('/api/country-leaderboard/:iso2', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[country-leaderboard] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -949,7 +977,7 @@ app.get('/api/duolingo-stats', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[duolingo-stats] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -960,7 +988,7 @@ app.get('/api/impact', async (req, res) => {
     res.json(await buildImpactReport(data.countries, destinationRanking))
   } catch (err) {
     console.error('[impact] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -972,7 +1000,7 @@ app.get('/api/impact/cultural', (req, res) => {
     res.json(buildCulturalImpact())
   } catch (err) {
     console.error('[impact/cultural] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -983,7 +1011,7 @@ app.get('/api/impact/tourism', async (req, res) => {
     res.json(await buildTourismImpact(data.countries, destinationRanking))
   } catch (err) {
     console.error('[impact/tourism] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -993,7 +1021,7 @@ app.get('/api/impact/export', async (req, res) => {
     res.json(await buildExportImpact(data.countries))
   } catch (err) {
     console.error('[impact/export] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -1003,7 +1031,7 @@ app.get('/api/benchmark', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[benchmark] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 
@@ -1013,7 +1041,7 @@ app.get('/api/turkish-learning-index', async (req, res) => {
     res.json(data)
   } catch (err) {
     console.error('[turkish-learning-index] hata:', err.message)
-    res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
+    sendUpstreamError(res, err)
   }
 })
 

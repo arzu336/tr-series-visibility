@@ -12,6 +12,17 @@ import {
   enrichSeriesNow,
 } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
+import { resolveIso2FromLabel } from '../lib/continents.js'
+
+// Denetim bulgusu O-7: B-13 düzeltmesinden sonra sunucu ülke alanında artık `r.geo` (ISO2 kodu)
+// döndürüyor — doğru karar, ama bu kart değeri HAM basıyordu. 7 günlük `serp:trends:*` önbelleği
+// devrettiğinde liste ülke adı yerine "DE, SA, EG…" gösterecekti (henüz görünmüyordu çünkü
+// önbellekte eski, adlı kayıtlar vardı — zaman ayarlı bir regresyon). Etiket artık her iki biçimi
+// de kabul edip ada çeviriyor; çözemezse gelen değeri olduğu gibi gösterir (uydurma yapmaz).
+function ulkeAdi(deger) {
+  const iso2 = resolveIso2FromLabel(deger)
+  return countryNames[iso2]?.name || deger
+}
 import SeriesTrendChart from './SeriesTrendChart.jsx'
 import CastBar from './CastBar.jsx'
 import ComparisonView from './ComparisonView.jsx'
@@ -106,7 +117,7 @@ function GlobalFootprintCard({ result, seriesId, onShowOnMap }) {
         <div className="benchmark-card__bars">
           {top8.map((row) => (
             <div key={row.country} className="benchmark-card__row">
-              <div className="benchmark-card__row-label">{row.country}</div>
+              <div className="benchmark-card__row-label">{ulkeAdi(row.country)}</div>
               <div className="benchmark-card__row-bar-track">
                 <div className="benchmark-card__row-bar" style={{ width: `${(row.value / maxValue) * 100}%`, background: '#EE3135' }} />
               </div>

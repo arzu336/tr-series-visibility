@@ -257,7 +257,25 @@ export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle,
 
   let articles
   try {
-    articles = await fetchNewsArticlesGdeltCached(query, iso2)
+    const sonuc = await fetchNewsArticlesGdeltCached(query, iso2)
+    // Denetim Y-2: GDELT'in ülke filtresi FIPS kodu ister ve elimizdeki tablo bazı bağımlı
+    // bölgeleri/Filistin'i kapsamıyor. Bu "haber bulunamadı" DEĞİL, "bu ülke için basın taraması
+    // yapılamıyor" demektir; media_sentiment'e yazılmaz (yoksa ortalamalara 'yetersiz-veri' olarak
+    // karışır) ve önbelleğe de alınmaz.
+    if (sonuc.unsupported) {
+      return {
+        seriesId,
+        countryIso2: iso2,
+        queryUsed: query,
+        unsupported: true,
+        totalNewsCount: null,
+        dominantSentiment: null,
+        llmSummary: null,
+        latestArticles: [],
+        fromCache: false,
+      }
+    }
+    articles = sonuc.news
   } catch (err) {
     // Haber çağrısı başarısız oldu (GDELT hız sınırı/ağ) — eski (süresi dolmuş) bir kayıt varsa çökmeden
     // onu stale:true ile döneriz, hiç kayıt yoksa hatayı olduğu gibi yukarı fırlatırız
