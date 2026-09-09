@@ -183,7 +183,6 @@ export default function ComparisonView({ seriesList }) {
 
   return (
     <div>
-      <p className="dashboard__hint">En fazla {MAX_COMPARE} dizi seç, aralarında küresel arama payını, IMDb puanını ve ana pazarlardaki ilgiyi kıyasla.</p>
 
       <div className="chip-selector">
         <div className="chip-selector__chips">
@@ -257,10 +256,6 @@ export default function ComparisonView({ seriesList }) {
 
           <section className="dashboard__section">
             <h3 className="dashboard__section-title">Karşılaştırılan Dizilerin Ülke İçi İlgi Payı</h3>
-            <p className="dashboard__hint">
-              Google Trends karşılaştırmalı verisi — seçilen ülkede bu diziler arasındaki arama payı
-              dağılımını gösterir (ülke toplamı %100). Ülkeler, listedeki ilk dizinin payına göre sıralanır.
-            </p>
             <RegionalDominanceTable topRows={regionalRows} cards={cards} />
           </section>
         </>

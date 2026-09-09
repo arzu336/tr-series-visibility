@@ -174,17 +174,6 @@ export default function ExportImpactTab({ onSelectCountry }) {
       </section>
 
       <section className="dashboard__section">
-        <h3 className="dashboard__section-title">Kurumsal Veri Beklentisi</h3>
-        <div className="impact__pending-badges">
-          <span className="badge badge--uncertain">Gerçek Veri Bekleniyor</span>
-        </div>
-        <p className="dashboard__hint">
-          Ülke bazlı dizi lisans bedelleri ($) kamuya açık değildir; resmi ihracat beyannameleri verisi
-          beklenmektedir.
-        </p>
-      </section>
-
-      <section className="dashboard__section">
         <h3 className="dashboard__section-title">Zaman İçinde Görünürlük</h3>
         <p className="dashboard__hint">Toplam görünürlük skorunun ay/yıl bazında değişimi.</p>
         <div style={{ opacity: periodLoading ? 0.5 : 1, transition: 'opacity 200ms ease' }}>

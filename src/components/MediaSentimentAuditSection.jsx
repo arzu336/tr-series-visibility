@@ -84,10 +84,6 @@ export default function MediaSentimentAuditSection({ canEdit = true }) {
 
   return (
     <>
-      <p className="dashboard__hint">
-        Her satır bir dizinin bir ülkede taranmış haber grubudur (tek bir haber değil) — LLM haberleri toplu
-        değerlendirir, ton düzeltmesi bu taramanın genelini düzeltir.
-      </p>
       <div className="dashboard__summary">
         <span className="dashboard__summary-item dashboard__summary-item--ok">{items.length} tarama kaydı</span>
         <input
