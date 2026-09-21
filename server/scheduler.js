@@ -41,7 +41,29 @@ async function runScheduledRefresh() {
   }
 }
 
-async function runScheduledRefreshInner() {
+function gunlukTazelemeSirasiGeldi() {
+  const row = getMetaStmt.get(META_KEY)
+  const lastRunAt = row ? Number(row.value) : 0
+  return Date.now() - lastRunAt >= REFRESH_INTERVAL_MS
+}
+
+// Dışa açık: açlık regresyonu (haftalık zenginleştirme zincirinin günlük kapının arkasında
+// kalması) tam olarak burada yaşandı, bu yüzden birim testiyle sabitleniyor.
+export async function runScheduledRefreshInner() {
+  // Eskiden 24 saatlik kapı setInterval'in İÇİNDE kontrol ediliyordu, yani tetiklemenin tamamı
+  // (günlük tazeleme + haftalık zenginleştirme zinciri) günde bir kez çalışıyordu. Bu, zincirin
+  // sonundaki işleri açlığa itiyordu: basın taraması ~10 saat sürüp hiç bitmediği için arkasındaki
+  // öncü turizm sinyali toplayıcısına 26 gün boyunca sıra gelmedi (lastTourismTrendsCollectAt
+  // 2026-08-26'da donmuştu). Kapı artık buraya, SADECE günlük bölümün başına taşındı; haftalık
+  // zenginleştirme zinciri her 30 dakikalık tetiklemede sırasını alır ve her iş kendi haftalık
+  // kapısını zaten kendisi kontrol eder — hazır değilse anında döner, boş yere iş yapılmaz.
+  if (gunlukTazelemeSirasiGeldi()) {
+    await runGunlukTazeleme()
+  }
+  await runZenginlestirmeZinciri()
+}
+
+async function runGunlukTazeleme() {
   console.log('[scheduler] zamanlanmış veri tazeleme başladı')
   try {
     // Süresi geçmiş oturum satırları eskiden yalnızca "sunulduklarında" siliniyordu, tablo
@@ -66,7 +88,9 @@ async function runScheduledRefreshInner() {
   } catch (err) {
     console.error('[scheduler] zamanlanmış veri tazeleme başarısız:', err.message)
   }
+}
 
+async function runZenginlestirmeZinciri() {
   // Turizm bülteni ayda bir yayınlanıyor — günlük tazelemeden BAĞIMSIZ, kendi haftalık kapısıyla
   // (tourismData.js) çalışır; başarısız olursa (site erişilemez, format değişmiş) diğer hiçbir
   // özelliği etkilemez.
@@ -83,6 +107,11 @@ async function runScheduledRefreshInner() {
   // döner; biri başarısız olursa (kota, ağ) diğerleri etkilenmez. Sıra bilerek en pahalıdan en
   // ucuza değil, mevcut 3'ün ardına en ucuz/en yeni işin (oyuncu, ~30 çağrı/tur) eklenmesi
   // şeklinde — böylece bütçe daralırsa önce daha büyük/öncelikli kalemler (basın/sosyal) payını alır.
+  //
+  // Basın taraması artık DİLİMLİ çalışıyor (autoNewsScheduler.js MAX_RUN_MS = 25 dk): GDELT'in hız
+  // sınırı yüzünden tam bir tur ~10 saat sürüyor ve sırasını bırakmadığı sürece aşağıdaki işlerin
+  // önünü tıkıyordu. Artık en geç 25 dakikada sırayı devrediyor, kaldığı yerden bir sonraki
+  // tetiklemede devam ediyor.
   try {
     await runAutoNewsScanIfNeeded()
   } catch (err) {
@@ -136,11 +165,11 @@ async function runScheduledRefreshInner() {
 export function startScheduler() {
   // .unref(): bu zamanlayıcı tek başına Node sürecini ayakta TUTMASIN — sunucu kapatılırken
   // (SIGTERM/test sonu) 30 dakikalık bir timer yüzünden asılı kalmaz (denetim B-10).
+  // Kapı kontrolü buradan runScheduledRefreshInner'a taşındı (gerekçesi orada): tetikleme her 30
+  // dakikada bir çalışır, günlük tazeleme kendi 24 saatlik kapısını, haftalık zenginleştirme
+  // işlerinin her biri kendi 7 günlük kapısını kontrol eder. refreshRunning bayrağı (B-10) iki
+  // tetiklemenin üst üste binmesini hâlâ engelliyor.
   setInterval(() => {
-    const row = getMetaStmt.get(META_KEY)
-    const lastRunAt = row ? Number(row.value) : 0
-    if (Date.now() - lastRunAt >= REFRESH_INTERVAL_MS) {
-      runScheduledRefresh()
-    }
+    runScheduledRefresh()
   }, CHECK_INTERVAL_MS).unref()
 }
