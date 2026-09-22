@@ -122,6 +122,13 @@ export async function fetchExportImpact() {
   return handle(await fetch('/api/impact/export'))
 }
 
+// Ülke Odaklı Çoklu Veri Birleştirme. `withInsight` LLM'in objektif gözlem özetini de ister —
+// ayrı bir bayrak, çünkü LLM çağrısı kota harcıyor ve ölçülmüş veri tablosu onsuz da tamdır.
+export async function fetchCountrySummary(iso2, { withInsight = false } = {}) {
+  const q = withInsight ? '?insight=1' : ''
+  return handle(await fetch(`/api/impact/country-summary/${encodeURIComponent(iso2)}${q}`))
+}
+
 export async function fetchBenchmark() {
   return handle(await fetch('/api/benchmark'))
 }

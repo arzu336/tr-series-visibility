@@ -38,6 +38,8 @@ import {
 import { queryTrends } from './serpapi.js'
 import { querySocialListening } from './social-listening.js'
 import { buildImpactReport, buildCulturalImpact, buildTourismImpact, buildExportImpact } from './impact.js'
+import { buildCountryConvergence } from './services/countrySummary.js'
+import { generateCountryDataSummary } from './llm.js'
 import { getImdbDataForTmdbSeries } from './imdb.js'
 import { buildPersonImpact } from './cast.js'
 import { buildBenchmark } from './benchmark.js'
@@ -1024,6 +1026,37 @@ app.get('/api/impact/export', requireAdmin, async (req, res) => {
     res.json(await buildExportImpact(data.countries))
   } catch (err) {
     console.error('[impact/export] hata:', err.message)
+    sendUpstreamError(res, err)
+  }
+})
+
+// Ülke Odaklı Çoklu Veri Birleştirme — üç sekmenin verisi TEK bir ülke için tek potada.
+// `?insight=1` verildiğinde ayrıca LLM'in objektif gözlem özeti eklenir.
+//
+// LLM ÇAĞRISI VERİYİ BLOKLAMAZ: özet üretilemezse (kota, zaman aşımı, ya da modelin sözleşmeyi
+// ihlal edip aksiyon önerisi üretmesi) `llmSummary: null` ve `llmError` döner — ölçülmüş veri
+// tablosu her hâlükârda gelir. Bu, projenin genel ilkesiyle aynı: sayısal veri hiçbir zaman
+// LLM'in başarısına bağımlı değildir.
+app.get('/api/impact/country-summary/:iso2', requireAdmin, async (req, res) => {
+  try {
+    if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
+    const iso2 = normalizeIso2(req.params.iso2)
+    const { data } = await getEnrichedVisibility()
+    const convergence = await buildCountryConvergence(iso2, data.countries)
+
+    if (req.query.insight !== '1') return res.json(convergence)
+
+    let llmSummary = null
+    let llmError = null
+    try {
+      llmSummary = await generateCountryDataSummary(convergence)
+    } catch (err) {
+      console.error(`[impact/country-summary] ${iso2} LLM özeti üretilemedi:`, err.message)
+      llmError = err.message
+    }
+    res.json({ ...convergence, llmSummary, llmError })
+  } catch (err) {
+    console.error('[impact/country-summary] hata:', err.message)
     sendUpstreamError(res, err)
   }
 })

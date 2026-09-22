@@ -3,6 +3,7 @@ import CulturalImpactTab from './CulturalImpactTab.jsx'
 import TourismImpactTab from './TourismImpactTab.jsx'
 import ExportImpactTab from './ExportImpactTab.jsx'
 import ImpactStats from './ImpactStats.jsx'
+import CountryConvergencePanel from './CountryConvergencePanel.jsx'
 
 const TABS = [
   { key: 'cultural', label: '🏛️ Kültürel Etki & Kamu Diplomasisi' },
@@ -98,6 +99,11 @@ export default function ImpactAnalysisTabs({ onSelectCountry }) {
       </div>
 
       <ImpactStats />
+
+      {/* Sekmelerin ÜSTÜNDE: üç sekmenin verisini tek bir ülke için birleştiren görünüm.
+          Sekme içinde değil, çünkü üçünü birden kesiyor. Yazdırma modunda gizlenir — basılı
+          rapor tüm ülkeleri kapsar, tek ülkelik bir filtre orada yanıltıcı olurdu. */}
+      {!yazdiriliyor && <CountryConvergencePanel />}
 
       <nav className="app__nav dashboard__tabs">
         {TABS.map((t) => (

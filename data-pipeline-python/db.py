@@ -116,6 +116,49 @@ CREATE TABLE IF NOT EXISTS reytingtv_daily_ranks (
     fetched_at TEXT,
     PRIMARY KEY (tmdb_id, air_date, category)
 );
+
+-- --- Kanonik Kimlik Katmanı (identity.py) --------------------------------------------
+-- Tüm kaynakların (Dizilla, IMDb, Telegram, Wikipedia, TMDB) ortak omurgası.
+-- canonical_id, öncelik sırasını KODLAYAN türetilmiş bir dizge: "wd:Q..." > "imdb:tt..." >
+-- "tmdb:...". Ölçüldü: dizilerin %78'inde wikidata_id, %95'inde imdb_id var, %5'inde
+-- hiçbiri yok — bu yüzden wikidata_id tek başına anahtar yapılamıyor (katalogun %22'si
+-- düşerdi) ama önceliği anahtarın kendisinde korunuyor.
+--
+-- UNIQUE kısıtları kasıtlı: aynı IMDb kimliği iki kanonik kayda bağlanamaz. Çakışma
+-- olursa yazma BAŞARISIZ olur ve kayıt unresolved_queue'ya düşer — sessizce birleşmez.
+CREATE TABLE IF NOT EXISTS canonical_identity (
+    canonical_id TEXT PRIMARY KEY,
+    tier TEXT NOT NULL,
+    wikidata_id TEXT UNIQUE,
+    imdb_id TEXT UNIQUE,
+    tmdb_id INTEGER UNIQUE,
+    primary_title TEXT NOT NULL,
+    resolved_at TEXT NOT NULL
+);
+
+-- Kademe yükseltmesi: bir kayıt önce yalnızca tmdb_id ile gelmiş olabilir ("tmdb:95603"),
+-- sonra TMDB'ye wikidata_id eklenince kanonik anahtarı "wd:Q64878719" olur. O ana kadar
+-- eski anahtarla yazılmış satırlar KIRILMAMALI — eski anahtar burada takma ad olarak yaşar.
+CREATE TABLE IF NOT EXISTS canonical_alias (
+    alias_id TEXT PRIMARY KEY,
+    canonical_id TEXT NOT NULL,
+    created_at TEXT NOT NULL
+);
+
+-- Çözülemeyen kayıtlar. SİLİNMEZ: 'drop' geri alınamaz ve denetlenemez. Kaynak sonradan
+-- sert kimlik kazanırsa aynı satır yeniden çözülebilir. candidates SADECE insan incelemesi
+-- içindir — otomatik birleştirmede asla kullanılmaz.
+CREATE TABLE IF NOT EXISTS unresolved_queue (
+    source TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    raw_title TEXT NOT NULL,
+    reason TEXT NOT NULL,
+    candidates TEXT NOT NULL DEFAULT '[]',
+    detail TEXT,
+    seen_at TEXT NOT NULL,
+    resolved_at TEXT,
+    PRIMARY KEY (source, source_ref)
+);
 """
 
 

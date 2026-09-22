@@ -4,10 +4,12 @@
 """
 from __future__ import annotations
 
+import re
 from datetime import date, datetime
+from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class EpisodeRating(BaseModel):
@@ -145,3 +147,78 @@ class ReytingTvDailyRank(BaseModel):
     rank_score: float
     air_date: date
     source_url: str
+
+
+# --- Kanonik Kimlik Katmanı (identity.py) ------------------------------------------------
+# SORUN: Dizilla, IMDb, Telegram, Wikipedia ve TMDB aynı diziyi farklı adlandırıyor
+# ("Kuruluş Osman" / "Kuruluş: Osman" / "المؤسس عثمان (مسلسل)" / "Themelimi Osman").
+# İsimden eşleştirme Latin dışı alfabelerde ve alt başlıklarda kırılıyor; yanlış eşleşen iki
+# kayıt sessizce birleşir, analiz katmanı bunu "trend" diye okur ve hata bülten metnine kadar
+# gider. Bu yüzden kanonik kimlik SADECE sert dış kimliklerden kurulur.
+#
+# ÖLÇÜLEN GERÇEK (60 dizilik TMDB örneği, canlı external_ids):
+#     wikidata_id var : 47  (%78)
+#     imdb_id var     : 57  (%95)
+#     hiçbiri yok     :  3  (%5)
+# Bu yüzden wikidata_id TEK BAŞINA birincil anahtar OLAMAZ — katalogun %22'si düşerdi
+# (ayrıca null olabilen bir alan zaten PRIMARY KEY olamaz). Öncelik sırası korunuyor ama
+# anahtar, sırayı KODLAYAN türetilmiş bir dizge: "wd:Q64878719" > "imdb:tt11712058" > "tmdb:95603".
+
+
+class ResolutionTier(str, Enum):
+    """Kimliğin hangi sertlikte bir dış anahtardan geldiği. Sıra = güvenilirlik sırası."""
+
+    WIKIDATA = "wikidata"  # diller arası birleştirme mümkün (Wikipedia okunma katmanı buna bağlı)
+    IMDB = "imdb"  # global olarak tekil ama dil sürümü bilgisi yok
+    TMDB = "tmdb"  # yalnızca kendi kataloğumuz içinde anlamlı
+
+
+class UnresolvedReason(str, Enum):
+    NO_EXTERNAL_ID = "no_external_id"  # hiçbir sert kimlik yok
+    NAME_ONLY = "name_only"  # kaynak yalnızca isim verdi (Dizilla slug, Telegram kanal adı)
+    AMBIGUOUS = "ambiguous"  # birden fazla aday, aralarında seçim yapılamaz
+    CONFLICT = "conflict"  # iki sert kimlik birbiriyle çelişiyor
+    MALFORMED_ID = "malformed_id"  # kimlik biçimi geçersiz (Q123 / tt123 kalıbına uymuyor)
+
+
+class CanonicalIdentity(BaseModel):
+    """Tek bir içeriğin kanonik kimliği. canonical_id, öncelik sırasını kodlayan türetilmiş
+    dizgedir — tahminle DEĞİL, yalnızca sert dış kimliklerden üretilir."""
+
+    canonical_id: str
+    tier: ResolutionTier
+    wikidata_id: Optional[str] = None
+    imdb_id: Optional[str] = None
+    tmdb_id: Optional[int] = None
+    primary_title: str
+    resolved_at: datetime
+
+    @field_validator("wikidata_id")
+    @classmethod
+    def _wikidata_bicimi(cls, v: Optional[str]) -> Optional[str]:
+        # Bozuk kimliği sessizce kabul etmek, onu anahtar yapıp yanlış birleştirmek demek.
+        if v is not None and not re.fullmatch(r"Q\d+", v):
+            raise ValueError(f"geçersiz wikidata_id: {v!r} (Q<sayı> bekleniyor)")
+        return v
+
+    @field_validator("imdb_id")
+    @classmethod
+    def _imdb_bicimi(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not re.fullmatch(r"tt\d+", v):
+            raise ValueError(f"geçersiz imdb_id: {v!r} (tt<sayı> bekleniyor)")
+        return v
+
+
+class UnresolvedRecord(BaseModel):
+    """Kanonik kimliğe bağlanamayan kayıt. KESİNLİKLE SİLİNMEZ: 'drop' geri alınamaz ve
+    denetlenemez — üç ay sonra 'neyi kaybettik' sorusu cevapsız kalır. Kuyruğa alınır,
+    kaynak sonradan kimlik kazanırsa aynı kayıt yeniden çözülür."""
+
+    source: str  # 'dizilla' | 'telegram' | 'wikipedia' | 'tmdb' | ...
+    source_ref: str  # slug / kanal / satır kimliği — kaynakta geri bulunabilsin diye
+    raw_title: str
+    reason: UnresolvedReason
+    # Aday listesi SADECE insan incelemesi içindir; otomatik birleştirmede ASLA kullanılmaz.
+    candidates: list[str] = Field(default_factory=list)
+    detail: Optional[str] = None
+    seen_at: datetime

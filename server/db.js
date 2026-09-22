@@ -283,6 +283,36 @@ db.exec(`
     expires_at INTEGER NOT NULL,
     PRIMARY KEY (actor_id, country_iso2)
   );
+
+  -- Wikipedia okunma sayısı katmanı (bkz. server/services/wikipediaPageviews.js).
+  -- NEDEN EKLENDİ: platformun uluslararası zaman derinliği yalnızca 63 gündü
+  -- (visibility_history 2026-07-20 -> 2026-09-21), yani "şu ülkede ilgi arttı" gibi HİÇBİR trend
+  -- iddiası dürüstçe kurulamıyordu. Wikimedia'nın Pageviews API'si ücretsiz, anahtarsız ve
+  -- 2015'e kadar geriye gidiyor — yani geçmiş BEKLENMEDEN geri doldurulabiliyor.
+  --
+  -- Bir dizinin hangi dilde hangi başlıkla yer aldığı: TMDB external_ids -> wikidata_id ->
+  -- Wikidata sitelinks zinciriyle çözülüyor. Ad eşleştirmesi YAPILMIYOR (kırılgan olurdu).
+  CREATE TABLE IF NOT EXISTS series_wiki_articles (
+    tmdb_id INTEGER NOT NULL,
+    lang TEXT NOT NULL,
+    wikidata_id TEXT,
+    title TEXT NOT NULL,
+    resolved_at TEXT NOT NULL,
+    PRIMARY KEY (tmdb_id, lang)
+  );
+
+  -- ÖNEMLİ DÜRÜSTLÜK SINIRI: burada saklanan birim DİL'dir, ÜLKE değil. Wikimedia makale bazında
+  -- ülke kırılımı yayınlamıyor (gizlilik gerekçesiyle). Arapça okunma "hangi Arap ülkesi"
+  -- sorusunu cevaplamaz. Ülke ataması yapılacaksa bu tablodan TÜRETİLİR ve arayüzde ayrıca
+  -- "dil bazlı tahmin" olarak etiketlenir — ham katman asla ülke gibi gösterilmez.
+  CREATE TABLE IF NOT EXISTS series_language_interest (
+    tmdb_id INTEGER NOT NULL,
+    lang TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    month INTEGER NOT NULL,
+    views INTEGER NOT NULL,
+    PRIMARY KEY (tmdb_id, lang, year, month)
+  );
 `)
 
 // Rastgele Denetim özelliği kaldırıldı — sadece test verisi biriktirmişti,

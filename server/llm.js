@@ -284,3 +284,109 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
     summary: parsed.summary.trim(),
   }
 }
+
+// --- Ülke Veri Özeti (Etki & İhracat / Ülke Odaklı Birleştirme) --------------------------------
+// KULLANICI KARARI — bu fonksiyonun en önemli kısıtı: SİSTEM AKSİYON ÖNERMEZ.
+// Modelin işi "ne yapılmalı" değil, "veri ne gösteriyor" sorusunu cevaplamaktır. Karar verici
+// uzmanın kendisidir; ona reçete sunmak, elindeki objektif tabloyu bir direktifle gölgelemek
+// olurdu. Prompt bunu hem POZİTİF (ne yapmalı) hem NEGATİF (ne yapmamalı) olarak söylüyor,
+// çıktı da ayrıca doğrulanıyor (bkz. aşağıdaki DIREKTIF_KALIPLARI).
+//
+// İkinci kısıt, projenin genel kuralı: SADECE verilen sayılarla konuş. Model burada kendi
+// yüzdesini üretemez — hesaplar zaten services/countrySummary.js'te yapılmış ve "hesaplanamaz"
+// olanlar gerekçesiyle işaretlenmiştir.
+// DİKKAT — burada `\b` KULLANILAMAZ: JavaScript'te sözcük sınırı ASCII tabanlıdır ve Türkçe
+// harfler (ı, ö, ü, ş, ğ, ç) `\w` sayılmaz. "artırılmalı" sonundaki `ı` zaten sözcük-dışı
+// karakter olduğu için `\bartırılmalı\b` HİÇBİR ZAMAN eşleşmiyordu — kalıpların birkaçı
+// sessizce ölüydü ve direktif denetimi çalışıyor sanılıyordu. Unicode harf sınıfıyla kurulan
+// lookaround (`u` bayrağıyla) doğru sınırı verir.
+const SINIR_ONU = '(?<!\\p{L})'
+const SINIR_SONU = '(?!\\p{L})'
+const kalip = (govde) => new RegExp(`${SINIR_ONU}(?:${govde})${SINIR_SONU}`, 'iu')
+// Sonu açık kalıplar (ek alabilen kökler) için yalnızca baş sınırı aranır.
+const kokKalip = (govde) => new RegExp(`${SINIR_ONU}(?:${govde})`, 'iu')
+
+const DIREKTIF_KALIPLARI = [
+  kokKalip('öneril'),
+  kokKalip('tavsiye\\s+edil'),
+  kalip('yapılmalı(?:dır)?'),
+  kalip('edilmeli(?:dir)?'),
+  kalip('olmalı(?:dır)?'),
+  kalip('gerekir'),
+  kokKalip('odaklanıl'),
+  kokKalip('artırılmalı'),
+  kokKalip('hızlandırılma'),
+  kokKalip('geliştirilmeli'),
+  kalip('strateji\\s+(?:geliştir\\p{L}*|oluştur\\p{L}*|belirlen\\p{L}*)'),
+]
+
+function direktifIceriyorMu(metin) {
+  return DIREKTIF_KALIPLARI.find((k) => k.test(metin)) || null
+}
+
+function boyutSatiri(ad, veri) {
+  const satirlar = []
+  for (const [alan, deger] of Object.entries(veri)) {
+    if (alan === 'sources') continue
+    if (deger && typeof deger === 'object' && deger.status === 'hesaplanamaz') {
+      satirlar.push(`  - ${alan}: HESAPLANAMAZ (${deger.reason})`)
+    } else if (deger && typeof deger === 'object' && deger.status === 'hesaplandi') {
+      const ek = Object.entries(deger)
+        .filter(([k]) => !['status', 'value'].includes(k))
+        .map(([k, v]) => `${k}=${v}`)
+        .join(', ')
+      satirlar.push(`  - ${alan}: ${deger.value}${ek ? ` (${ek})` : ''}`)
+    } else if (deger != null && typeof deger !== 'object') {
+      satirlar.push(`  - ${alan}: ${deger}`)
+    }
+  }
+  return `${ad}:\n${satirlar.join('\n') || '  - (veri yok)'}`
+}
+
+export async function generateCountryDataSummary(convergence) {
+  const { iso2, dimensions, trustClasses } = convergence
+  const govde = [
+    boyutSatiri('1) KÜLTÜREL & DİZİ SİNYALİ', dimensions.cultural),
+    boyutSatiri('2) TURİZM & DESTİNASYON ETKİSİ', dimensions.tourism),
+    boyutSatiri('3) İHRACAT & TİCARİ VERİ DENGESİ', dimensions.export),
+  ].join('\n\n')
+
+  const prompt = `Aşağıda ${iso2} ülkesi için üç boyutta toplanmış ÖLÇÜLMÜŞ veri var. Her boyut için
+TEK CÜMLELİK, tamamen betimleyici bir Türkçe gözlem yaz.
+
+EN ÖNEMLİ KURAL — BU BİR KARAR DESTEK ARACIDIR, DANIŞMAN DEĞİL:
+- ASLA ne yapılması gerektiğini söyleme. Öneri, tavsiye, strateji, aksiyon maddesi YAZMA.
+- "önerilir", "yapılmalı", "odaklanılmalı", "artırılmalı", "gerekir" gibi ifadeler YASAK.
+- Sadece verinin NE GÖSTERDİĞİNİ betimle. Kararı okuyan uzman verecek.
+
+DİĞER KURALLAR:
+- SADECE aşağıdaki sayılarla konuş. Yeni bir yüzde, oran veya karşılaştırma UYDURMA.
+- "HESAPLANAMAZ" yazan bir alan için sayı üretme; o boyutta neyin ölçülemediğini dürüstçe söyle.
+- Nedensellik iddia etme ("dizi yüzünden turizm arttı" gibi) — elimizde bunu kanıtlayacak veri yok.
+- Resmî kaynaklar: ${trustClasses.official.join(', ') || 'yok'}. Gayriresmi/telemetri: ${trustClasses.unofficialTelemetry.join(', ') || 'yok'}.
+  Bir gözlem gayriresmi kaynağa dayanıyorsa bunu cümlede belirt.
+
+${govde}
+
+Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce metni yazma:
+{"cultural": "...", "tourism": "...", "export": "..."}`
+
+  const parsed = await callLLMForJson(prompt, 700)
+  const sonuc = {}
+  for (const alan of ['cultural', 'tourism', 'export']) {
+    const metin = parsed[alan]
+    if (!metin || typeof metin !== 'string') {
+      throw new Error(`LLM "${alan}" boyutu için geçerli bir gözlem döndürmedi`)
+    }
+    // Sözleşmenin ihlali sessizce geçmemeli: model direktif üretirse bu bir hatadır,
+    // "biraz fazla yardımsever bir cümle" değil.
+    const ihlal = direktifIceriyorMu(metin)
+    if (ihlal) {
+      throw new Error(`LLM "${alan}" boyutunda aksiyon önerisi üretti (yasak kalıp: ${ihlal}): ${metin.slice(0, 120)}`)
+    }
+    sonuc[alan] = metin.trim()
+  }
+  return sonuc
+}
+
+export { direktifIceriyorMu }

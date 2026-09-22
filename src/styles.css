@@ -3780,3 +3780,195 @@ button.sidebar__big-card:hover {
 @media (max-width: 768px) {
   .leading-signal__bar { width: 78px; }
 }
+
+/* --- Ülke Bazlı Veri Filtreleme ve Anomali Özeti (CountryConvergencePanel.jsx) ---------------
+   Sekmelerin üstünde duran, üç boyutu tek ülke için birleştiren bölüm. Görsel dil mevcut
+   dashboard kartlarıyla aynı; ayırt edici tek şey sol kenardaki ince şerit — bu bölümün
+   sekmelerden farklı bir kesit (ülke bazlı) olduğunu göstermek için. */
+.convergence {
+  background: #0b111c;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-left: 3px solid rgba(109, 167, 236, 0.55);
+  border-radius: 12px;
+  padding: 1.1rem 1.25rem;
+  margin: 0 0 1.5rem;
+}
+
+.convergence__header {
+  margin-bottom: 0.9rem;
+}
+
+.convergence__controls {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.convergence__label {
+  font-size: 0.8rem;
+  color: #9aa4b8;
+  font-weight: 600;
+}
+
+.convergence__select {
+  background: #131c2b;
+  color: #f1f3f8;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  padding: 0.45rem 0.7rem;
+  font-size: 0.87rem;
+  min-width: 240px;
+}
+
+.convergence__summary-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.8rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.7rem;
+}
+
+.convergence__country {
+  margin: 0;
+  font-size: 1.15rem;
+}
+
+.convergence__iso {
+  color: #7d8799;
+  font-weight: 500;
+  font-size: 0.9rem;
+}
+
+.convergence__gapcount {
+  font-size: 0.8rem;
+  color: #9aa4b8;
+}
+
+.convergence__trust {
+  display: flex;
+  gap: 1.4rem;
+  flex-wrap: wrap;
+  font-size: 0.82rem;
+  color: #b6bfd0;
+  padding: 0.6rem 0.8rem;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 8px;
+  margin-bottom: 1rem;
+}
+
+.convergence__dimension {
+  margin-bottom: 1.1rem;
+}
+
+.convergence__dimension-title {
+  margin: 0 0 0.5rem;
+  font-size: 0.93rem;
+  color: #dbe2ef;
+}
+
+.convergence__table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.85rem;
+}
+
+.convergence__table th {
+  text-align: left;
+  font-weight: 500;
+  color: #9aa4b8;
+  padding: 0.35rem 0.8rem 0.35rem 0;
+  width: 220px;
+  vertical-align: top;
+  white-space: nowrap;
+}
+
+.convergence__table td {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.convergence__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  color: #f1f3f8;
+}
+
+.convergence__meta {
+  color: #7d8799;
+  font-size: 0.78rem;
+}
+
+.convergence__na {
+  color: #5c6578;
+}
+
+/* Hesaplanamayan alan, hesaplanandan GÖRSEL olarak da ayrışmalı: aynı hücrede sayı gibi
+   duran bir "—" okuyucuya sıfır gibi görünür. */
+.convergence__pending {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.convergence__reason {
+  color: #9aa4b8;
+  font-size: 0.78rem;
+}
+
+.convergence__observation {
+  margin: 0.5rem 0 0;
+  font-size: 0.84rem;
+  line-height: 1.5;
+  color: #c7cfdd;
+  background: rgba(57, 135, 229, 0.07);
+  border-left: 2px solid rgba(109, 167, 236, 0.4);
+  padding: 0.5rem 0.75rem;
+  border-radius: 0 6px 6px 0;
+}
+
+.convergence__observation-tag {
+  color: #6da7ec;
+  font-weight: 600;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  margin-right: 0.35rem;
+}
+
+.convergence__llm-error {
+  font-size: 0.82rem;
+  color: #e8c07a;
+  background: rgba(240, 173, 78, 0.08);
+  border-radius: 8px;
+  padding: 0.5rem 0.75rem;
+  margin: 0 0 1rem;
+}
+
+.convergence__gaps {
+  font-size: 0.83rem;
+  color: #b6bfd0;
+  margin-top: 0.8rem;
+}
+
+.convergence__gaps summary {
+  cursor: pointer;
+  color: #9aa4b8;
+}
+
+.convergence__gaps ul {
+  margin: 0.5rem 0 0;
+  padding-left: 1.2rem;
+  line-height: 1.6;
+}
+
+@media (max-width: 720px) {
+  .convergence__table th {
+    width: auto;
+    white-space: normal;
+  }
+}

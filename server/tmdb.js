@@ -113,9 +113,14 @@ export async function getCredits(seriesId) {
 
 // TMDB'nin TV detay/discover uçları imdb_id vermiyor — ayrı bir uç (external_ids) gerekiyor.
 // server/imdb.js bunu OMDb API'ye gitmeden önce dizinin gerçek IMDb kimliğini bulmak için kullanır.
+//
+// `wikidataId` de aynı uçtan geliyor (ek istek YOK) ve Wikipedia okunma katmanının giriş
+// noktası: wikidata_id -> Wikidata sitelinks -> dil başına makale başlığı zinciri, diziyi adıyla
+// aramaya göre çok daha sağlam (ad eşleştirmesi farklı alfabelerde ve alt başlıklarda kırılıyor).
+// Bkz. server/services/wikipediaPageviews.js.
 export async function getExternalIds(seriesId) {
   const data = await tmdbGet(`/tv/${seriesId}/external_ids`)
-  return { imdbId: data.imdb_id || null }
+  return { imdbId: data.imdb_id || null, wikidataId: data.wikidata_id || null }
 }
 
 const FETCH_CONCURRENCY = 8

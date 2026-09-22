@@ -15,7 +15,8 @@
     "start": "node server/index.js",
     "server": "node server/index.js",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "backfill:wikipedia": "node server/scripts/backfill-wikipedia.js"
   },
   "dependencies": {
     "compression": "^1.8.1",
