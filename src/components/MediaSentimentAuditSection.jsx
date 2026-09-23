@@ -78,14 +78,14 @@ export default function MediaSentimentAuditSection({ canEdit = true }) {
     <>
       <div className="dashboard__summary">
         <span className="dashboard__summary-item dashboard__summary-item--ok">{items.length} tarama kaydı</span>
-        <input
+        <input aria-label="Dizi ara"
           className="search-input"
           type="text"
           placeholder="Dizi ara..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select value={toneFilter} onChange={(e) => setToneFilter(e.target.value)}>
+        <select aria-label="Basın tonuna göre filtrele" value={toneFilter} onChange={(e) => setToneFilter(e.target.value)}>
           <option value="">Tüm tonlar</option>
           {TONE_OPTIONS.map((t) => (
             <option key={t} value={t}>
@@ -144,6 +144,7 @@ export default function MediaSentimentAuditSection({ canEdit = true }) {
                 <td>
                   {canEdit ? (
                     <select
+                      aria-label={`${item.seriesName} için basın tonu`}
                       value={item.effectiveSentiment === 'yetersiz-veri' ? '' : item.effectiveSentiment}
                       disabled={savingId === item.id || item.effectiveSentiment === 'yetersiz-veri'}
                       onChange={(e) => handleChangeTone(item, e.target.value)}

@@ -62,19 +62,38 @@ export default function Login({ onSuccess, notice: initialNotice = null }) {
 
         {!isLogin && (
           <>
-            <input type="text" value={name} onChange={(e) => setName(e.target.value)} placeholder="Ad Soyad" autoFocus />
-            <input type="text" value={role} onChange={(e) => setRole(e.target.value)} placeholder="Kurumdaki göreviniz" />
+            <input
+              aria-label="Ad Soyad"
+              type="text"
+              autoComplete="name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Ad Soyad"
+              autoFocus
+            />
+            <input
+              aria-label="Kurumdaki göreviniz"
+              type="text"
+              autoComplete="organization-title"
+              value={role}
+              onChange={(e) => setRole(e.target.value)}
+              placeholder="Kurumdaki göreviniz"
+            />
           </>
         )}
         <input
+          aria-label="E-posta"
           type="email"
+          autoComplete="email"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           placeholder="E-posta"
           autoFocus={isLogin}
         />
         <input
+          aria-label="Şifre"
           type="password"
+          autoComplete={isLogin ? 'current-password' : 'new-password'}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           placeholder="Şifre"

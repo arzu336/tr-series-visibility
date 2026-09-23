@@ -91,7 +91,7 @@ export default function AdminUsersPanel({ currentUserId }) {
         <span className="dashboard__summary-item dashboard__summary-item--ok">
           {items.filter((u) => u.status !== 'pending').length} karara bağlandı
         </span>
-        <input
+        <input aria-label="İsim veya e-posta ara"
           className="search-input"
           type="text"
           placeholder="İsim veya e-posta ara..."
@@ -182,6 +182,7 @@ export default function AdminUsersPanel({ currentUserId }) {
                   <td>
                     {u.status === 'approved' ? (
                       <select
+                        aria-label={`${u.name || u.email} için erişim düzeyi`}
                         value={u.accessLevel}
                         disabled={actingId === u.id}
                         onChange={(e) => act(() => setAccessLevel(u.id, e.target.value), u.id)}

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useOverrideEditor } from '../lib/useOverrideEditor.js'
 import {
   fetchTaxonomy,
   fetchThemes,
@@ -36,13 +37,13 @@ function OverviewCell({ overview, highlightTerms }) {
   const shown = expanded || !isLong ? text : `${text.slice(0, OVERVIEW_PREVIEW_LENGTH)}…`
   const rendered = highlightTerms?.length ? highlightKeywordMatches(shown, highlightTerms) : shown
   return (
-    <td
-      className="dashboard__overview"
-      onClick={() => isLong && setExpanded((v) => !v)}
-      style={isLong ? { cursor: 'pointer' } : undefined}
-    >
+    <td className="dashboard__overview">
       {rendered}
-      {isLong && <span className="dashboard__expand-hint"> {expanded ? '(kısalt)' : '(devamını gör)'}</span>}
+      {isLong && (
+        <button type="button" className="dashboard__link-btn dashboard__expand-hint" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+          {expanded ? '(kısalt)' : '(devamını gör)'}
+        </button>
+      )}
     </td>
   )
 }
@@ -60,7 +61,7 @@ export function HumanAuditIcon({ reviewer, at }) {
 function EditControls({ item, taxonomy, draft, onDraftChange, onApprove, saving }) {
   return (
     <>
-      <select value={draft ?? item.effectiveTheme} onChange={(e) => onDraftChange(e.target.value)}>
+      <select aria-label={`${item.name} için tema`} value={draft ?? item.effectiveTheme} onChange={(e) => onDraftChange(e.target.value)}>
         {taxonomy.map((t) => (
           <option key={t} value={t}>
             {t}
@@ -102,7 +103,7 @@ function DestinationTagPicker({ taxonomy, draft, onToggle }) {
         ))}
       </div>
       <div className="tag-picker__search-wrap">
-        <input
+        <input aria-label="Destinasyon ara ve eklemek için seçin"
           className="tag-picker__search"
           type="text"
           placeholder="Destinasyon ara ve eklemek için seçin..."
@@ -135,72 +136,30 @@ function DestinationTagPicker({ taxonomy, draft, onToggle }) {
   )
 }
 
+async function fetchDestinationEditorData() {
+  const [destRes, taxonomyRes] = await Promise.all([fetchDestinations(), fetchDestinationTaxonomy()])
+  return { items: destRes.items, taxonomy: taxonomyRes.destinations }
+}
+
 function DestinationSection({ canEdit, onViewSeriesOnMap }) {
-  const [items, setItems] = useState([])
-  const [taxonomy, setTaxonomy] = useState([])
-  const [status, setStatus] = useState('loading')
-  const [error, setError] = useState(null)
-  const [drafts, setDrafts] = useState({})
-  const [savingId, setSavingId] = useState(null)
-  const [editingId, setEditingId] = useState(null)
+  const editor = useOverrideEditor({
+    fetchAll: fetchDestinationEditorData,
+    save: submitDestinationOverride,
+    revert: clearDestinationOverride,
+  })
+  const { items, taxonomy, status, error, setError, drafts, updateDraft, savingId, editingId, setEditingId } = editor
   const [search, setSearch] = useState('')
   const [destFilter, setDestFilter] = useState('')
 
-  const load = useCallback(({ silent = false } = {}) => {
-    if (!silent) setStatus('loading')
-    Promise.all([fetchDestinations(), fetchDestinationTaxonomy()])
-      .then(([destRes, taxonomyRes]) => {
-        setItems(destRes.items)
-        setTaxonomy(taxonomyRes.destinations)
-        setStatus('ready')
-      })
-      .catch((err) => {
-        setError(err.message)
-        if (!silent) setStatus('error')
-      })
-  }, [])
+  const toggleDraft = (item, destId) =>
+    updateDraft(
+      item.id,
+      (current) => (current.includes(destId) ? current.filter((id) => id !== destId) : [...current, destId]),
+      item.effectiveDestinations
+    )
 
-  useEffect(() => {
-    load()
-  }, [load])
-
-  const toggleDraft = (item, destId) => {
-    setDrafts((d) => {
-      const current = d[item.id] ?? item.effectiveDestinations
-      const next = current.includes(destId)
-        ? current.filter((id) => id !== destId)
-        : [...current, destId]
-      return { ...d, [item.id]: next }
-    })
-  }
-
-  const handleSave = async (item) => {
-    const chosen = drafts[item.id] ?? item.effectiveDestinations
-    setSavingId(item.id)
-    setError(null)
-    try {
-      await submitDestinationOverride(item.id, chosen)
-      setEditingId(null)
-      load({ silent: true })
-    } catch (err) {
-      setError(`"${item.name}" kaydedilemedi: ${err.message}`)
-    } finally {
-      setSavingId(null)
-    }
-  }
-
-  const handleRevert = async (item) => {
-    setSavingId(item.id)
-    setError(null)
-    try {
-      await clearDestinationOverride(item.id)
-      load({ silent: true })
-    } catch (err) {
-      setError(`"${item.name}" geri alınamadı: ${err.message}`)
-    } finally {
-      setSavingId(null)
-    }
-  }
+  const handleSave = (item) => editor.saveItem(item, drafts[item.id] ?? item.effectiveDestinations)
+  const handleRevert = (item) => editor.revertItem(item)
 
   if (status === 'loading') return <div className="dashboard status">Yükleniyor…</div>
   if (status === 'error') return <div className="dashboard status status--error">Hata: {error}</div>
@@ -229,14 +188,14 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
         <span className="dashboard__summary-item dashboard__summary-item--ok">
           {items.filter((i) => !i.isUntagged).length} dizi en az bir destinasyon içeriyor
         </span>
-        <input
+        <input aria-label="Dizi ara"
           className="search-input"
           type="text"
           placeholder="Dizi ara..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select value={destFilter} onChange={(e) => setDestFilter(e.target.value)}>
+        <select aria-label="Destinasyona göre filtrele" value={destFilter} onChange={(e) => setDestFilter(e.target.value)}>
           <option value="">Tüm destinasyonlar</option>
           {taxonomy.map((d) => (
             <option key={d.id} value={d.id}>
@@ -391,15 +350,20 @@ function sortItems(list, sortBy) {
   return sorted
 }
 
+async function fetchThemeEditorData() {
+  const [themesRes, taxonomyRes] = await Promise.all([fetchThemes(), fetchTaxonomy()])
+  return { items: themesRes.items, taxonomy: taxonomyRes.themes }
+}
+
 export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) {
   const [tab, setTab] = useState('themes')
-  const [items, setItems] = useState([])
-  const [taxonomy, setTaxonomy] = useState([])
-  const [status, setStatus] = useState('loading')
-  const [error, setError] = useState(null)
-  const [drafts, setDrafts] = useState({})
-  const [savingId, setSavingId] = useState(null)
-  const [editingId, setEditingId] = useState(null)
+  const editor = useOverrideEditor({
+    fetchAll: fetchThemeEditorData,
+    save: submitThemeOverride,
+    revert: clearThemeOverride,
+    saveFailLabel: 'onaylanamadı',
+  })
+  const { items, taxonomy, status, error, setError, drafts, setDraft, savingId, editingId, setEditingId, reload } = editor
   const [search, setSearch] = useState('')
   const [themeFilter, setThemeFilter] = useState('')
   const [sortBy, setSortBy] = useState('confidence-asc')
@@ -407,51 +371,9 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
   const [bulkSaving, setBulkSaving] = useState(false)
   const [bulkTheme, setBulkTheme] = useState('')
 
-  const load = useCallback(({ silent = false } = {}) => {
-    if (!silent) setStatus('loading')
-    Promise.all([fetchThemes(), fetchTaxonomy()])
-      .then(([themesRes, taxonomyRes]) => {
-        setItems(themesRes.items)
-        setTaxonomy(taxonomyRes.themes)
-        setStatus('ready')
-      })
-      .catch((err) => {
-        setError(err.message)
-        if (!silent) setStatus('error')
-      })
-  }, [])
-
-  useEffect(() => {
-    load()
-  }, [load])
-
-  const handleApprove = async (item) => {
-    const chosen = drafts[item.id] ?? item.effectiveTheme
-    setSavingId(item.id)
-    setError(null)
-    try {
-      await submitThemeOverride(item.id, chosen)
-      setEditingId(null)
-      load({ silent: true })
-    } catch (err) {
-      setError(`"${item.name}" onaylanamadı: ${err.message}`)
-    } finally {
-      setSavingId(null)
-    }
-  }
-
-  const handleRevert = async (item) => {
-    setSavingId(item.id)
-    setError(null)
-    try {
-      await clearThemeOverride(item.id)
-      load({ silent: true })
-    } catch (err) {
-      setError(`"${item.name}" geri alınamadı: ${err.message}`)
-    } finally {
-      setSavingId(null)
-    }
-  }
+  const handleApprove = (item) => editor.saveItem(item, drafts[item.id] ?? item.effectiveTheme)
+  const handleRevert = (item) => editor.revertItem(item)
+  const load = reload
 
   const toggleSelected = (id) => {
     setSelectedIds((prev) => {
@@ -567,14 +489,14 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
                 <span className="dashboard__summary-item dashboard__summary-item--ok">
                   {items.filter((i) => i.effectiveConfidence >= CONFIDENCE_THRESHOLD).length} dizi onaylı
                 </span>
-                <input
+                <input aria-label="Dizi ara"
                   className="search-input"
                   type="text"
                   placeholder="Dizi ara..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
-                <select value={themeFilter} onChange={(e) => setThemeFilter(e.target.value)}>
+                <select aria-label="Temaya göre filtrele" value={themeFilter} onChange={(e) => setThemeFilter(e.target.value)}>
                   <option value="">Tüm temalar</option>
                   {taxonomy.map((t) => (
                     <option key={t} value={t}>
@@ -582,7 +504,7 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
                     </option>
                   ))}
                 </select>
-                <select value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
+                <select aria-label="Sıralama" value={sortBy} onChange={(e) => setSortBy(e.target.value)}>
                   {SORT_OPTIONS.map((o) => (
                     <option key={o.value} value={o.value}>
                       {o.label}
@@ -681,7 +603,7 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
                                 item={item}
                                 taxonomy={taxonomy}
                                 draft={drafts[item.id]}
-                                onDraftChange={(v) => setDrafts((d) => ({ ...d, [item.id]: v }))}
+                                onDraftChange={(v) => setDraft(item.id, v)}
                                 onApprove={() => handleApprove(item)}
                                 saving={savingId === item.id}
                               />
@@ -730,7 +652,7 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
                               item={item}
                               taxonomy={taxonomy}
                               draft={drafts[item.id]}
-                              onDraftChange={(v) => setDrafts((d) => ({ ...d, [item.id]: v }))}
+                              onDraftChange={(v) => setDraft(item.id, v)}
                               onApprove={() => handleApprove(item)}
                               saving={savingId === item.id}
                             />

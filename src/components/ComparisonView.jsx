@@ -187,6 +187,7 @@ export default function ComparisonView({ seriesList }) {
         {picked.length < MAX_COMPARE && (
           <div className="trends__controls" style={{ marginBottom: 0 }}>
             <input
+              aria-label="Karşılaştırmaya dizi ekle"
               className="search-input"
               list="compare-series-list"
               type="text"

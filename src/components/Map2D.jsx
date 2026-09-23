@@ -130,10 +130,15 @@ export default function Map2D({
           kenar çizgisiyle (map2d__country--selected) işaretler. popup?.onClose burada hâlâ
           kullanılıyor: boş/deniz alanına tıklamak seçimi (ve çekmeceyi) kapatır — bu, App.jsx
           handleCloseSelection'a bağlı, görsel karta değil. */}
+      {/* 177 ülke path'ini tek tek odaklanabilir yapmak klavye kullanıcısına 177 sekme durağı
+          demek; ülke seçimi klavyeyle sağ paneldeki arama kutusundan yapılır (PanelSearch).
+          Harita burada görsel bir özet olarak etiketlenir. */}
       <svg
         ref={svgRef}
         viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
         className="map2d__svg"
+        role="img"
+        aria-label="Ülke bazlı görünürlük haritası. Bir ülke seçmek için sağ paneldeki arama kutusunu kullanabilirsiniz."
         onClick={() => popup?.onClose?.()}
       >
         <g

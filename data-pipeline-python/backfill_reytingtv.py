@@ -21,6 +21,9 @@ from pathlib import Path
 
 import db
 import reytingtv_ranker as rtv
+from logsetup import get_logger
+
+log = get_logger(__name__)
 
 BASE_DIR = Path(__file__).parent
 CACHE_DIR = BASE_DIR / "data"
@@ -78,19 +81,19 @@ def write_to_node_db(monthly: dict[tuple[int, int, int], tuple[float, int]]) -> 
 def run(limit: int | None) -> None:
     conn = db.get_connection(DB_PATH)
     try:
-        print("[backfill] reytingtv.com arşivi taranıyor...")
+        log.info("reytingtv.com arşivi taranıyor...")
         results = rtv.scrape_daily_ranks(NODE_DB_PATH, limit=limit, progress_every=50)
-        print(f"[backfill] {len(results)} eşleşen satır bulundu, pipeline.db'ye yazılıyor...")
+        log.info(f"{len(results)} eşleşen satır bulundu, pipeline.db'ye yazılıyor...")
         db.save_reytingtv_daily_ranks(conn, results, datetime.datetime.now(datetime.timezone.utc).isoformat())
 
         monthly = rollup_monthly(conn)
-        print(f"[backfill] {len(monthly)} (dizi, ay) satırı hesaplandı, Node app.db'ye yazılıyor...")
+        log.info(f"{len(monthly)} (dizi, ay) satırı hesaplandı, Node app.db'ye yazılıyor...")
         write_to_node_db(monthly)
-        print(f"[backfill] tamamlandı — {NODE_DB_PATH} güncellendi (source='reytingtv_rank').")
+        log.info(f"tamamlandı — {NODE_DB_PATH} güncellendi (source='reytingtv_rank').")
 
         distinct_series = len({k[0] for k in monthly})
         distinct_months = len({(k[1], k[2]) for k in monthly})
-        print(f"[backfill] özet: {distinct_series} farklı dizi, {distinct_months} farklı (yıl,ay) kombinasyonu.")
+        log.info(f"özet: {distinct_series} farklı dizi, {distinct_months} farklı (yıl,ay) kombinasyonu.")
     finally:
         conn.close()
 

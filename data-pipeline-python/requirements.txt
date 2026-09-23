@@ -1,7 +1,8 @@
-beautifulsoup4>=4.12
-lxml>=5.2
-pandas>=2.2
-pydantic>=2.9
-pytest>=8.0
-python-dotenv>=1.0
-requests>=2.32
+# pyproject.toml ile aynı sürümler — `pip install -r requirements.txt` ya da `pip install -e .[dev]`
+beautifulsoup4==4.12.3
+lxml==5.2.2
+pandas==2.2.2
+pydantic==2.13.1
+python-dotenv==1.2.2
+requests==2.32.3
+pytest==9.1.1

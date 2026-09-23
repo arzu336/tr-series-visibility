@@ -5,11 +5,12 @@ import Login from './components/Login.jsx'
 import ChangePasswordModal from './components/ChangePasswordModal.jsx'
 import ContinentSidebar from './components/ContinentSidebar.jsx'
 import MapViewToggle from './components/MapViewToggle.jsx'
-import MapMetricToggle from './components/MapMetricToggle.jsx'
 import { MAP_METRICS } from './lib/scale.js'
 
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { useAsync } from './lib/useAsync.js'
+import { useAuth } from './lib/useAuth.js'
+import { usePersistedState, boolStorage } from './lib/usePersistedState.js'
 
 const Globe3D = lazy(() => import('./components/Globe3D.jsx'))
 const Map2D = lazy(() => import('./components/Map2D.jsx'))
@@ -19,24 +20,16 @@ const ImpactAnalysisTabs = lazy(() => import('./components/ImpactAnalysisTabs.js
 const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
 const PENDING_APPROVALS_POLL_MS = 60000
 const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
-const MAP_METRIC_STORAGE_KEY = 'gp_map_metric'
-import {
-  fetchVisibility,
-  fetchAuthStatus,
-  logout,
-  fetchAdminUsers,
-  fetchImdbData,
-  setUnauthorizedHandler,
-} from './lib/api.js'
+import { fetchVisibility, logout, fetchAdminUsers, fetchImdbData } from './lib/api.js'
 import { continentCentroid } from './lib/continents.js'
 import countryNames from './data/country-centroids.json'
 const SIDEBAR_COLLAPSED_KEY = 'gp_sidebar_collapsed'
 const PANEL_COLLAPSED_KEY = 'gp_panel_collapsed'
 
+const darEkranVarsayilani = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
+
 export default function App() {
-  const [authStatus, setAuthStatus] = useState('checking')
-  const [sessionNotice, setSessionNotice] = useState(null)
-  const [user, setUser] = useState(null)
+  const { authStatus, user, sessionNotice, refresh: loadAuthStatus, signOut } = useAuth()
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
   const [countries, setCountries] = useState([])
@@ -48,58 +41,18 @@ export default function App() {
   const [continentHighlight, setContinentHighlight] = useState(null)
   const [seriesFilter, setSeriesFilter] = useState(null)
   const [highlightFilter, setHighlightFilter] = useState(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false
-    const stored = window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY)
-    if (stored != null) return stored === '1'
-    return window.matchMedia('(max-width: 900px)').matches
-  })
-  const [panelCollapsed, setPanelCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false
-    const stored = window.localStorage.getItem(PANEL_COLLAPSED_KEY)
-    if (stored != null) return stored === '1'
-    return window.matchMedia('(max-width: 900px)').matches
-  })
+  const [sidebarCollapsed, setSidebarCollapsed] = usePersistedState(SIDEBAR_COLLAPSED_KEY, darEkranVarsayilani, boolStorage)
+  const [panelCollapsed, setPanelCollapsed] = usePersistedState(PANEL_COLLAPSED_KEY, darEkranVarsayilani, boolStorage)
   const [activeSeriesId, setActiveSeriesId] = useState(null)
   const [searchedSeriesId, setSearchedSeriesId] = useState(null)
   const [view, setView] = useState('map')
-  const [mapView, setMapView] = useState(() => {
-    if (typeof window === 'undefined') return '2d'
-    return window.localStorage.getItem(MAP_VIEW_STORAGE_KEY) === '3d' ? '3d' : '2d'
-  })
-  const [mapMetric, setMapMetric] = useState(() => {
-    if (typeof window === 'undefined') return MAP_METRICS.PER_CAPITA
-    return window.localStorage.getItem(MAP_METRIC_STORAGE_KEY) === MAP_METRICS.TOTAL
-      ? MAP_METRICS.TOTAL
-      : MAP_METRICS.PER_CAPITA
-  })
+  const [mapView, setMapView] = usePersistedState(MAP_VIEW_STORAGE_KEY, '2d', { parse: (s) => (s === '3d' ? '3d' : '2d') })
+  // Harita tek metrikle boyanır (kişi başına — bkz. lib/scale.js); kullanıcı seçicisi kaldırıldı.
+  const mapMetric = MAP_METRICS.PER_CAPITA
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [pendingApprovals, setPendingApprovals] = useState(0)
   const profileMenuRef = useRef(null)
-
-  const loadAuthStatus = useCallback(() => {
-    fetchAuthStatus()
-      .then((d) => {
-        setUser(d.user)
-        setAuthStatus(d.authenticated ? 'in' : 'out')
-        if (d.authenticated) setSessionNotice(null)
-      })
-      .catch(() => setAuthStatus('out'))
-  }, [])
-
-  useEffect(() => {
-    loadAuthStatus()
-  }, [loadAuthStatus])
-
-  useEffect(() => {
-    setUnauthorizedHandler((message) => {
-      setUser(null)
-      setAuthStatus('out')
-      setSessionNotice(message)
-    })
-    return () => setUnauthorizedHandler(null)
-  }, [])
 
   useEffect(() => {
     if (!showProfileMenu) return
@@ -142,22 +95,6 @@ export default function App() {
         setStatus('error')
       })
   }, [authStatus])
-
-  useEffect(() => {
-    window.localStorage.setItem(MAP_VIEW_STORAGE_KEY, mapView)
-  }, [mapView])
-
-  useEffect(() => {
-    window.localStorage.setItem(MAP_METRIC_STORAGE_KEY, mapMetric)
-  }, [mapMetric])
-
-  useEffect(() => {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, sidebarCollapsed ? '1' : '0')
-  }, [sidebarCollapsed])
-
-  useEffect(() => {
-    window.localStorage.setItem(PANEL_COLLAPSED_KEY, panelCollapsed ? '1' : '0')
-  }, [panelCollapsed])
 
   const handleCloseSelection = useCallback(() => {
     setSelected(null)
@@ -303,8 +240,7 @@ export default function App() {
     try {
       await logout()
     } finally {
-      setUser(null)
-      setAuthStatus('out')
+      signOut()
     }
   }
 
@@ -460,11 +396,6 @@ export default function App() {
                   <div className="app__map-pane">
                     <div className="app__map-controls">
                       <MapViewToggle value={mapView} onChange={setMapView} />
-                      {/* Dizi/oyuncu filtresi aktifken harita o filtrenin metriğini boyar;
-                          metrik seçici o an anlamsız olurdu, bu yüzden gizlenir. */}
-                      {!seriesFilter && !highlightFilter && (
-                        <MapMetricToggle value={mapMetric} onChange={setMapMetric} />
-                      )}
                     </div>
                     {seriesFilter && (
                       <div className="series-filter-badge">

@@ -32,7 +32,7 @@ const CUMARTESI_2300 = new Date(2026, 8, 26, 23, 0).getTime()
 const PAZARTESI_0100 = new Date(2026, 8, 28, 1, 0).getTime()
 const CARSAMBA = new Date(2026, 8, 30, 12, 0).getTime()
 
-const OZET = "[netflix_pipeline] {'status': 'ok', 'records_written': 241}"
+const OZET = '{"status": "ok", "records_written": 241}'
 
 function sahteExec(senaryo = {}) {
   const fn = vi.fn((bin, args, opts, cb) => {
@@ -44,7 +44,11 @@ function sahteExec(senaryo = {}) {
         cb(err, senaryo.stdout || '', senaryo.stderr || '')
         return
       }
-      cb(null, senaryo.stdout ?? `${'[netflix_pipeline] 400 TMDB dizisi yüklendi'}\n${OZET}\n`, senaryo.stderr || '')
+      cb(
+        null,
+        senaryo.stdout ?? `2026-09-27 00:30:01 INFO    [netflix_pipeline] 400 TMDB dizisi yüklendi\nRESULT_JSON ${OZET}\n`,
+        senaryo.stderr || ''
+      )
     }
     if (senaryo.firlat) throw new Error(senaryo.firlat)
     if (senaryo.gecikmeMs) setTimeout(bitir, senaryo.gecikmeMs)

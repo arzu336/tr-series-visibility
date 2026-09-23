@@ -8,8 +8,9 @@ import PeriodChart from './PeriodChart.jsx'
 import MediaSentimentCard, { HybridScoreTag } from './MediaSentimentCard.jsx'
 import CountryLeaderboard from './CountryLeaderboard.jsx'
 import { describePerCapita, formatTotalScore } from '../lib/perCapitaLabel.js'
-import { useAsync } from '../lib/useAsync.js'
 import { PER_CAPITA_SCORE_NOTE, TOTAL_SCORE_NOTE } from '../lib/methodologyNotes.js'
+import { useAsync } from '../lib/useAsync.js'
+import { onEnterOrSpace } from '../lib/useDialog.js'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w92'
@@ -98,7 +99,7 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
 
   return (
     <div className="panel-search">
-      <input
+      <input aria-label="Ülke, dizi veya oyuncu ara"
         type="text"
         className="panel-search__input"
         placeholder="Ülke, dizi veya oyuncu ara…"
@@ -426,7 +427,12 @@ export default function CountryPanel({
                           ? 'panel__series-item panel__series-item--expanded'
                           : 'panel__series-item'
                       }
+                      role="button"
+                      tabIndex={0}
+                      aria-expanded={isExpanded}
+                      aria-label={`${s.name} — ${isExpanded ? 'ayrıntıyı kapat' : 'ayrıntıyı aç ve haritada göster'}`}
                       onClick={() => handleSelectSeriesRow(s, isExpanded, key)}
+                      onKeyDown={onEnterOrSpace(() => handleSelectSeriesRow(s, isExpanded, key))}
                     >
                       <div className="panel__series-row">
                         <span className="panel__series-rank">{i + 1}.</span>

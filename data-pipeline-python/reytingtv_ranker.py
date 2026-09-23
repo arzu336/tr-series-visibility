@@ -45,6 +45,9 @@ from typing import Optional
 import requests
 
 from models import ReytingTvDailyRank
+from logsetup import get_logger
+
+log = get_logger(__name__)
 
 BASE_URL = "https://reytingtv.com"
 SITEMAP_PATHS = ["post-sitemap.xml", "post-sitemap2.xml"]
@@ -257,7 +260,7 @@ def scrape_daily_ranks(
     results: list[ReytingTvDailyRank] = []
     for i, (url, published_at) in enumerate(articles):
         if progress_every and i % progress_every == 0:
-            print(f"[reytingtv] {i}/{len(articles)} işlendi, {len(results)} eşleşme bulundu")
+            log.info(f"{i}/{len(articles)} işlendi, {len(results)} eşleşme bulundu")
         air_date = _extract_date_from_slug(url, published_at)
         if air_date is None:
             continue
@@ -265,7 +268,7 @@ def scrape_daily_ranks(
             resp = session.get(url, timeout=30)
             resp.raise_for_status()
         except requests.RequestException as exc:
-            print(f"[reytingtv] {url} alınamadı, atlanıyor: {exc}")
+            log.warning(f"{url} alınamadı, atlanıyor: {exc}")
             continue
         finally:
             time.sleep(request_delay_s)

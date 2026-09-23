@@ -80,8 +80,25 @@ export async function fetchTrendsInsight(seriesName, iso2 = null) {
   return handle(await fetch(`/api/trends/insight/${encodeURIComponent(seriesName)}${q}`))
 }
 
+// 202 döner: { job, existing, statusUrl }. Sonuç için fetchJob ile ilerleme izlenir.
 export async function enrichSeriesNow(seriesId) {
   return handle(await fetch(`/api/series/enrich-now/${seriesId}`, { method: 'POST' }))
+}
+
+export async function fetchJob(jobId) {
+  return handle(await fetch(`/api/jobs/${encodeURIComponent(jobId)}`))
+}
+
+/** İş bitene kadar (done/failed) yoklar; her yoklamada onProgress(job) çağrılır. */
+export async function waitForJob(jobId, { intervalMs = 2000, onProgress, signal } = {}) {
+  for (;;) {
+    if (signal?.aborted) throw new Error('İzleme iptal edildi')
+    const job = await fetchJob(jobId)
+    onProgress?.(job)
+    if (job.status === 'done') return job.result
+    if (job.status === 'failed') throw new Error(job.error || 'İş başarısız oldu')
+    await new Promise((r) => setTimeout(r, intervalMs))
+  }
 }
 
 export async function fetchImdbData(tmdbSeriesId) {

@@ -2,6 +2,14 @@
 AYRI, bu pipeline'a özel bir dosya kullanır (varsayılan: data/pipeline.db) — üretim
 uygulamasının şemasına (server/db.js) izinsiz/otomatik bir migration eklemek yerine,
 çıktı burada gözden geçirilip istenirse ayrı bir adımda ana şemaya taşınabilir.
+
+SINIR SÖZLEŞMESİ (iki taraf da bunu varsayar):
+  - Node, pipeline.db'yi yalnızca SALT OKUNUR açar (server/services/pipelineDb.js).
+  - Python, app.db'ye yalnızca OKUMA yapar (reytingtv_ranker.load_tmdb_series_index) — tek
+    istisna backfill_reytingtv.py: app.db'deki `series_popularity_monthly` tablosuna
+    source='reytingtv_rank' ile yazar. Bu tablo Node tarafında da aynı kaynak etiketiyle
+    okunur (server/series-period-history.js); her iki taraf busy_timeout kullanır. Başka bir
+    Python betiği app.db'ye yazmaya başlarsa bu not ve README güncellenmeli.
 """
 from __future__ import annotations
 

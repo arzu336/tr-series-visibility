@@ -18,6 +18,7 @@ import { enrichSeriesSocialNow } from '../services/socialEnricher.js'
 import { getCached } from '../cache.js'
 import { isValidIso2, normalizeIso2, resolveKnownSeriesName, resolveKnownSeriesNames } from '../services/requestGuards.js'
 import { countryNameFromIso2 } from '../services/countryLookup.js'
+import { startJob, getJob } from '../services/jobs.js'
 import { requireAdmin } from './auth.js'
 import { upstream } from './shared.js'
 
@@ -127,6 +128,9 @@ trendsRouter.get(
   })
 )
 
+// Basın + sosyal tarama 25 ülke × ≥20 sn GDELT aralığı ≈ 8+ dk sürer; istek içinde bekletilmez.
+// 202 + iş kimliği döner, ilerleme /api/jobs/:id'den izlenir. Aynı dizi için süren bir iş varsa
+// yenisi açılmaz, mevcut iş döner. GDELT kuyruğunda bu iş zamanlanmış taramanın önüne geçer.
 trendsRouter.post(
   '/api/series/enrich-now/:id',
   requireAdmin,
@@ -135,11 +139,29 @@ trendsRouter.post(
     const series = liveSeriesOr404(res, seriesId)
     if (!series) return
     const { topCountries } = await getEnrichmentTargets()
-    const news = await enrichSeriesNewsNow(seriesId, series.name, topCountries)
-    const social = await enrichSeriesSocialNow(series.name, topCountries)
-    res.json({ ok: true, seriesId, seriesName: series.name, countriesTargeted: topCountries.length, news, social })
+
+    const { job, existing } = startJob(
+      'series-enrich',
+      async (update) => {
+        update({ phase: 'news', done: 0, total: topCountries.length })
+        const news = await enrichSeriesNewsNow(seriesId, series.name, topCountries, {
+          onProgress: ({ done, total, current }) => update({ phase: 'news', done, total, current }),
+        })
+        update({ phase: 'social', current: null })
+        const social = await enrichSeriesSocialNow(series.name, topCountries)
+        return { ok: true, seriesId, seriesName: series.name, countriesTargeted: topCountries.length, news, social }
+      },
+      { key: `series-enrich:${seriesId}`, meta: { seriesId, seriesName: series.name } }
+    )
+    res.status(202).json({ job, existing, statusUrl: `/api/jobs/${job.id}` })
   })
 )
+
+trendsRouter.get('/api/jobs/:id', (req, res) => {
+  const job = getJob(req.params.id)
+  if (!job) return res.status(404).json({ error: 'İş bulunamadı — sunucu yeniden başlamış olabilir; taramayı yeniden başlatın.' })
+  res.json(job)
+})
 
 trendsRouter.get(
   '/api/imdb/:tmdbId',

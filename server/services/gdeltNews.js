@@ -27,27 +27,57 @@ export function gdeltNewsCacheKey(query, iso2) {
   return `gdelt:news:${String(query).trim().toLocaleLowerCase('tr')}::${String(iso2).toUpperCase()}`
 }
 
-let kuyruk = Promise.resolve()
+// GDELT'in genel ucu ≥20 sn/istek istiyor; tek bir kuyruk bunu zorlar. Eski kuyruk düz FIFO'ydu:
+// haftalık tarama 25 dk'lık dilimini doldururken kullanıcının "şimdi tara" isteği arkada
+// dakikalarca bekliyordu. Artık iki öncelik var — INTERACTIVE (kullanıcı tetiklemeli) kuyruğun
+// önüne geçer, BACKGROUND (zamanlanmış tarama) kalanı alır. Aralık kuralı her ikisi için aynı.
+export const GDELT_PRIORITY = { INTERACTIVE: 0, BACKGROUND: 1 }
+
+const bekleyenler = []
+let calisiyor = false
 let sonIstekZamani = 0
 
-function sirayaAl(fn) {
-  const sonuc = kuyruk.then(async () => {
-    const gecen = Date.now() - sonIstekZamani
-    if (gecen < MIN_GAP_MS) await new Promise((r) => setTimeout(r, MIN_GAP_MS - gecen))
-    try {
-      return await fn()
-    } finally {
-      sonIstekZamani = Date.now()
-    }
+function sirayaAl(fn, priority = GDELT_PRIORITY.BACKGROUND) {
+  return new Promise((resolve, reject) => {
+    const kayit = { fn, priority, resolve, reject, eklendi: Date.now() }
+    // Aynı öncelik içinde FIFO; daha yüksek öncelik (küçük sayı) öne alınır.
+    let i = bekleyenler.length
+    while (i > 0 && bekleyenler[i - 1].priority > priority) i--
+    bekleyenler.splice(i, 0, kayit)
+    if (!calisiyor) void kuyruguIsle()
   })
-  kuyruk = sonuc.then(
-    () => {},
-    () => {}
-  )
-  return sonuc
 }
 
-async function gdeltGet(query) {
+async function kuyruguIsle() {
+  calisiyor = true
+  try {
+    while (bekleyenler.length > 0) {
+      const gecen = Date.now() - sonIstekZamani
+      if (gecen < MIN_GAP_MS) await new Promise((r) => setTimeout(r, MIN_GAP_MS - gecen))
+      const kayit = bekleyenler.shift() // bekleme sırasında öne geçen olabilir; en son burada seçilir
+      try {
+        kayit.resolve(await kayit.fn())
+      } catch (err) {
+        kayit.reject(err)
+      } finally {
+        sonIstekZamani = Date.now()
+      }
+    }
+  } finally {
+    calisiyor = false
+  }
+}
+
+/** İzleme ve test için kuyruk durumu. */
+export function gdeltQueueStats() {
+  return {
+    waiting: bekleyenler.length,
+    interactiveWaiting: bekleyenler.filter((k) => k.priority === GDELT_PRIORITY.INTERACTIVE).length,
+    running: calisiyor,
+  }
+}
+
+async function gdeltGet(query, priority) {
   const url = new URL(GDELT_URL)
   url.searchParams.set('query', query)
   url.searchParams.set('mode', 'artlist')
@@ -59,12 +89,14 @@ async function gdeltGet(query) {
   let sonHata
   for (let deneme = 0; deneme < MAX_ATTEMPTS; deneme++) {
     try {
-      const res = await sirayaAl(() =>
-        undiciFetch(url, {
-          dispatcher: gdeltAgent,
-          signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
-          headers: { 'User-Agent': 'gorunurluk-platformu/1.0 (kurumsal analiz araci)' },
-        })
+      const res = await sirayaAl(
+        () =>
+          undiciFetch(url, {
+            dispatcher: gdeltAgent,
+            signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+            headers: { 'User-Agent': 'gorunurluk-platformu/1.0 (kurumsal analiz araci)' },
+          }),
+        priority
       )
       const text = await res.text()
       if (text.trim().startsWith('{')) {
@@ -211,7 +243,7 @@ export function normalizeGdeltArticles(articles, iso2) {
  * `source` olarak yayının alan adı (domain) kullanılıyor — başlık ve alan adı, analize giren iki
  * gerçek alan.
  */
-export async function fetchNewsArticlesGdelt(query, countryIso2) {
+export async function fetchNewsArticlesGdelt(query, countryIso2, { priority = GDELT_PRIORITY.BACKGROUND } = {}) {
   const iso2 = String(countryIso2).toUpperCase()
   const fips = ISO2_TO_FIPS[iso2]
 
@@ -219,17 +251,17 @@ export async function fetchNewsArticlesGdelt(query, countryIso2) {
     return { unsupported: true, news: [] }
   }
 
-  const data = await gdeltGet(`"${String(query).trim()}" sourcecountry:${fips}`)
+  const data = await gdeltGet(`"${String(query).trim()}" sourcecountry:${fips}`, priority)
   return { unsupported: false, news: normalizeGdeltArticles(data.articles, iso2) }
 }
 
 /** 14 günlük önbellek katmanı — `gdelt:news:*` ad alanında (bkz. gdeltNewsCacheKey). */
-export async function fetchNewsArticlesGdeltCached(query, countryIso2) {
+export async function fetchNewsArticlesGdeltCached(query, countryIso2, { priority = GDELT_PRIORITY.BACKGROUND } = {}) {
   const key = gdeltNewsCacheKey(query, countryIso2)
   const cached = getCached(key)
   if (cached) return Array.isArray(cached) ? { unsupported: false, news: cached } : cached
 
-  const sonuc = await fetchNewsArticlesGdelt(query, countryIso2)
+  const sonuc = await fetchNewsArticlesGdelt(query, countryIso2, { priority })
   if (!sonuc.unsupported) setCached(key, sonuc, NEWS_TTL_MS)
   return sonuc
 }

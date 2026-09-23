@@ -29,6 +29,7 @@ bileşeni ancak bu tablo dolduğunda aktif olur (satır yoksa faktör dışlanı
 from __future__ import annotations
 
 import argparse
+import json
 import sqlite3
 from collections import defaultdict
 from datetime import datetime, timezone
@@ -38,6 +39,9 @@ import db
 import netflix_country_ranker as nf
 from models import NetflixCountryRanking
 from reytingtv_ranker import SeriesIndexEntry, load_tmdb_series_index, match_series, normalize_title
+from logsetup import get_logger
+
+log = get_logger(__name__)
 
 BASE_DIR = Path(__file__).parent
 CACHE_DIR = BASE_DIR / "data"
@@ -45,6 +49,7 @@ DB_PATH = CACHE_DIR / "pipeline.db"
 NODE_DB_PATH = BASE_DIR.parent / "server" / "data" / "app.db"
 
 MIN_TITLE_LEN = 4  # reytingtv_ranker.match_series'teki aynı güvenlik: çok kısa adlar yanlış-pozitif riski taşır
+RESULT_MARKER = "RESULT_JSON "
 
 # netflix_country_ranker.fetch_country_page_fallback bir ülke SLUG'ı gerektiriyor (bkz. o
 # dosyadaki _country_slug), TSV yolu gibi doğrudan ISO2 kabul etmiyor — Tudum URL'i İngilizce
@@ -175,7 +180,7 @@ def load_title_aliases(series_index: list[SeriesIndexEntry], db_path: Path = DB_
         aliases.append(SeriesIndexEntry(tmdb_id=next(iter(ids)), name=title, normalized=norm))
 
     if ambiguous:
-        print(f"[netflix_pipeline] {len(ambiguous)} takma ad birden fazla diziye gidiyor, atlandı: {sorted(ambiguous)[:10]}")
+        log.warning(f"{len(ambiguous)} takma ad birden fazla diziye gidiyor, atlandı: {sorted(ambiguous)[:10]}")
     return aliases
 
 
@@ -288,7 +293,7 @@ def sync_country(
     records, unresolved = _to_records(country_iso2, signals, series_index, now)
 
     if unresolved:
-        print(f"[netflix_pipeline] {country_iso2}: TMDB'ye eşlenemeyen {len(unresolved)} Netflix başlığı: {unresolved}")
+        log.info(f"{country_iso2}: TMDB'ye eşlenemeyen {len(unresolved)} Netflix başlığı: {unresolved}")
 
     conn = db.get_connection(db_path)
     try:
@@ -350,10 +355,10 @@ def sync_all(
             conn.close()
 
     if unresolved_all:
-        print(f"[netflix_pipeline] TMDB'ye eşlenemeyen {len(unresolved_all)} Netflix başlığı: {sorted(unresolved_all)}")
+        log.info(f"TMDB'ye eşlenemeyen {len(unresolved_all)} Netflix başlığı: {sorted(unresolved_all)}")
     if truncated:
-        print(
-            f"[netflix_pipeline] UYARI: dosya kısmi — '{truncated}' ülkesinin bloğu yarım kaldı, YAZILMADI. "
+        log.warning(
+            f"dosya kısmi — '{truncated}' ülkesinin bloğu yarım kaldı, YAZILMADI. "
             f"Alfabetik olarak ondan sonraki ülkeler bu koşuda hiç kapsanamadı."
         )
 
@@ -372,18 +377,21 @@ def sync_all(
 def run(countries: list[str], sync_everything: bool = False, force_download: bool = False, offline: bool = False) -> None:
     series_index = load_tmdb_series_index(NODE_DB_PATH)
     aliases = load_title_aliases(series_index)
-    print(
-        f"[netflix_pipeline] {len(series_index)} TMDB dizisi + {len(aliases)} başlık takma adı "
+    log.info(
+        f"{len(series_index)} TMDB dizisi + {len(aliases)} başlık takma adı "
         f"(IMDb AKA / Netflix yayın adı) yüklendi (eşleştirme havuzu)."
     )
     series_index = series_index + aliases
     if sync_everything:
         result = sync_all(series_index, force_download=force_download, offline=offline)
-        print(f"[netflix_pipeline] {result}")
+        log.info(f"sonuç: {result}")
+        # Makine-okunur özet: server/services/netflixPipelineRunner.js stdout'ta bu satırı arar.
+        print(RESULT_MARKER + json.dumps(result, ensure_ascii=False, default=str), flush=True)
         return
     for country in countries:
         result = sync_country(country, series_index)
-        print(f"[netflix_pipeline] {result}")
+        log.info(f"sonuç: {result}")
+        print(RESULT_MARKER + json.dumps(result, ensure_ascii=False, default=str), flush=True)
 
 
 if __name__ == "__main__":

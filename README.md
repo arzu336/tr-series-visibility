@@ -54,11 +54,11 @@ cp server/.env.example server/.env   # değerleri doldurun
 
 Zorunlu anahtarlar: `TMDB_API_KEY`, `SERPAPI_API_KEY`, `OMDB_API_KEY`, `APP_PASSWORD`, `ADMIN_EMAIL`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`. Diğer ayarlar ve açıklamaları `server/.env.example` içinde.
 
-Python hattı için:
+Python hattı için (sürümler `pyproject.toml` ile pin'li):
 
 ```bash
 cd data-pipeline-python
-pip install -r requirements.txt
+pip install -r requirements.txt     # ya da: pip install -e .[dev]
 ```
 
 ## Çalıştırma
@@ -92,7 +92,7 @@ Tüm SerpAPI çağrıları tek bir aylık bütçe sayacından geçer (`SERPAPI_M
 
 ## Python hattı
 
-`data-pipeline-python/` Node'dan bağımsızdır; `data/pipeline.db` dosyasına yazar.
+`data-pipeline-python/` Node'dan bağımsızdır; `data/pipeline.db` dosyasına yazar. Node bu dosyayı salt okunur açar; Python ise `app.db`'yi yalnızca okur — tek istisna `backfill_reytingtv.py`'nin `series_popularity_monthly` tablosuna `source='reytingtv_rank'` ile yazmasıdır (bkz. `db.py` docstring). Operasyonel betikler `logging` kullanır; seviye `PIPELINE_LOG_LEVEL` (varsayılan `INFO`).
 
 ```bash
 python netflix_pipeline.py --all          # tüm ülkeler, tek geçiş

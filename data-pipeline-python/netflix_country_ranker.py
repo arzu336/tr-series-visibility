@@ -49,6 +49,9 @@ from typing import Optional
 import requests
 
 from models import NetflixCountrySignal
+from logsetup import get_logger
+
+log = get_logger(__name__)
 
 DATA_URL = "https://www.netflix.com/tudum/top10/data/all-weeks-countries.tsv"
 # Kaynak URL'nin son parçasıyla BİREBİR aynı ad — tarayıcıdan elle indirilirse (bkz. modül
@@ -158,7 +161,7 @@ def cleanup_temp_files(cache_dir: Path) -> int:
                 tmp.unlink()
                 silinen += 1
             except OSError as exc:
-                print(f"[netflix] geçici dosya silinemedi ({tmp.name}): {exc}")
+                log.error(f"geçici dosya silinemedi ({tmp.name}): {exc}")
     return silinen
 
 
@@ -173,7 +176,7 @@ def resolve_local_dataset(cache_dir: Path) -> tuple[Path, bool]:
         return dest, True
     best_partial = dest.with_suffix(".tsv.partial")
     if best_partial.exists():
-        print(f"[netflix] çevrimdışı: kısmi dosya kullanılıyor ({best_partial.stat().st_size} bayt).")
+        log.warning(f"çevrimdışı: kısmi dosya kullanılıyor ({best_partial.stat().st_size} bayt).")
         return best_partial, False
     raise RuntimeError(f"Çevrimdışı mod: {cache_dir} içinde ne {FILENAME} ne de kısmi dosya var.")
 
@@ -205,7 +208,7 @@ def download_dataset(cache_dir: Path, force: bool = False) -> tuple[Path, bool]:
             _COZULMUS_DATASET = (dest, True)
             return _COZULMUS_DATASET
         stale_full = dest
-        print(f"[netflix] mevcut tam dosya {age / 86400:.1f} gün eski — yenileme deneniyor (başarısızsa eskisi kullanılır).")
+        log.info(f"mevcut tam dosya {age / 86400:.1f} gün eski — yenileme deneniyor (başarısızsa eskisi kullanılır).")
 
     tmp = dest.with_suffix(".tsv.part")
     best_partial = dest.with_suffix(".tsv.partial")
@@ -240,7 +243,7 @@ def _download_with_retries(
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
         if time.monotonic() >= deadline:
-            print(f"[netflix] toplam süre sınırı ({TOTAL_DEADLINE_S:.0f} sn) aşıldı, {attempt - 1} denemede durduruldu.")
+            log.info(f"toplam süre sınırı ({TOTAL_DEADLINE_S:.0f} sn) aşıldı, {attempt - 1} denemede durduruldu.")
             break
 
         offset = tmp.stat().st_size if (tmp.exists() and range_supported is not False) else 0
@@ -258,14 +261,14 @@ def _download_with_retries(
                 res.raise_for_status()
                 if offset > 0 and res.status_code == 206:
                     if range_supported is None:
-                        print(f"[netflix] sunucu Range destekliyor — {offset} bayttan devam ediliyor.")
+                        log.info(f"sunucu Range destekliyor — {offset} bayttan devam ediliyor.")
                     range_supported = True
                     mode = "ab"
                     total = offset
                     expected = _parse_content_range_total(res.headers.get("content-range"))
                 else:
                     if offset > 0:
-                        print("[netflix] sunucu Range başlığını yok saydı (200) — baştan indiriliyor.")
+                        log.warning("sunucu Range başlığını yok saydı (200) — baştan indiriliyor.")
                         range_supported = False
                     mode = "wb"
                     total = 0
@@ -284,7 +287,7 @@ def _download_with_retries(
 
             tmp.replace(dest)
             elapsed = time.monotonic() - start
-            print(f"[netflix] indirme tamamlandı: {total} bayt, {elapsed:.1f}s (deneme {attempt})")
+            log.info(f"indirme tamamlandı: {total} bayt, {elapsed:.1f}s (deneme {attempt})")
             for artefact in (best_partial, meta_path):
                 if artefact.exists():
                     artefact.unlink()
@@ -294,7 +297,7 @@ def _download_with_retries(
             last_error = exc
             elapsed = time.monotonic() - start
             partial_size = tmp.stat().st_size if tmp.exists() else 0
-            print(f"[netflix] deneme {attempt}/{MAX_ATTEMPTS} başarısız ({elapsed:.1f}s, {partial_size} bayt): {exc}")
+            log.error(f"deneme {attempt}/{MAX_ATTEMPTS} başarısız ({elapsed:.1f}s, {partial_size} bayt): {exc}")
             if partial_size > best_bytes:
                 best_bytes = partial_size
                 shutil.copy(tmp, best_partial)
@@ -302,7 +305,7 @@ def _download_with_retries(
             time.sleep(min(2**attempt, 30))
 
     if stale_full is not None:
-        print(f"[netflix] UYARI: yenileme başarısız (son hata: {last_error}); eski TAM dosya kullanılıyor: {stale_full}")
+        log.warning(f"yenileme başarısız (son hata: {last_error}); eski TAM dosya kullanılıyor: {stale_full}")
         _COZULMUS_DATASET = (stale_full, True)
         return _COZULMUS_DATASET
 
@@ -314,8 +317,8 @@ def _download_with_retries(
                 f" DİKKAT: bu kısmi dosya eski bir sunucu sürümüne ait ({meta['last_modified']}), "
                 f"sunucudaki güncel sürüm {last_modified} — kapsadığı ülkelerin son haftaları eksik olabilir."
             )
-        print(
-            f"[netflix] UYARI: tam indirilemedi (son hata: {last_error}). En uzun kısmi indirme "
+        log.warning(
+            f"tam indirilemedi (son hata: {last_error}). En uzun kısmi indirme "
             f"({best_bytes} bayt) kullanılacak — sadece bu kısımda TAM olarak bulunan ülkeler işlenebilir.{surum_notu}"
         )
         _COZULMUS_DATASET = (best_partial, False)

@@ -10,6 +10,7 @@ import {
   fetchSeriesMeta,
   fetchMediaSentimentSummary,
   enrichSeriesNow,
+  waitForJob,
 } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import { resolveIso2FromLabel } from '../lib/continents.js'
@@ -134,7 +135,14 @@ function ToneBadge({ tone }) {
   return <span className="badge badge--info">Nötr</span>
 }
 
-function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, scanResult, scanError }) {
+function scanProgressText(p) {
+  if (!p) return 'Tarama sıraya alındı…'
+  if (p.phase === 'social') return 'Basın tarandı, sosyal/YouTube verisi çekiliyor…'
+  const oran = p.total ? ` (${p.done}/${p.total}${p.current ? ` · ${p.current}` : ''})` : ''
+  return `Basın taranıyor${oran} — her ülke için ~20 sn bekleme var, sayfadan ayrılabilirsiniz.`
+}
+
+function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, scanResult, scanError, scanProgress }) {
   return (
     <div className="subcard">
       <h4 className="subcard__title">Medya &amp; Basın Algısı</h4>
@@ -182,6 +190,11 @@ function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, sca
         </button>
       </div>
 
+      {scanStatus === 'running' && (
+        <div className="dashboard__hint" style={{ marginTop: '0.6rem' }} role="status">
+          {scanProgressText(scanProgress)}
+        </div>
+      )}
       {scanStatus === 'done' && scanResult && (
         <div className="dashboard__bulk-bar" style={{ marginTop: '0.6rem' }}>
           {scanResult.countriesTargeted} ülke hedeflendi — basın: {scanResult.news.scanned} tarandı ({scanResult.news.liveCalls} canlı),
@@ -281,6 +294,7 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
   const [enrichStatus, setEnrichStatus] = useState('idle')
   const [enrichResult, setEnrichResult] = useState(null)
   const [enrichError, setEnrichError] = useState(null)
+  const [enrichProgress, setEnrichProgress] = useState(null)
 
   useEffect(() => {
     if (seriesList.length === 0) return
@@ -419,8 +433,10 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
     if (selectedId == null) return
     setEnrichStatus('running')
     setEnrichError(null)
+    setEnrichProgress(null)
     try {
-      const data = await enrichSeriesNow(selectedId)
+      const { job } = await enrichSeriesNow(selectedId)
+      const data = await waitForJob(job.id, { onProgress: (j) => setEnrichProgress(j.progress) })
       setEnrichResult(data)
       setEnrichStatus('done')
       fetchMediaSentimentSummary(selectedId).then(setSentimentSummary).catch(() => {})
@@ -434,7 +450,7 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
   return (
     <div>
       <div className="trends__controls">
-        <input
+        <input aria-label="Bir dizi ara ve seç"
           className="search-input"
           list="trends-series-list"
           type="text"
@@ -473,6 +489,7 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
                 scanStatus={enrichStatus}
                 scanResult={enrichResult}
                 scanError={enrichError}
+                scanProgress={enrichProgress}
               />
             </div>
           </section>

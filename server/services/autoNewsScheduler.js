@@ -1,6 +1,7 @@
 import db from '../db.js'
 import { getEnrichmentTargets } from './enrichmentTargets.js'
 import { fetchAndAnalyzeSentiment } from './newsSentiment.js'
+import { GDELT_PRIORITY } from './gdeltNews.js'
 
 const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000
 const META_KEY = 'lastAutoNewsScanAt'
@@ -18,18 +19,28 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-export async function scanSeriesAcrossCountries(seriesId, seriesName, countryIso2s, { throttle, deadline } = {}) {
+/**
+ * `priority`: GDELT kuyruğundaki sıra — zamanlanmış tarama BACKGROUND, kullanıcı tetiklemeli
+ * tarama INTERACTIVE (öne geçer). `onProgress({ done, total, current })` her ülkeden sonra çağrılır.
+ */
+export async function scanSeriesAcrossCountries(
+  seriesId,
+  seriesName,
+  countryIso2s,
+  { throttle, deadline, priority = GDELT_PRIORITY.BACKGROUND, onProgress } = {}
+) {
   let scanned = 0
   let liveCalls = 0
   let failed = 0
   let deadlineReached = false
+  const total = countryIso2s.length
   for (const iso2 of countryIso2s) {
     if (deadline && Date.now() >= deadline) {
       deadlineReached = true
       break
     }
     try {
-      const result = await fetchAndAnalyzeSentiment(seriesId, seriesName, null, iso2)
+      const result = await fetchAndAnalyzeSentiment(seriesId, seriesName, null, iso2, { priority })
       scanned++
       if (!result.fromCache) {
         liveCalls++
@@ -39,6 +50,7 @@ export async function scanSeriesAcrossCountries(seriesId, seriesName, countryIso
       failed++
       console.error(`[autoNewsScheduler] ${seriesName}/${iso2} taranamadı:`, err.message)
     }
+    onProgress?.({ done: scanned + failed, total, current: iso2 })
   }
   return { scanned, liveCalls, failed, deadlineReached }
 }
@@ -87,6 +99,10 @@ export async function runAutoNewsScanIfNeeded() {
   }
 }
 
-export async function enrichSeriesNewsNow(seriesId, seriesName, countryIso2s) {
-  return scanSeriesAcrossCountries(seriesId, seriesName, countryIso2s, { throttle: false })
+export async function enrichSeriesNewsNow(seriesId, seriesName, countryIso2s, { onProgress } = {}) {
+  return scanSeriesAcrossCountries(seriesId, seriesName, countryIso2s, {
+    throttle: false,
+    priority: GDELT_PRIORITY.INTERACTIVE,
+    onProgress,
+  })
 }

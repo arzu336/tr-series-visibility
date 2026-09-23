@@ -203,7 +203,7 @@ function rowToResult(row, extra) {
  *    dominant_sentiment 'yetersiz-veri' işaretlenir (bkz. themeInsight.js'teki aynı prensip:
  *    ham veri asla LLM'in başarısına bağımlı değil).
  */
-export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle, countryIso2) {
+export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle, countryIso2, { priority } = {}) {
   const iso2 = countryIso2.toUpperCase()
   const existing = getStmt.get(seriesId, iso2)
   if (existing && Date.now() <= existing.expires_at && existing.source === NEWS_SOURCE) {
@@ -216,7 +216,7 @@ export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle,
 
   let articles
   try {
-    const sonuc = await fetchNewsArticlesGdeltCached(query, iso2)
+    const sonuc = await fetchNewsArticlesGdeltCached(query, iso2, { priority })
     if (sonuc.unsupported) {
       return {
         seriesId,

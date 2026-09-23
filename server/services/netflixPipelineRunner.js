@@ -75,13 +75,16 @@ export function isNetflixSyncDue({ now = Date.now(), lastSuccessAt = 0, lastAtte
   return false
 }
 
-function sonOzetSatiri(stdout) {
+const RESULT_MARKER = 'RESULT_JSON '
+
+/** Python son satırda `RESULT_JSON {...}` basar (netflix_pipeline.run); yoksa son satır. */
+export function sonOzetSatiri(stdout) {
   const satirlar = String(stdout || '')
     .split(/\r?\n/)
     .map((s) => s.trim())
     .filter(Boolean)
-  const ozet = [...satirlar].reverse().find((s) => s.startsWith('[netflix_pipeline] {'))
-  return ozet || satirlar[satirlar.length - 1] || ''
+  const ozet = [...satirlar].reverse().find((s) => s.startsWith(RESULT_MARKER))
+  return ozet ? ozet.slice(RESULT_MARKER.length) : satirlar[satirlar.length - 1] || ''
 }
 
 /**
