@@ -96,10 +96,6 @@ export async function fetchPersonImpact(personId) {
   return handle(await fetch(`/api/person/${personId}`))
 }
 
-export async function fetchImpactReport() {
-  return handle(await fetch('/api/impact'))
-}
-
 export async function fetchCulturalImpact() {
   return handle(await fetch('/api/impact/cultural'))
 }

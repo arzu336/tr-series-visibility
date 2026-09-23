@@ -14,11 +14,17 @@ function wait(ms) {
 }
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const CA_PATH = path.join(__dirname, 'internal-ca-chain.pem')
 
-if (fs.existsSync(CA_PATH)) {
+// Kurum içi LLM sunucusu özel bir CA ile imzalıysa sertifika zinciri depoya DEĞİL,
+// LLM_CA_PATH ile gösterilen dosyaya konur (.gitignore'lu). Yol verilmemişse ya da dosya
+// yoksa yalnızca Node'un kök deposu kullanılır.
+const CA_PATH = process.env.LLM_CA_PATH ? path.resolve(__dirname, '..', process.env.LLM_CA_PATH) : null
+
+if (CA_PATH && fs.existsSync(CA_PATH)) {
   const extraCa = fs.readFileSync(CA_PATH, 'utf8')
   setGlobalDispatcher(new Agent({ connect: { ca: [...tls.rootCertificates, extraCa] } }))
+} else if (CA_PATH) {
+  console.warn(`[llm] LLM_CA_PATH verildi ama dosya yok: ${CA_PATH} — yalnızca sistem kök sertifikaları kullanılacak`)
 }
 
 function extractJson(text) {

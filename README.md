@@ -77,6 +77,8 @@ Python hattı testleri: `cd data-pipeline-python && python -m pytest`.
 - Ters proxy arkasındaysanız `TRUST_PROXY=true` verin; aksi halde kapalı bırakın (hız sınırları gerçek IP ile çalışır).
 - Oturum çerezinin `Secure` bayrağı isteğin protokolünden türetilir; düz HTTP üzerinden kurum içi kurulum çalışır.
 - `APP_ORIGIN` üretimde izin verilen tek tarayıcı origin'idir (CORS).
+- Süreç, yakalanmamış bir istisnada günlüğe yazıp çıkar; üretimde bir denetleyici (systemd, pm2, Windows servisi) altında çalıştırın ki otomatik yeniden başlasın.
+- LLM sunucusu özel bir CA ile imzalıysa zinciri depoya değil `LLM_CA_PATH` ile gösterilen dosyaya koyun.
 
 ## Zamanlanmış işler
 

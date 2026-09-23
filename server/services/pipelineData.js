@@ -1,32 +1,7 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { DatabaseSync } from 'node:sqlite'
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const PIPELINE_DB_PATH = path.join(__dirname, '..', '..', 'data-pipeline-python', 'data', 'pipeline.db')
-
-let db = null
-let triedOpen = false
-
-function getDb() {
-  if (db || triedOpen) return db
-  triedOpen = true
-  if (!fs.existsSync(PIPELINE_DB_PATH)) {
-    console.warn('[pipelineData] data-pipeline-python/data/pipeline.db bulunamadı — Python pipeline henüz çalıştırılmamış olabilir.')
-    return null
-  }
-  try {
-    db = new DatabaseSync(PIPELINE_DB_PATH, { readOnly: true })
-  } catch (err) {
-    console.error('[pipelineData] pipeline.db açılamadı:', err.message)
-    db = null
-  }
-  return db
-}
+import { getPipelineDb } from './pipelineDb.js'
 
 export function getSeriesEnrichment(tmdbId) {
-  const conn = getDb()
+  const conn = getPipelineDb()
   if (!conn) return null
 
   const mapping = conn

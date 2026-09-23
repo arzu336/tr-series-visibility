@@ -3,12 +3,7 @@ import { getCached, setCached } from '../cache.js'
 import { getPipelineDb } from './pipelineDb.js'
 import { getVisitorSeries, pickBeforeAfterPair } from './tourismData.js'
 import { getTourismLeadingSignalSummary } from './tourismTrendsCollector.js'
-import {
-  pearsonCorrelation,
-  pValueForPearsonR,
-  confidenceInterval95,
-  differenceInDifferences,
-} from './tourismCorrelation.js'
+import { differenceInDifferences } from './tourismCorrelation.js'
 import { suggestControlCountry } from '../control-matching.js'
 
 /**
@@ -120,22 +115,47 @@ function buildCulturalDimension(iso2, countryRow, kanonik) {
  * n<3 iken p-değeri tanımsızdır (df=n-2) ve `pValueForPearsonR` zaten `null` döner; o durum
  * burada `hesaplanamaz` olarak dışarı taşınır, sahte bir anlamlılık iddiası üretilmez.
  */
-async function buildTourismDimension(iso2, countryRow) {
-  const seri = getVisitorSeries(iso2)
+const ay2 = (m) => String(m).padStart(2, '0')
+
+function sayiMi(n) {
+  return typeof n === 'number' && Number.isFinite(n)
+}
+
+/**
+ * `deps` yalnızca test için: getVisitorSeries / pickBeforeAfterPair / suggestControlCountry /
+ * differenceInDifferences enjekte edilebilir. Üretimde çağıran hiçbir şey vermez.
+ *
+ * Sözleşme notu: getVisitorSeries `{ year, month, visitorCount }` (camelCase) döner;
+ * pickBeforeAfterPair `{ before, after, beforeYear, afterYear, month }` — before/after düz sayı;
+ * differenceInDifferences `{ didEstimate, treatmentChangePct, controlChangePct }` döner.
+ * Bu üç sözleşmenin herhangi biri bozulursa aşağıdaki sayiMi kontrolleri değeri 'hesaplandi'
+ * diye sunmaz — NaN/undefined bir rapora asla gerçek sayı gibi girmez.
+ */
+export async function buildTourismDimension(iso2, countryRow, deps = {}) {
+  const {
+    getVisitorSeries: seriAl = getVisitorSeries,
+    pickBeforeAfterPair: ciftSec = pickBeforeAfterPair,
+    suggestControlCountry: kontrolOner = suggestControlCountry,
+    differenceInDifferences: didHesapla = differenceInDifferences,
+    leadingSignalFor: onculSinyal = leadingSignalFor,
+  } = deps
+  const sources = [{ source: 'yigm', trust: trustOf('yigm'), note: 'turist giriş istatistikleri' }]
+
+  const seri = seriAl(iso2)
   if (!seri || seri.length === 0) {
     return {
       arrivals: yetersiz(`${iso2} YİGM bülteninde izlenen ülkeler arasında değil`),
       correlation: yetersiz('turist girişi serisi yok — korelasyon hesaplanamaz'),
       didEstimate: yetersiz('turist girişi serisi yok — DiD hesaplanamaz'),
-      leadingSignal: leadingSignalFor(iso2),
-      sources: [{ source: 'yigm', trust: trustOf('yigm'), note: 'turist giriş istatistikleri' }],
+      leadingSignal: onculSinyal(iso2),
+      sources,
     }
   }
 
-  const ciftler = pickBeforeAfterPair(seri)
+  const ciftler = ciftSec(seri)
   const gorunurluk = countryRow?.score ?? null
 
-  const aylikDegerler = seri.map((s) => s.visitor_count)
+  const aylikDegerler = seri.map((s) => s.visitorCount).filter(sayiMi)
   const correlation =
     aylikDegerler.length < 3
       ? yetersiz(`örneklem çok küçük (n=${aylikDegerler.length}, en az 3 gerekli)`)
@@ -147,25 +167,32 @@ async function buildTourismDimension(iso2, countryRow) {
           )
 
   let didEstimate = yetersiz('kontrol ülkesi eşleştirilemedi')
-  if (ciftler) {
+  if (ciftler && sayiMi(ciftler.before) && sayiMi(ciftler.after)) {
     try {
-      const kontrol = await suggestControlCountry(iso2, new Set([iso2]))
+      const kontrol = await kontrolOner(iso2, new Set([iso2]))
       if (kontrol?.iso2) {
-        const kontrolSeri = getVisitorSeries(kontrol.iso2)
-        const kontrolCift = kontrolSeri?.length ? pickBeforeAfterPair(kontrolSeri) : null
-        if (kontrolCift) {
-          const did = differenceInDifferences({
-            treatmentBefore: ciftler.before.visitor_count,
-            treatmentAfter: ciftler.after.visitor_count,
-            controlBefore: kontrolCift.before.visitor_count,
-            controlAfter: kontrolCift.after.visitor_count,
+        const kontrolSeri = seriAl(kontrol.iso2)
+        const kontrolCift = kontrolSeri?.length ? ciftSec(kontrolSeri) : null
+        if (kontrolCift && sayiMi(kontrolCift.before) && sayiMi(kontrolCift.after)) {
+          const did = didHesapla({
+            treatmentBefore: ciftler.before,
+            treatmentAfter: ciftler.after,
+            controlBefore: kontrolCift.before,
+            controlAfter: kontrolCift.after,
           })
-          didEstimate = OK(Math.round(did * 10) / 10, {
-            controlIso2: kontrol.iso2,
-            controlReason: kontrol.reason ?? null,
-            unit: 'yuzde-puan-fark',
-            window: `${ciftler.before.year}-${String(ciftler.before.month).padStart(2, '0')} → ${ciftler.after.year}-${String(ciftler.after.month).padStart(2, '0')}`,
-          })
+          if (sayiMi(did?.didEstimate)) {
+            didEstimate = OK(Math.round(did.didEstimate * 10) / 10, {
+              controlIso2: kontrol.iso2,
+              controlReason: kontrol.reason ?? null,
+              treatmentChangePct: did.treatmentChangePct ?? null,
+              controlChangePct: did.controlChangePct ?? null,
+              unit: 'ziyaretci-fark',
+              window: `${ciftler.beforeYear}-${ay2(ciftler.month)} → ${ciftler.afterYear}-${ay2(ciftler.month)}`,
+              controlWindow: `${kontrolCift.beforeYear}-${ay2(kontrolCift.month)} → ${kontrolCift.afterYear}-${ay2(kontrolCift.month)}`,
+            })
+          } else {
+            didEstimate = yetersiz('DiD sonucu sayısal değil — hesaplama sözleşmesi kontrol edilmeli')
+          }
         } else {
           didEstimate = yetersiz(`kontrol ülkesi ${kontrol.iso2} için turist serisi yok`)
         }
@@ -173,17 +200,23 @@ async function buildTourismDimension(iso2, countryRow) {
     } catch (err) {
       didEstimate = yetersiz(`kontrol ülkesi önerisi alınamadı: ${err.message}`)
     }
+  } else if (ciftler) {
+    didEstimate = yetersiz('önce/sonra çiftinde sayısal olmayan değer')
+  } else {
+    didEstimate = yetersiz('aynı ay için en az iki yıllık veri yok — önce/sonra çifti kurulamadı')
   }
 
+  const son = seri[seri.length - 1]
+  const arrivals = sayiMi(son.visitorCount)
+    ? OK(son.visitorCount, { monthCount: seri.length, latest: `${son.year}-${ay2(son.month)}` })
+    : yetersiz('son ay için ziyaretçi sayısı sayısal değil')
+
   return {
-    arrivals: OK(seri[seri.length - 1].visitor_count, {
-      monthCount: seri.length,
-      latest: `${seri[seri.length - 1].year}-${String(seri[seri.length - 1].month).padStart(2, '0')}`,
-    }),
+    arrivals,
     correlation,
     didEstimate,
-    leadingSignal: leadingSignalFor(iso2),
-    sources: [{ source: 'yigm', trust: trustOf('yigm'), note: 'turist giriş istatistikleri' }],
+    leadingSignal: onculSinyal(iso2),
+    sources,
   }
 }
 

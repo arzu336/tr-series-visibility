@@ -1,7 +1,7 @@
 import { getRawSeriesData } from './tmdb.js'
 import { getCached, setCached } from './cache.js'
-import { ensureClassified } from './themes.js'
-import { ensureDetected } from './destinations.js'
+import { ensureClassified, getThemeStore } from './themes.js'
+import { ensureDetected, getDestinationStore } from './destinations.js'
 import { buildVisibility, mergeProxyFallback, attachPerCapitaScores } from './aggregate.js'
 import { getCountryDemographics } from './services/countryDemographics.js'
 import { getTrend, maybeRecordSnapshot, loadHistoryStore } from './history.js'
@@ -29,11 +29,35 @@ export async function getRawSeriesDataCached() {
   return rawFetchInFlight
 }
 
-export async function getEnrichedVisibility() {
+// LLM sınıflandırması (400 dizi × tema + destinasyon) ilk açılışta dakikalar sürebilir; LLM
+// kapalıysa her dizi zaman aşımına düşer ve /api/visibility hiç yanıt vermezdi. Kullanıcı
+// istekleri artık beklemez: sınıflandırma arka planda TEK bir iş olarak başlar (eş zamanlı
+// istekler aynı işe bağlanır), harita o an elde olan etiketlerle döner — eksik olanlar
+// buildVisibility'de zaten 'diğer' / güven 0 ile işlenir ve bir sonraki istekte güncel gelir.
+// Zamanlanmış günlük tazeleme ise tamamlanmasını bekler (waitForClassification: true).
+let enrichmentInFlight = null
+
+function kickOffEnrichment(series) {
+  if (enrichmentInFlight) return enrichmentInFlight
+  enrichmentInFlight = (async () => {
+    await ensureClassified(series)
+    await ensureDetected(series)
+  })()
+    .catch((err) => {
+      console.error('[visibility] arka plan sınıflandırma turu başarısız:', err.message)
+    })
+    .finally(() => {
+      enrichmentInFlight = null
+    })
+  return enrichmentInFlight
+}
+
+export async function getEnrichedVisibility({ waitForClassification = false } = {}) {
   const raw = await getRawSeriesDataCached()
-  const themeStore = await ensureClassified(raw.series)
-  const destinationStore = await ensureDetected(raw.series)
-  const data = buildVisibility(raw, themeStore, destinationStore)
+  const enrichment = kickOffEnrichment(raw.series)
+  if (waitForClassification) await enrichment
+  const data = buildVisibility(raw, getThemeStore(), getDestinationStore())
+  const destinationStore = getDestinationStore()
 
   try {
     const fallback = await getFallbackInterestScores()

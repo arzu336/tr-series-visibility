@@ -9,9 +9,8 @@ DOĞRULANMIŞ İKİ ÖNEMLİ SINIR (2026-08-20, gerçek dosyayla test edildi):
    `country_name, country_iso2, week, category, weekly_rank, show_title, season_title,
    cumulative_weeks_in_top_10`. "Haftalık izlenme saati" SADECE global dosyada
    (all-weeks-global.tsv) var — ülke bazlı dosyada sadece SIRA (1-10) ve o ülkede Top
-   10'da kaldığı toplam hafta sayısı var. Bu yüzden `country_score_engine.py`'deki
-   "Netflix Top 10 Haftalık Puanı" gerçek saat/izlenme sayısı DEĞİL, sıraya dayalı bir
-   türetilmiş puandır (bkz. compute_rank_score) — bunu uydurma bir saat rakamıyla
+   10'da kaldığı toplam hafta sayısı var. Bu yüzden `compute_rank_score` gerçek saat/izlenme
+   sayısı DEĞİL, sıraya dayalı türetilmiş bir puan üretir — bunu uydurma bir saat rakamıyla
    karıştırmıyoruz.
 
 2. **Dosya (~32 MB) uzun süre BİR KEZ BİLE tam inmedi.** Her denemede content-length doğru

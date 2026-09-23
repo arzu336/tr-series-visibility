@@ -57,24 +57,47 @@ function writeRaw(key, value, ttlMs, now = Date.now()) {
  *    kayıt varsa çökmeden onu `stale:true` ile döner. Hiç kayıt yoksa hatayı olduğu gibi
  *    yukarı fırlatır (çağıran route'un mevcut try/catch → 502 davranışı korunur).
  */
+// Aynı anahtar için aynı anda gelen N istek = N ücretli SerpAPI çağrısı demekti (ör. bir dizi
+// panelinin üç bileşeni aynı trend anahtarını aynı anda istiyor). İlk isteğin sözü paylaşılır;
+// sonrakiler ona bağlanır. Sonuç yazılınca kayıt silinir — data-pipeline.js rawFetchInFlight ile
+// aynı kalıp.
+const inFlight = new Map()
+
+export function inFlightCount() {
+  return inFlight.size
+}
+
 export async function cacheFirstSerpApi(key, ttlMs, fetchFn) {
   const cached = readRaw(key)
   if (cached && cached.isFresh) {
     return { ...cached.value, fromCache: true, stale: false }
   }
 
-  try {
-    const fresh = await fetchFn()
-    writeRaw(key, fresh, ttlMs)
-    return { ...fresh, fromCache: false, stale: false }
-  } catch (err) {
-    if (cached) {
-      console.error(
-        `[serpApiCache] "${key}" için canlı istek başarısız (${err.message}) — süresi dolmuş önbellek stale:true ile kullanılıyor.`
-      )
-      return { ...cached.value, fromCache: true, stale: true, staleReason: err.message }
+  if (inFlight.has(key)) {
+    const paylasilan = await inFlight.get(key)
+    return { ...paylasilan, coalesced: true }
+  }
+
+  const soz = (async () => {
+    try {
+      const fresh = await fetchFn()
+      writeRaw(key, fresh, ttlMs)
+      return { ...fresh, fromCache: false, stale: false }
+    } catch (err) {
+      if (cached) {
+        console.error(
+          `[serpApiCache] "${key}" için canlı istek başarısız (${err.message}) — süresi dolmuş önbellek stale:true ile kullanılıyor.`
+        )
+        return { ...cached.value, fromCache: true, stale: true, staleReason: err.message }
+      }
+      throw err
     }
-    throw err
+  })()
+  inFlight.set(key, soz)
+  try {
+    return await soz
+  } finally {
+    inFlight.delete(key)
   }
 }
 

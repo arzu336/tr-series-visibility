@@ -146,8 +146,8 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
   const [search, setSearch] = useState('')
   const [destFilter, setDestFilter] = useState('')
 
-  const load = useCallback(() => {
-    setStatus('loading')
+  const load = useCallback(({ silent = false } = {}) => {
+    if (!silent) setStatus('loading')
     Promise.all([fetchDestinations(), fetchDestinationTaxonomy()])
       .then(([destRes, taxonomyRes]) => {
         setItems(destRes.items)
@@ -156,7 +156,7 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
       })
       .catch((err) => {
         setError(err.message)
-        setStatus('error')
+        if (!silent) setStatus('error')
       })
   }, [])
 
@@ -177,12 +177,13 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
   const handleSave = async (item) => {
     const chosen = drafts[item.id] ?? item.effectiveDestinations
     setSavingId(item.id)
+    setError(null)
     try {
       await submitDestinationOverride(item.id, chosen)
       setEditingId(null)
-      load()
+      load({ silent: true })
     } catch (err) {
-      setError(err.message)
+      setError(`"${item.name}" kaydedilemedi: ${err.message}`)
     } finally {
       setSavingId(null)
     }
@@ -190,11 +191,12 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
 
   const handleRevert = async (item) => {
     setSavingId(item.id)
+    setError(null)
     try {
       await clearDestinationOverride(item.id)
-      load()
+      load({ silent: true })
     } catch (err) {
-      setError(err.message)
+      setError(`"${item.name}" geri alınamadı: ${err.message}`)
     } finally {
       setSavingId(null)
     }
@@ -212,6 +214,14 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
 
   return (
     <>
+      {error && (
+        <div className="status status--error" role="alert">
+          {error}
+          <button type="button" className="dashboard__link-btn" style={{ marginLeft: '0.75rem' }} onClick={() => setError(null)}>
+            Kapat
+          </button>
+        </div>
+      )}
       <div className="dashboard__summary">
         <span className="dashboard__summary-item dashboard__summary-item--warn">
           {items.filter((i) => i.isUntagged).length} dizi hiç destinasyon içermiyor
@@ -397,8 +407,8 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
   const [bulkSaving, setBulkSaving] = useState(false)
   const [bulkTheme, setBulkTheme] = useState('')
 
-  const load = useCallback(() => {
-    setStatus('loading')
+  const load = useCallback(({ silent = false } = {}) => {
+    if (!silent) setStatus('loading')
     Promise.all([fetchThemes(), fetchTaxonomy()])
       .then(([themesRes, taxonomyRes]) => {
         setItems(themesRes.items)
@@ -407,7 +417,7 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
       })
       .catch((err) => {
         setError(err.message)
-        setStatus('error')
+        if (!silent) setStatus('error')
       })
   }, [])
 
@@ -418,12 +428,13 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
   const handleApprove = async (item) => {
     const chosen = drafts[item.id] ?? item.effectiveTheme
     setSavingId(item.id)
+    setError(null)
     try {
       await submitThemeOverride(item.id, chosen)
       setEditingId(null)
-      load()
+      load({ silent: true })
     } catch (err) {
-      setError(err.message)
+      setError(`"${item.name}" onaylanamadı: ${err.message}`)
     } finally {
       setSavingId(null)
     }
@@ -431,11 +442,12 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
 
   const handleRevert = async (item) => {
     setSavingId(item.id)
+    setError(null)
     try {
       await clearThemeOverride(item.id)
-      load()
+      load({ silent: true })
     } catch (err) {
-      setError(err.message)
+      setError(`"${item.name}" geri alınamadı: ${err.message}`)
     } finally {
       setSavingId(null)
     }
@@ -454,14 +466,16 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
     const targets = visibleList.filter((item) => selectedIds.has(item.id))
     if (targets.length === 0) return
     setBulkSaving(true)
+    setError(null)
     try {
       await Promise.all(
         targets.map((item) => submitThemeOverride(item.id, drafts[item.id] ?? item.effectiveTheme))
       )
       setSelectedIds(new Set())
-      load()
+      load({ silent: true })
     } catch (err) {
-      setError(err.message)
+      setError(`Toplu onay tamamlanamadı: ${err.message}`)
+      load({ silent: true })
     } finally {
       setBulkSaving(false)
     }
@@ -471,13 +485,15 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
     const targets = visibleList.filter((item) => selectedIds.has(item.id))
     if (targets.length === 0 || !bulkTheme) return
     setBulkSaving(true)
+    setError(null)
     try {
       await Promise.all(targets.map((item) => submitThemeOverride(item.id, bulkTheme)))
       setSelectedIds(new Set())
       setBulkTheme('')
-      load()
+      load({ silent: true })
     } catch (err) {
-      setError(err.message)
+      setError(`Toplu tema değişikliği tamamlanamadı: ${err.message}`)
+      load({ silent: true })
     } finally {
       setBulkSaving(false)
     }
@@ -534,6 +550,14 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
         <>
           {status === 'loading' && <div className="status">Yükleniyor…</div>}
           {status === 'error' && <div className="status status--error">Hata: {error}</div>}
+          {status === 'ready' && error && (
+            <div className="status status--error" role="alert">
+              {error}
+              <button type="button" className="dashboard__link-btn" style={{ marginLeft: '0.75rem' }} onClick={() => setError(null)}>
+                Kapat
+              </button>
+            </div>
+          )}
           {status === 'ready' && (
             <>
               <div className="dashboard__summary">

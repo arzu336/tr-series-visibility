@@ -10,33 +10,49 @@ const deleteStmt = db.prepare('DELETE FROM sessions WHERE token = ?')
 const deleteByUserStmt = db.prepare('DELETE FROM sessions WHERE user_id = ?')
 const deleteExpiredStmt = db.prepare('DELETE FROM sessions WHERE expires_at < ?')
 
-export function createSession(userId) {
-  const token = crypto.randomBytes(24).toString('hex')
-  insertStmt.run(token, userId, Date.now() + SESSION_TTL_MS)
-  return token
+// Veritabanında token'ın kendisi değil SHA-256 özeti durur: app.db sızarsa (yedek, hata
+// çıktısı, salt-okunur erişim) satırlar oturum çalmaya yaramaz. Token rastgele 192 bit olduğu
+// için tuz/yavaş hash gereksiz — kaba kuvvetle bulunacak bir şey yok, korunan şey düz metnin
+// kendisi. Çerezde hâlâ ham token gider; sunucu her okuyuşta özetler.
+const RAW_TOKEN_BYTES = 24
+const LEGACY_RAW_TOKEN_LENGTH = RAW_TOKEN_BYTES * 2 // eski düz metin satırlar 48 hex karakter
+
+export function hashSessionToken(token) {
+  return crypto.createHash('sha256').update(String(token)).digest('hex')
 }
 
-export function isValidSession(token) {
-  if (!token) return false
-  const entry = selectStmt.get(token)
-  if (!entry) return false
-  if (Date.now() > entry.expires_at) {
-    deleteStmt.run(token)
-    return false
-  }
-  return true
+// Tek seferlik geçiş: düz metin saklanmış eski oturumlar özetlenir, kullanıcılar yeniden giriş
+// yapmak zorunda kalmaz. Özetlenmiş satırlar 64 karakter olduğu için ayrım nettir.
+const legacyRowsStmt = db.prepare(`SELECT token FROM sessions WHERE length(token) = ${LEGACY_RAW_TOKEN_LENGTH}`)
+const rehashStmt = db.prepare('UPDATE sessions SET token = ? WHERE token = ?')
+export function migrateLegacyPlaintextSessions() {
+  const rows = legacyRowsStmt.all()
+  for (const row of rows) rehashStmt.run(hashSessionToken(row.token), row.token)
+  return rows.length
+}
+migrateLegacyPlaintextSessions()
+
+export function createSession(userId) {
+  const token = crypto.randomBytes(RAW_TOKEN_BYTES).toString('hex')
+  insertStmt.run(hashSessionToken(token), userId, Date.now() + SESSION_TTL_MS)
+  return token
 }
 
 export function getSessionUserId(token) {
   if (!token) return null
-  const entry = selectStmt.get(token)
+  const entry = selectStmt.get(hashSessionToken(token))
   if (!entry || Date.now() > entry.expires_at) return null
   return entry.user_id
 }
 
 export function deleteSession(token) {
   if (!token) return
-  deleteStmt.run(token)
+  deleteStmt.run(hashSessionToken(token))
+}
+
+/** Hız sınırlayıcı için oturum bazlı anahtar — ham token'ı sınırlayıcının belleğine koymaz. */
+export function sessionRateLimitKey(token) {
+  return `sess:${hashSessionToken(token).slice(0, 24)}`
 }
 
 export function parseCookies(header) {
@@ -47,7 +63,15 @@ export function parseCookies(header) {
     if (idx === -1) continue
     const key = part.slice(0, idx).trim()
     const value = part.slice(idx + 1).trim()
-    if (key) result[key] = decodeURIComponent(value)
+    if (!key) continue
+    // Bozuk yüzde kodlaması (ör. "%E0%A4%A") decodeURIComponent'i fırlatır; bu, o istemcinin
+    // HER isteğini 500'e çevirirdi. Bozuk değer ham hâliyle alınır — geçersiz bir çerez zaten
+    // oturum bulamayacak, 401 ile sonuçlanacak.
+    try {
+      result[key] = decodeURIComponent(value)
+    } catch {
+      result[key] = value
+    }
   }
   return result
 }

@@ -19,6 +19,30 @@ const MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 
 export const PYTHON_BIN = process.env.PYTHON_BIN || (process.platform === 'win32' ? 'python' : 'python3')
 
+// Alt sürece process.env'in tamamı DEĞİL, yalnızca çalışması için gerekenler geçer: TMDB/SerpAPI/
+// LLM anahtarları ve APP_PASSWORD gibi sırların Python tarafında hiçbir işi yok. Beyaz liste:
+// yorumlayıcının kendini bulması (PATH, SYSTEMROOT, APPDATA...), geçici dizin, yerel ayar,
+// proxy/CA ayarları ve Netflix hattının kendi ayarları.
+const SUBPROCESS_ENV_ALLOWLIST = [
+  'PATH', 'Path', 'PATHEXT', 'SYSTEMROOT', 'SystemRoot', 'SYSTEMDRIVE', 'SystemDrive', 'WINDIR', 'COMSPEC', 'ComSpec',
+  'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
+  'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ',
+  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
+  'SSL_CERT_FILE', 'SSL_CERT_DIR', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE',
+  'PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV', 'PYTHONDONTWRITEBYTECODE',
+  'NETFLIX_DOWNLOAD_DEADLINE_S', 'NETFLIX_DATASET_MAX_AGE_S',
+]
+
+export function buildSubprocessEnv(source = process.env) {
+  const env = {}
+  for (const key of SUBPROCESS_ENV_ALLOWLIST) {
+    if (source[key] !== undefined) env[key] = source[key]
+  }
+  env.PYTHONUTF8 = '1'
+  env.PYTHONIOENCODING = 'utf-8'
+  return env
+}
+
 const getMetaStmt = db.prepare('SELECT value FROM meta WHERE key = ?')
 const setMetaStmt = db.prepare(`
   INSERT INTO meta (key, value) VALUES (?, ?)
@@ -68,7 +92,7 @@ export function runNetflixPipeline({ exec = execFile, pythonBin = PYTHON_BIN, ti
   return new Promise((resolve) => {
     const opts = {
       cwd: PIPELINE_DIR,
-      env: { ...process.env, PYTHONUTF8: '1', PYTHONIOENCODING: 'utf-8' },
+      env: buildSubprocessEnv(),
       timeout: timeoutMs,
       killSignal: 'SIGTERM',
       maxBuffer: MAX_OUTPUT_BYTES,

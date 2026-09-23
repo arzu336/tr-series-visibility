@@ -1,11 +1,11 @@
+import './env.js'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import dotenv from 'dotenv'
 import express from 'express'
 import cors from 'cors'
 import compression from 'compression'
 import helmet from 'helmet'
-import rateLimit from 'express-rate-limit'
+import rateLimit, { ipKeyGenerator } from 'express-rate-limit'
 import { buildDestinationRanking } from './aggregate.js'
 import {
   THEMES,
@@ -64,16 +64,16 @@ import { enrichSeriesSocialNow } from './services/socialEnricher.js'
 import { getCached } from './cache.js'
 import { isValidIso2, normalizeIso2, resolveKnownSeriesName, resolveKnownSeriesNames } from './services/requestGuards.js'
 import { countryNameFromIso2 } from './services/countryLookup.js'
-import { runWithUserContext } from './services/liveCallQuota.js'
+import { runWithUserContext, getUserLiveCallUsage } from './services/liveCallQuota.js'
 import {
   COOKIE_NAME,
   createSession,
   getSessionUserId,
-  isValidSession,
   deleteSession,
   deleteSessionsForUser,
   parseCookies,
   sessionCookieHeader,
+  sessionRateLimitKey,
 } from './auth.js'
 import {
   ensureBootstrapAdmin,
@@ -92,7 +92,6 @@ import {
 } from './users.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-dotenv.config({ path: path.join(__dirname, '.env') })
 const SESSION_MAX_AGE_S = 7 * 24 * 60 * 60
 
 const app = express()
@@ -168,11 +167,18 @@ app.use((req, res, next) => {
   next()
 })
 
+// Kurum ağı tek bir NAT IP'sinden çıkar: yalnızca IP'ye dayalı sınırlar, bir kişinin 10 yanlış
+// denemesiyle herkesi kilitler. Giriş sınırı IP + hedef e-posta çiftine, genel sınır oturuma
+// (varsa) bağlanır; oturumsuz istekler IP'ye düşer.
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    const email = String(req.body?.email || '').trim().toLocaleLowerCase('tr').slice(0, 200)
+    return `${ipKeyGenerator(req.ip)}|${email}`
+  },
   message: { error: 'Çok fazla giriş denemesi yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.' },
 })
 const registerLimiter = rateLimit({
@@ -188,6 +194,10 @@ const generalApiLimiter = rateLimit({
   limit: 300,
   standardHeaders: true,
   legacyHeaders: false,
+  keyGenerator: (req) => {
+    const token = req.cookies?.[COOKIE_NAME]
+    return token ? sessionRateLimitKey(token) : ipKeyGenerator(req.ip)
+  },
   message: { error: 'Çok fazla istek yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.' },
 })
 app.use('/api', generalApiLimiter)
@@ -225,7 +235,12 @@ app.post('/api/auth/login', loginLimiter, (req, res) => {
 app.get('/api/auth/status', (req, res) => {
   const userId = getSessionUserId(req.cookies[COOKIE_NAME])
   const user = userId ? getUser(userId) : null
-  res.json({ authenticated: Boolean(user), user: user ? publicUser(user) : null })
+  res.json({
+    authenticated: Boolean(user),
+    user: user ? publicUser(user) : null,
+    // Günlük canlı sorgu kotası (SERPAPI_USER_DAILY_LIMIT) — kullanıcı 429 yemeden önce görebilsin.
+    liveCalls: user ? getUserLiveCallUsage(userId) : null,
+  })
 })
 
 app.post('/api/auth/logout', (req, res) => {
@@ -275,15 +290,7 @@ function requireAdmin(req, res, next) {
   next()
 }
 
-app.use('/api/admin', (req, res, next) => {
-  const userId = getSessionUserId(req.cookies[COOKIE_NAME])
-  const user = userId ? getUser(userId) : null
-  if (!user?.isAdmin) {
-    return res.status(403).json({ error: 'Yönetici yetkisi gerekli' })
-  }
-  req.currentUser = user
-  next()
-})
+app.use('/api/admin', requireAdmin)
 
 app.get('/api/admin/users', (req, res) => {
   res.json({ items: listUsers().map(publicUser) })
@@ -695,8 +702,14 @@ app.post('/api/series/enrich-now/:id', requireAdmin, async (req, res) => {
 })
 
 app.get('/api/imdb/:tmdbId', async (req, res) => {
+  // Her farklı parametre bir dış çağrı + önbellek satırı demek; TMDB kimliği pozitif tam sayıdır,
+  // gerisi 400.
+  const tmdbId = Number(req.params.tmdbId)
+  if (!Number.isInteger(tmdbId) || tmdbId <= 0 || tmdbId > 2_147_483_647) {
+    return res.status(400).json({ error: 'Geçersiz TMDB kimliği' })
+  }
   try {
-    const data = await getImdbDataForTmdbSeries(req.params.tmdbId)
+    const data = await getImdbDataForTmdbSeries(tmdbId)
     res.json(data)
   } catch (err) {
     console.error('[imdb] hata:', err.message)
@@ -921,7 +934,11 @@ process.on('unhandledRejection', (reason) => {
   console.error('[process] yakalanmamış promise reddi:', reason instanceof Error ? reason.message : reason)
 })
 process.on('uncaughtException', (err) => {
-  console.error('[process] yakalanmamış istisna:', err.message)
+  // Yakalanmamış istisnadan sonra süreç tanımsız durumdadır (yarım kalmış SQLite işlemi, açık
+  // dosya tanıtıcısı, kaybolmuş timer). Devam etmek yerine günlüğe yazıp çıkılır; yeniden başlatma
+  // dıştaki denetleyicinin işi (geliştirmede nodemon, üretimde systemd/pm2 — bkz. README Dağıtım).
+  console.error('[process] yakalanmamış istisna, süreç kapatılıyor:', err.stack || err.message)
+  setTimeout(() => process.exit(1), 300).unref()
 })
 
 // eslint-disable-next-line no-unused-vars

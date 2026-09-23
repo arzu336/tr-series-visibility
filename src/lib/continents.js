@@ -23,12 +23,6 @@ export const CONTINENTS = [
   { id: 'north_america', name: 'Kuzey Amerika' },
 ]
 
-const CONTINENT_NAME_BY_ID = Object.fromEntries(CONTINENTS.map((c) => [c.id, c.name]))
-
-export function continentName(id) {
-  return CONTINENT_NAME_BY_ID[id] || id
-}
-
 export function groupByContinent(countries) {
   const byContinent = new Map(CONTINENTS.map((c) => [c.id, { ...c, countries: [] }]))
 

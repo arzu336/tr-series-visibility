@@ -67,8 +67,7 @@ class ImdbSeriesInfo(BaseModel):
     )
 
 
-# --- Ülke bazlı yerel popülerlik sıralaması (netflix_country_ranker.py,
-# trends_country_ranker.py, country_score_engine.py) ---
+# --- Ülke bazlı Netflix Top 10 sinyali (netflix_country_ranker.py) ---
 
 
 class NetflixCountrySignal(BaseModel):
@@ -82,39 +81,6 @@ class NetflixCountrySignal(BaseModel):
     peak_position: int
     latest_week: Optional[str] = None
     latest_rank: Optional[int] = None
-
-
-class TrendsCountrySignal(BaseModel):
-    show_title: str
-    geo: str
-    # SerpAPI/Google Trends tek seferde EN FAZLA 5 terimi karşılaştırabiliyor (doğrulandı —
-    # 6. terimde "Maximum number of queries accepted is 5" hatası döner). Bu yüzden N>5
-    # dizi karşılaştırılırken 5'erli gruplara bölünür, her grupta ORTAK BİR ÇAPA (anchor)
-    # dizi tekrarlanır — çapa değeri gruplar arası normalize etmek için kullanılır (bkz.
-    # trends_country_ranker.py compare_shows_interest). Normalize edilmemiş ham skorlar
-    # SADECE aynı grup içinde karşılaştırılabilir, gruplar arası değil.
-    avg_interest: float
-    trend_direction: str  # "yükseliyor" | "düşüyor" | "sabit" | "yetersiz-veri"
-    trend_change_pct: Optional[float] = None
-
-
-class CountryLeaderboardEntry(BaseModel):
-    show_title: str
-    local_score: float
-    netflix_signal: Optional[NetflixCountrySignal] = None
-    trends_signal: Optional[TrendsCountrySignal] = None
-    locally_available: bool
-    # Skora katkıda bulunan gerçek kanıtların kısa, insan-okur özeti — "local_score: 62.3"
-    # tek başına neye dayandığını göstermez, bu liste gösterir.
-    evidence: list[str] = Field(default_factory=list)
-
-
-class CountryLeaderboard(BaseModel):
-    country_code: str
-    country_name: str
-    generated_at: datetime
-    entries: list[CountryLeaderboardEntry]
-    notes: list[str] = Field(default_factory=list)
 
 
 class NetflixCountryRanking(BaseModel):

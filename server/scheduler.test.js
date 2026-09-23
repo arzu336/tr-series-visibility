@@ -27,7 +27,7 @@ vi.mock('./services/socialEnricher.js', () => ({ runSocialEnrichmentIfNeeded: ka
 vi.mock('./services/actorTrendsCollector.js', () => ({ runActorTrendsCollectionIfNeeded: kaydet('zincir:actor') }))
 vi.mock('./services/netflixPipelineRunner.js', () => ({ runNetflixSyncIfNeeded: kaydet('zincir:netflix') }))
 
-const { runScheduledRefreshInner, META_KEY } = await import('./scheduler.js')
+const { runScheduledRefreshInner, startScheduler, META_KEY } = await import('./scheduler.js')
 
 const GUN_MS = 24 * 60 * 60 * 1000
 
@@ -118,6 +118,32 @@ describe('zamanlanmış tetikleme', () => {
     await runScheduledRefreshInner()
 
     expect(cagriSirasi).toContain('zincir:netflix')
+  })
+
+  it('günlük tazeleme LLM sınıflandırmasının BİTMESİNİ bekler (kullanıcı isteğinden farklı)', async () => {
+    const { getEnrichedVisibility } = await import('./data-pipeline.js')
+    await runScheduledRefreshInner()
+    expect(vi.mocked(getEnrichedVisibility)).toHaveBeenCalledWith({ waitForClassification: true })
+  })
+
+  it('startScheduler yeniden başlatma sonrası ilk turu 30 dk beklemeden atar', async () => {
+    vi.useFakeTimers()
+    try {
+      const durdur = startScheduler({ initialDelayMs: 1000, intervalMs: 10_000 })
+      expect(cagriSirasi).toEqual([])
+      await vi.advanceTimersByTimeAsync(1000)
+      expect(cagriSirasi).toContain('gunluk:visibility')
+
+      cagriSirasi.length = 0
+      await vi.advanceTimersByTimeAsync(10_000)
+      expect(cagriSirasi).toContain('zincir:news') // periyodik tur da çalıştı
+      durdur()
+      cagriSirasi.length = 0
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(cagriSirasi).toEqual([]) // durdurulduktan sonra sessiz
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it('günlük tazeleme tamamlanınca kapısını kapatır', async () => {

@@ -58,7 +58,7 @@ async function runGunlukTazeleme() {
     const purgedCache = purgeExpiredCacheEntries()
     if (purgedCache > 0) console.log(`[scheduler] süresi geçmiş ${purgedCache} önbellek kaydı temizlendi`)
 
-    await getEnrichedVisibility()
+    await getEnrichedVisibility({ waitForClassification: true })
     rollupMonthlyIfNeeded()
     rollupSeriesMonthlyIfNeeded()
     setMetaStmt.run(META_KEY, String(Date.now()))
@@ -107,8 +107,22 @@ async function runZenginlestirmeZinciri() {
   }
 }
 
-export function startScheduler() {
-  setInterval(() => {
+// Yeniden başlatma sonrası ilk tur 30 dakika beklemesin: sunucu ayağa kalkıp ilk istekleri
+// karşıladıktan kısa süre sonra bir tur atılır (günlük kapı kapalıysa yalnızca haftalık zincir
+// sırasını alır, boşa iş yapılmaz).
+export const INITIAL_DELAY_MS = 60 * 1000
+
+export function startScheduler({ initialDelayMs = INITIAL_DELAY_MS, intervalMs = CHECK_INTERVAL_MS } = {}) {
+  const ilk = setTimeout(() => {
     runScheduledRefresh()
-  }, CHECK_INTERVAL_MS).unref()
+  }, initialDelayMs)
+  ilk.unref()
+  const periyodik = setInterval(() => {
+    runScheduledRefresh()
+  }, intervalMs)
+  periyodik.unref()
+  return () => {
+    clearTimeout(ilk)
+    clearInterval(periyodik)
+  }
 }
