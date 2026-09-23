@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import { fetchImdbData, fetchSeriesEnrichment } from '../lib/api.js'
+import { useAsync } from '../lib/useAsync.js'
 import CastBar from './CastBar.jsx'
 import { VISIBILITY_SCORE_NOTE } from '../lib/methodologyNotes.js'
 import countryNames from '../data/country-centroids.json'
@@ -17,9 +18,10 @@ function formatVotes(n) {
 }
 
 export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onShowOnMap }) {
-  const [imdb, setImdb] = useState(null)
-  const [imdbStatus, setImdbStatus] = useState('loading')
-  const [enrichment, setEnrichment] = useState(null)
+  const imdbReq = useAsync(() => fetchImdbData(seriesId), [seriesId], { enabled: seriesId != null })
+  const imdb = imdbReq.status === 'ready' ? imdbReq.data : null
+  const imdbStatus = imdbReq.status === 'ready' ? imdb?.status : imdbReq.status === 'error' ? 'unavailable' : 'loading'
+  const enrichment = useAsync(() => fetchSeriesEnrichment(seriesId), [seriesId], { enabled: seriesId != null }).data
 
   const series = useMemo(() => {
     let base = null
@@ -34,40 +36,6 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
     countries.sort((a, b) => b.score - a.score)
     return base ? { ...base, countries } : null
   }, [allCountries, seriesId])
-
-  useEffect(() => {
-    if (seriesId == null) return
-    let cancelled = false
-    setImdbStatus('loading')
-    setImdb(null)
-    fetchImdbData(seriesId)
-      .then((res) => {
-        if (cancelled) return
-        setImdb(res)
-        setImdbStatus(res.status)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setImdbStatus('unavailable')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [seriesId])
-
-  useEffect(() => {
-    if (seriesId == null) return
-    let cancelled = false
-    setEnrichment(null)
-    fetchSeriesEnrichment(seriesId)
-      .then((res) => {
-        if (!cancelled) setEnrichment(res)
-      })
-      .catch(() => {})
-    return () => {
-      cancelled = true
-    }
-  }, [seriesId])
 
   if (!series) {
     return <p className="dashboard__empty">Bu dizi için veri bulunamadı.</p>

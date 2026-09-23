@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchMediaSentiment, fetchRegionalInterest } from '../lib/api.js'
+import { useAsync } from '../lib/useAsync.js'
 
 const SENTIMENT_LABELS = {
   positive: 'Olumlu Basın Algısı',
@@ -122,29 +123,17 @@ export default function MediaSentimentCard({ seriesId, iso2, seriesName }) {
 }
 
 export function HybridScoreTag({ seriesName, iso2 }) {
-  const [state, setState] = useState({ status: 'loading', hybrid: null })
+  const req = useAsync(() => fetchRegionalInterest(seriesName, iso2), [seriesName, iso2], {
+    enabled: Boolean(seriesName && iso2),
+  })
+  const hybrid = req.status === 'ready' ? req.data?.hybridScore : null
 
-  useEffect(() => {
-    if (!seriesName || !iso2) return
-    let cancelled = false
-    setState({ status: 'loading', hybrid: null })
-    fetchRegionalInterest(seriesName, iso2)
-      .then((res) => {
-        if (cancelled) return
-        setState({ status: res.hybridScore ? 'ready' : 'unavailable', hybrid: res.hybridScore })
-      })
-      .catch(() => {
-        if (!cancelled) setState({ status: 'unavailable', hybrid: null })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [seriesName, iso2])
+  if (req.status === 'loading' || req.status === 'idle') {
+    return <span className="hybrid-score hybrid-score--loading">Yerel skor hesaplanıyor…</span>
+  }
+  if (!hybrid) return null
 
-  if (state.status === 'loading') return <span className="hybrid-score hybrid-score--loading">Yerel skor hesaplanıyor…</span>
-  if (state.status === 'unavailable' || !state.hybrid) return null
-
-  const { score, multiplier, localInterest, basis } = state.hybrid
+  const { score, multiplier, localInterest, basis } = hybrid
   const isLow = basis === 'yetersiz-veri' || (localInterest ?? 0) < 5
 
   return (

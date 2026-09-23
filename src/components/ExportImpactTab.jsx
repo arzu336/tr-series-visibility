@@ -81,8 +81,9 @@ export default function ExportImpactTab({ onSelectCountry }) {
   const [status, setStatus] = useState('loading')
   const [hoveredCountryId, setHoveredCountryId] = useState(null)
   const [periodRange, setPeriodRange] = useState('monthly')
-  const [periodData, setPeriodData] = useState(null)
-  const [periodLoading, setPeriodLoading] = useState(true)
+  const periodsReq = useAsync(() => fetchGlobalPeriods(periodRange), [periodRange], { keepPrevious: true })
+  const periodData = periodsReq.data
+  const periodLoading = periodsReq.status === 'loading'
 
   useEffect(() => {
     Promise.all([fetchExportImpact(), fetchBenchmark().catch(() => null)])
@@ -96,23 +97,8 @@ export default function ExportImpactTab({ onSelectCountry }) {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    setPeriodLoading(true)
-    fetchGlobalPeriods(periodRange)
-      .then((res) => {
-        if (cancelled) return
-        setPeriodData(res)
-        setPeriodLoading(false)
-      })
-      .catch((err) => {
-        if (cancelled) return
-        console.error('[ExportImpactTab] periods', err.message)
-        setPeriodLoading(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [periodRange])
+    if (periodsReq.error) console.error('[ExportImpactTab] periods', periodsReq.error)
+  }, [periodsReq.error])
 
   if (status === 'loading') return <div className="dashboard status">Yükleniyor…</div>
   if (status === 'error' || !data) return <div className="dashboard status status--error">Veri alınamadı.</div>

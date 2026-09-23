@@ -1,39 +1,24 @@
 import { useEffect, useState } from 'react'
 import { fetchPersonImpact, fetchImdbData } from '../lib/api.js'
+import { useAsync } from '../lib/useAsync.js'
 
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185'
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 
 export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlobal }) {
-  const [data, setData] = useState(null)
-  const [status, setStatus] = useState('loading')
-  const [error, setError] = useState(null)
   const [imdbBySeriesId, setImdbBySeriesId] = useState({})
   const [photoFailed, setPhotoFailed] = useState(false)
   const [photoLoaded, setPhotoLoaded] = useState(false)
 
+  const personReq = useAsync(() => fetchPersonImpact(personId), [personId], { enabled: personId != null })
+  const data = personReq.status === 'ready' ? personReq.data : null
+  const status = personReq.status === 'ready' ? data.status : personReq.status === 'idle' ? 'loading' : personReq.status
+  const error = personReq.error
+
   useEffect(() => {
-    if (personId == null) return
-    let cancelled = false
-    setStatus('loading')
-    setData(null)
     setImdbBySeriesId({})
     setPhotoFailed(false)
     setPhotoLoaded(false)
-    fetchPersonImpact(personId)
-      .then((res) => {
-        if (cancelled) return
-        setData(res)
-        setStatus(res.status)
-      })
-      .catch((err) => {
-        if (cancelled) return
-        setError(err.message)
-        setStatus('error')
-      })
-    return () => {
-      cancelled = true
-    }
   }, [personId])
 
   useEffect(() => {

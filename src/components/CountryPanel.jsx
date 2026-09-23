@@ -8,6 +8,7 @@ import PeriodChart from './PeriodChart.jsx'
 import MediaSentimentCard, { HybridScoreTag } from './MediaSentimentCard.jsx'
 import CountryLeaderboard from './CountryLeaderboard.jsx'
 import { describePerCapita, formatTotalScore } from '../lib/perCapitaLabel.js'
+import { useAsync } from '../lib/useAsync.js'
 import { PER_CAPITA_SCORE_NOTE, TOTAL_SCORE_NOTE } from '../lib/methodologyNotes.js'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
@@ -20,32 +21,17 @@ function yearOf(dateStr) {
 }
 
 function RegionalInterest({ seriesName, iso2 }) {
-  const [state, setState] = useState({ status: 'loading', byRegion: [] })
+  const { status, data } = useAsync(() => fetchRegionalInterest(seriesName, iso2), [seriesName, iso2], {
+    enabled: Boolean(seriesName && iso2),
+  })
+  const byRegion = data?.byRegion || []
 
-  useEffect(() => {
-    if (!seriesName || !iso2) return
-    let cancelled = false
-    setState({ status: 'loading', byRegion: [] })
-    fetchRegionalInterest(seriesName, iso2)
-      .then((res) => {
-        if (cancelled) return
-        setState({ status: res.byRegion?.length > 0 ? 'ready' : 'unavailable', byRegion: res.byRegion || [] })
-      })
-      .catch(() => {
-        if (cancelled) return
-        setState({ status: 'unavailable', byRegion: [] })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [seriesName, iso2])
-
-  if (state.status === 'loading') return <p className="dashboard__empty">Yükleniyor…</p>
-  if (state.status === 'unavailable') {
+  if (status === 'loading' || status === 'idle') return <p className="dashboard__empty">Yükleniyor…</p>
+  if (status === 'error' || byRegion.length === 0) {
     return <p className="dashboard__empty">Bu ülke/dizi için bölgesel arama ilgisi verisi bulunamadı.</p>
   }
 
-  const top = state.byRegion.filter((r) => r.value > 0).slice(0, 8)
+  const top = byRegion.filter((r) => r.value > 0).slice(0, 8)
   const maxValue = Math.max(...top.map((r) => r.value), 1)
 
   if (top.length === 0) {
@@ -250,27 +236,22 @@ export default function CountryPanel({
 }) {
   const [expandedId, setExpandedId] = useState(null)
   const [periodRange, setPeriodRange] = useState('monthly')
-  const [countryPeriods, setCountryPeriods] = useState(null)
   const [seriesRange, setSeriesRange] = useState('current')
-  const [seriesPopularity, setSeriesPopularity] = useState(null)
+
+  const popularityReq = useAsync(() => fetchSeriesPopularity(seriesRange), [seriesRange], {
+    enabled: seriesRange !== 'current',
+  })
+  const seriesPopularity = popularityReq.data?.items ?? null
+
+  const periodsReq = useAsync(() => fetchCountryPeriods(country.iso2, periodRange), [country?.iso2, periodRange], {
+    enabled: Boolean(country?.iso2) && country?.dataSource !== 'proxy',
+  })
+  const countryPeriods = periodsReq.data
 
   useEffect(() => {
-    if (seriesRange === 'current') {
-      setSeriesPopularity(null)
-      return
-    }
-    let cancelled = false
-    fetchSeriesPopularity(seriesRange)
-      .then((res) => {
-        if (!cancelled) setSeriesPopularity(res.items)
-      })
-      .catch((err) => {
-        if (!cancelled) console.error('[CountryPanel] series-popularity', err.message)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [seriesRange])
+    if (popularityReq.error) console.error('[CountryPanel] series-popularity', popularityReq.error)
+    if (periodsReq.error) console.error('[CountryPanel] periods', periodsReq.error)
+  }, [popularityReq.error, periodsReq.error])
 
   const sortedSeriesList = useMemo(() => {
     const list = country?.seriesList || []
@@ -289,24 +270,6 @@ export default function CountryPanel({
   useEffect(() => {
     setExpandedId(null)
   }, [country?.iso2])
-
-  useEffect(() => {
-    if (!country?.iso2 || country.dataSource === 'proxy') {
-      setCountryPeriods(null)
-      return
-    }
-    let cancelled = false
-    fetchCountryPeriods(country.iso2, periodRange)
-      .then((res) => {
-        if (!cancelled) setCountryPeriods(res)
-      })
-      .catch((err) => {
-        if (!cancelled) console.error('[CountryPanel] periods', err.message)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [country?.iso2, periodRange])
 
   const handleSelectSeriesRow = (s, isExpanded, key) => {
     setExpandedId(isExpanded ? null : key)

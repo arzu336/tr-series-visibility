@@ -37,11 +37,14 @@ export default function Map2D({
 }) {
   const [geoFeatures, setGeoFeatures] = useState(null)
   const [hovered, setHovered] = useState(null)
-  const [tooltipPos, setTooltipPos] = useState({ x: 0, y: 0 })
   const [zoom, setZoom] = useState(DEFAULT_ZOOM)
   const containerRef = useRef(null)
   const svgRef = useRef(null)
   const zoomGroupRef = useRef(null)
+  // Tooltip konumu React state'i DEĞİL: her mouse hareketinde tüm haritayı (177 path) yeniden
+  // render etmek yerine tooltip elemanının stili doğrudan güncellenir.
+  const tooltipRef = useRef(null)
+  const lastMouse = useRef({ x: 0, y: 0 })
 
   useEffect(() => {
     fetchCountryGeoJSON()
@@ -54,13 +57,19 @@ export default function Map2D({
     return buildMapScale(countries, metric).byIso2
   }, [countries, metric])
 
-  const { path, features, projection } = useMemo(() => {
-    if (!geoFeatures) return { path: null, features: [], projection: null }
+  // Projeksiyon ve her ülkenin SVG path dizgisi yalnızca GeoJSON değişince hesaplanır — bunlar
+  // pahalı ve hover/zoom/seçimden bağımsız.
+  const { projection, renderable } = useMemo(() => {
+    if (!geoFeatures) return { projection: null, renderable: null }
     const projection = geoNaturalEarth1().fitSize([VIEWBOX_WIDTH, VIEWBOX_HEIGHT], {
       type: 'FeatureCollection',
       features: geoFeatures,
     })
-    return { path: geoPath(projection), features: geoFeatures, projection }
+    const path = geoPath(projection)
+    const renderable = geoFeatures
+      .map((f) => ({ feature: f, iso2: featureIso2(f), d: path(f), key: featureIso2(f) || f.properties.ADM0_A3 || f.properties.NAME }))
+      .filter((r) => r.d)
+    return { projection, renderable }
   }, [geoFeatures])
 
   useEffect(() => {
@@ -94,7 +103,12 @@ export default function Map2D({
   const handleMouseMove = (e) => {
     const rect = containerRef.current?.getBoundingClientRect()
     if (!rect) return
-    setTooltipPos({ x: e.clientX - rect.left, y: e.clientY - rect.top })
+    lastMouse.current = { x: e.clientX - rect.left, y: e.clientY - rect.top }
+    const el = tooltipRef.current
+    if (el) {
+      el.style.left = `${lastMouse.current.x + 12}px`
+      el.style.top = `${lastMouse.current.y + 12}px`
+    }
   }
 
   const handleResetView = () => {
@@ -102,7 +116,7 @@ export default function Map2D({
     onResetView?.()
   }
 
-  if (!path) {
+  if (!renderable) {
     return <div className="status">Harita yükleniyor…</div>
   }
 
@@ -127,11 +141,8 @@ export default function Map2D({
           className="map2d__zoom-group"
           style={{ transform: `translate(${zoom.tx}px, ${zoom.ty}px) scale(${zoom.scale})` }}
         >
-          {features.map((f) => {
-            const iso2 = featureIso2(f)
+          {renderable.map(({ feature: f, iso2, d, key }) => {
             const c = byIso2.get(iso2)
-            const d = path(f)
-            if (!d) return null
             const isHovered = hovered === f
             const isSelected = iso2 === selectedIso2
             const isHighlighted = actorHighlightSet.has(iso2)
@@ -165,7 +176,7 @@ export default function Map2D({
                   : NO_DATA_COLOR
             return (
               <path
-                key={iso2 || f.properties.ADM0_A3 || f.properties.NAME}
+                key={key}
                 d={d}
                 fill={fill}
                 className={className}
@@ -182,7 +193,7 @@ export default function Map2D({
         </g>
       </svg>
       {hovered && (
-        <div className="map2d__tooltip" style={{ left: tooltipPos.x + 12, top: tooltipPos.y + 12 }}>
+        <div ref={tooltipRef} className="map2d__tooltip" style={{ left: lastMouse.current.x + 12, top: lastMouse.current.y + 12 }}>
           {(() => {
             const name = displayName(hovered)
             const iso2 = featureIso2(hovered)

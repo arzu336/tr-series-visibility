@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
 import { fetchCountryLeaderboard } from '../lib/api.js'
+import { useAsync } from '../lib/useAsync.js'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 
@@ -9,29 +9,18 @@ const BADGE_LEVEL_CLASS = {
   weak: 'leaderboard__badge--weak',
 }
 
-export default function CountryLeaderboard({ iso2 }) {
-  const [state, setState] = useState({ status: 'loading', data: null, error: null })
+function leaderboardState(req) {
+  if (req.status === 'ready') {
+    const data = req.data
+    if (data.error || !data.entries?.length) return { status: 'empty', data, error: data.error || null }
+    return { status: 'ready', data, error: null }
+  }
+  if (req.status === 'error') return { status: 'error', data: null, error: req.error }
+  return { status: 'loading', data: null, error: null }
+}
 
-  useEffect(() => {
-    if (!iso2) return
-    let cancelled = false
-    setState({ status: 'loading', data: null, error: null })
-    fetchCountryLeaderboard(iso2)
-      .then((data) => {
-        if (cancelled) return
-        if (data.error || !data.entries?.length) {
-          setState({ status: 'empty', data, error: data.error || null })
-        } else {
-          setState({ status: 'ready', data, error: null })
-        }
-      })
-      .catch((err) => {
-        if (!cancelled) setState({ status: 'error', data: null, error: err.message })
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [iso2])
+export default function CountryLeaderboard({ iso2 }) {
+  const state = leaderboardState(useAsync(() => fetchCountryLeaderboard(iso2), [iso2], { enabled: Boolean(iso2) }))
 
   if (state.status === 'loading') {
     return (

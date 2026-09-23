@@ -8,6 +8,9 @@ import MapViewToggle from './components/MapViewToggle.jsx'
 import MapMetricToggle from './components/MapMetricToggle.jsx'
 import { MAP_METRICS } from './lib/scale.js'
 
+import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { useAsync } from './lib/useAsync.js'
+
 const Globe3D = lazy(() => import('./components/Globe3D.jsx'))
 const Map2D = lazy(() => import('./components/Map2D.jsx'))
 const AnalystDashboard = lazy(() => import('./components/AnalystDashboard.jsx'))
@@ -39,8 +42,6 @@ export default function App() {
   const [countries, setCountries] = useState([])
   const [meta, setMeta] = useState(null)
   const [selected, setSelected] = useState(null)
-  const [imdbData, setImdbData] = useState(null)
-  const [imdbStatus, setImdbStatus] = useState('idle')
   const [selectedActorId, setSelectedActorId] = useState(null)
   const [focusTarget, setFocusTarget] = useState(null)
   const [actorHighlight, setActorHighlight] = useState(null)
@@ -182,31 +183,10 @@ export default function App() {
   const activeSeries =
     selected?.seriesList?.find((s) => s.id === activeSeriesId) ?? selected?.seriesList?.[0] ?? null
 
-  useEffect(() => {
-    const tmdbId = activeSeries?.id
-    if (tmdbId == null) {
-      setImdbData(null)
-      setImdbStatus('idle')
-      return
-    }
-    let cancelled = false
-    setImdbStatus('loading')
-    setImdbData(null)
-    fetchImdbData(tmdbId)
-      .then((data) => {
-        if (cancelled) return
-        setImdbData(data)
-        setImdbStatus(data.status)
-      })
-      .catch(() => {
-        if (cancelled) return
-        setImdbData(null)
-        setImdbStatus('unavailable')
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [activeSeries?.id])
+  const imdbReq = useAsync(() => fetchImdbData(activeSeries.id), [activeSeries?.id], { enabled: activeSeries?.id != null })
+  const imdbData = imdbReq.status === 'ready' ? imdbReq.data : null
+  const imdbStatus =
+    imdbReq.status === 'ready' ? imdbReq.data.status : imdbReq.status === 'error' ? 'unavailable' : imdbReq.status
 
   const handleSelect = useCallback((country) => {
     setSelected(country)
@@ -451,6 +431,7 @@ export default function App() {
       {showPasswordModal && <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />}
 
       <main className="app__main">
+        <ErrorBoundary name="görünüm" resetKey={view}>
         <Suspense fallback={<div className="status">Yükleniyor…</div>}>
           {view === 'dashboard' && user?.isAdmin && (
             <AnalystDashboard
@@ -575,6 +556,7 @@ export default function App() {
             </>
           )}
         </Suspense>
+        </ErrorBoundary>
       </main>
     </div>
   )
