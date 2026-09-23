@@ -1,6 +1,3 @@
-// Klasik nokta+etiket legend yerine: sıra numarası, renk göstergesi, isim,
-// yüzde ve (varsa) trend okunu bir arada gösteren kart satırları. DonutChart
-// ile aynı hoveredId state'ini paylaşır — birine dokunmak diğerini de vurgular.
 export default function DonutRankedList({ items, hoveredId, onHoverChange, onSelect }) {
   const clickable = Boolean(onSelect)
 

@@ -3,15 +3,25 @@ import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-// data-pipeline-python KENDİ ayrı SQLite dosyasını tutuyor (bkz. data-pipeline-python/db.py
-// modül docstring'i: "Node.js uygulamasının server/data/app.db'sinden BİLEREK AYRI"). Burada
-// SADECE OKUMA amaçlı bir bağlantı açılıyor — netflix_pipeline.py'nin yazdığı veriye Node
-// tarafından erişmenin tek yolu bu. server/services/countryScoringEngine.js VE server/impact.js
-// AYNI bağlantıyı paylaşır (iki ayrı DatabaseSync açmak yerine) — Python hiçbir zaman app.db'ye,
-// Node hiçbir zaman pipeline.db'ye YAZMIYOR.
-const PIPELINE_DB_PATH = path.join(__dirname, '..', '..', 'data-pipeline-python', 'data', 'pipeline.db')
+const VARSAYILAN_YOL = path.join(__dirname, '..', '..', 'data-pipeline-python', 'data', 'pipeline.db')
+
+function pipelineDbPath() {
+  return process.env.PIPELINE_DB_PATH || VARSAYILAN_YOL
+}
 
 let pipelineDb = null
+
+/** Testlerin yolu değiştirdikten sonra bağlantıyı tazeleyebilmesi için. */
+export function resetPipelineDb() {
+  if (pipelineDb) {
+    try {
+      pipelineDb.close()
+    } catch {
+      /* zaten kapalı olabilir */
+    }
+  }
+  pipelineDb = null
+}
 
 /**
  * pipeline.db henüz hiç oluşturulmamış olabilir (netflix_pipeline.py hiç çalıştırılmadıysa) —
@@ -22,7 +32,7 @@ let pipelineDb = null
 export function getPipelineDb() {
   if (pipelineDb !== null) return pipelineDb || null
   try {
-    pipelineDb = new DatabaseSync(PIPELINE_DB_PATH, { readOnly: true })
+    pipelineDb = new DatabaseSync(pipelineDbPath(), { readOnly: true })
   } catch (err) {
     console.error('[pipelineDb] pipeline.db açılamadı (resmi platform verisi kullanılamayacak):', err.message)
     pipelineDb = false

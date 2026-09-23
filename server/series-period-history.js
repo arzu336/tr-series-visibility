@@ -1,11 +1,5 @@
 import db, { inTransaction } from './db.js'
 
-// CountryPanel'deki "Yayındaki diziler" listesi şu ana kadar hep dizinin O ANKİ (canlı)
-// TMDB popülerliğine göre sıralanıyordu — burada dizi bazında (ülkeye göre DEĞİL, TMDB
-// popülerliği zaten global tek bir değer) aylık/yıllık geçmiş tutulup "bu ay/bu yıl/son 5
-// yılda popüler olan diziler" sorusuna cevap veriliyor. server/period-history.js'teki ülke
-// skoru rollup deseninin birebir aynısı — ham anlık görüntüler (visibility_history gibi
-// budanan) budanmadan önce kalıcı bir aylık özet tabloya taşınır.
 const SNAPSHOT_INTERVAL_MS = 12 * 60 * 60 * 1000
 const MAX_SNAPSHOTS_PER_SERIES = 60
 const ROLLUP_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -27,13 +21,6 @@ const pruneStmt = db.prepare(`
   )
 `)
 const selectRawStmt = db.prepare('SELECT tmdb_id, popularity, captured_at FROM series_popularity_history')
-// Denetim bulgusu Y-1 (B-08 düzeltmesinin yan etkisi): bu sorgu `source` süzmediği için
-// `alreadyRolled` anahtarı `tmdb_id:yıl:ay` idi. Python'un ReytingTV satırı olan her (dizi, ay)
-// Node tarafından "zaten toplanmış" sayılıyor ve o ayın TMDB satırı HİÇ yazılmıyordu; ham anlık
-// görüntüler MAX_SNAPSHOTS_PER_SERIES=60 ile budandığından ölçüm kalıcı olarak kayboluyordu.
-// Ölçüldü: 305 (dizi, yıl, ay) kombinasyonunda ReytingTV satırı vardı ve HİÇBİRİNDE TMDB
-// karşılığı yoktu — yani atlama tamdı. B-08 ezmeyi önledi, yerine sessiz atlama koymuştu.
-// Bu rollup yalnızca kendi kaynağını (tmdb_snapshot) yazar, dolayısıyla yalnızca onu sormalı.
 const selectMonthlyKeysStmt = db.prepare(
   "SELECT tmdb_id, year, month FROM series_popularity_monthly WHERE source = 'tmdb_snapshot'"
 )
@@ -43,11 +30,6 @@ const upsertMonthlyStmt = db.prepare(`
   ON CONFLICT(tmdb_id, year, month, source) DO UPDATE SET
     avg_popularity = excluded.avg_popularity, sample_count = excluded.sample_count
 `)
-// Denetim bulgusu B-08: bu yazıcı `source` sütununu HİÇ doldurmuyordu, dolayısıyla eklediği her
-// satır NULL kaynakla kalıyordu (canlı veride 487 satır) ve çakışma hedefi de kaynağı
-// içermediği için Python'un ReytingTV upsert'i bu satırları eziyordu. Artık kaynak açıkça
-// yazılıyor ve çakışma (tmdb_id, year, month, source) üzerinden çözülüyor — iki kaynak aynı ay
-// içinde yan yana yaşayabilir, okuyucu taraf zaten dizi başına birini seçiyor.
 const selectMonthlyForYearsStmt = db.prepare(
   'SELECT tmdb_id, year, month, avg_popularity, source FROM series_popularity_monthly WHERE year >= ?'
 )
@@ -56,16 +38,12 @@ function round1(n) {
   return Math.round(n * 10) / 10
 }
 
-// data-pipeline.js'teki getEnrichedVisibility'den, ülke skoru snapshot'ıyla (history.js
-// maybeRecordSnapshot) aynı ritimde çağrılır — kendi ayrı meta anahtarı var, o yüzden
-// birbirlerini engellemezler.
 export function maybeRecordSeriesSnapshot(series) {
   const now = Date.now()
   const row = getMetaStmt.get(SNAPSHOT_META_KEY)
   const lastRunAt = row ? Number(row.value) : 0
   if (now - lastRunAt < SNAPSHOT_INTERVAL_MS) return
 
-  // Denetim B-20: ~400 dizi × 2 ifade tek transaction'da.
   inTransaction(() => {
     for (const s of series) {
       insertSnapshotStmt.run(s.id, s.popularity, now)
@@ -75,8 +53,6 @@ export function maybeRecordSeriesSnapshot(series) {
   })
 }
 
-// server/scheduler.js'in günlük tazelemesinden çağrılır — tamamlanmış ayları, ham veri
-// budanmadan (MAX_SNAPSHOTS_PER_SERIES) önce kalıcı özet tabloya taşır.
 export function rollupSeriesMonthlyIfNeeded() {
   const now = Date.now()
   const row = getMetaStmt.get(ROLLUP_META_KEY)
@@ -103,7 +79,6 @@ export function rollupSeriesMonthlyIfNeeded() {
     b.count += 1
   }
 
-  // Denetim B-20: aylık rollup ~800 upsert'e kadar çıkabiliyor — tek transaction.
   inTransaction(() => {
     for (const b of buckets.values()) {
       upsertMonthlyStmt.run(b.tmdb_id, b.year, b.month, b.sum / b.count, b.count)
@@ -128,21 +103,6 @@ function currentMonthAverages() {
   return byId
 }
 
-// range: 'monthly' (bu ayın anlık ortalaması) | 'yearly' (bu yılın rolled-up ayları + bu
-// ayın anlık ortalaması) | '5yearly' (son 5 takvim yılı, aynı mantık). Dönen Map<tmdbId,
-// {value, sampleCount, isPartial}> — CountryPanel bunu kendi seriesList'iyle eşleştirip
-// yeniden sıralar. Geçmişi olmayan (yeni eklenmiş) diziler map'te YER ALMAZ — çağıran taraf
-// bu durumda dürüstçe güncel (canlı) popülerliğe düşer, sıfır/uydurma bir değer atanmaz.
-// Denetim bulgusu B-09: getSeriesPopularityMap iki AYRI ölçekten değer döndürüyor ve CountryPanel
-// bunları tek listede aritmetik olarak karşılaştırıyordu. Gerçek veriyle ölçüldü (487 TMDB + 305
-// ReytingTV satırı): TMDB aylık ortalaması 5,1-80 (ort. 11,5) iken ReytingTV skoru 0-100
-// (ort. 44,9) — yani ReytingTV verisi olan 49 dizi, GERÇEK popülerliklerinden bağımsız olarak
-// sistematik biçimde listenin tepesine çıkıyordu. (Denetim raporu bunun tersini, "dibe batar"
-// diyordu; canlı veri aksini gösteriyor — yön farklı ama hata aynı.)
-//
-// Çözüm: değerler KENDİ kaynağı içinde yüzdeliğe çevriliyor. Yüzdelik ölçeksizdir, bu yüzden
-// "kendi ölçüm kaynağında ilk %10'da" ifadesi iki kaynak arasında karşılaştırılabilir. Ham değer
-// (value) gösterim için AYNEN korunuyor — arayüz onu kaynak rozetiyle birlikte basmaya devam eder.
 function yuzdelikAta(entries) {
   const kaynagaGore = new Map()
   for (const entry of entries) {
@@ -154,10 +114,7 @@ function yuzdelikAta(entries) {
     const dizi = kaynagaGore.get(entry.source)
     const altinda = dizi.filter((v) => v < entry.value).length
     const esit = dizi.filter((v) => v === entry.value).length
-    // Orta-sıra (mid-rank) yüzdeliği: eşit değerler aynı konumu paylaşır.
     entry.percentile = Math.round(((altinda + esit / 2) / dizi.length) * 1000) / 10
-    // Tek elemanlı bir kaynak grubunda yüzdelik anlamsızdır (her zaman 50 çıkar) — çağıran taraf
-    // bunu bilsin diye açıkça işaretleniyor.
     entry.percentileReliable = dizi.length >= 5
   }
   return entries
@@ -173,7 +130,6 @@ export function getSeriesPopularityMap(range) {
     for (const [tmdbId, c] of current) {
       result.set(tmdbId, { value: round1(c.sum / c.count), sampleCount: c.count, isPartial: false, source: 'tmdb_snapshot' })
     }
-    // Tek kaynak olsa da aynı sözleşme dönsün: çağıran taraf her aralıkta `percentile` bulur.
     yuzdelikAta([...result.values()])
     return result
   }
@@ -181,11 +137,7 @@ export function getSeriesPopularityMap(range) {
   const yearsBack = range === '5yearly' ? 5 : 1
   const cutoffYear = currentYear - yearsBack + 1
 
-  // Aylık satırlar iki farklı ölçekten gelebilir: TMDB anlık görüntü ortalaması (sınırsız
-  // skala) veya ReytingTV geriye dönük TR reyting sırası skoru (10-100 skala, bkz.
-  // data-pipeline-python/reytingtv_ranker.py backfill). İkisini aritmetik olarak karıştırmak
-  // yanıltıcı olur — kaynak bazında ayrı tutulup, dizi başına TEK bir kaynak seçilir.
-  const bySeriesSource = new Map() // tmdbId -> Map<source, { sum, count, months: Set }>
+  const bySeriesSource = new Map()
   for (const r of selectMonthlyForYearsStmt.all(cutoffYear)) {
     const src = r.source || 'tmdb_snapshot'
     if (!bySeriesSource.has(r.tmdb_id)) bySeriesSource.set(r.tmdb_id, new Map())
@@ -208,8 +160,6 @@ export function getSeriesPopularityMap(range) {
     acc.months.add('current')
   }
 
-  // TMDB'nin tek küresel popülerlik sayısına güvenmeyen kullanıcı için asıl istenen sinyal
-  // gerçek TR reyting geçmişi — mevcutsa o tercih edilir, yoksa dürüstçe TMDB'ye düşülür.
   const expectedMonths = yearsBack * 12
   const result = new Map()
   for (const [tmdbId, bySource] of bySeriesSource) {

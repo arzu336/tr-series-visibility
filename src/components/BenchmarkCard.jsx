@@ -1,9 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchBenchmark } from '../lib/api.js'
 
-// Türkiye'nin marka rengiyle (#EE3135, bkz. styles.css .app__nav-btn--active) tutarlı,
-// diğer üç ülke için dataviz-skill paletinden (ImpactReport.jsx SLOT_COLORS) ödünç alınan
-// nötr kategorik renkler — yeni bir palet icat edilmedi.
 const COUNTRY_COLORS = { TR: '#EE3135', US: '#3987e5', KR: '#9085e9', ES: '#d95926' }
 
 function TrendBadge({ trend }) {

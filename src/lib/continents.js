@@ -5,10 +5,6 @@ const ISO2_BY_NAME = new Map(
   Object.entries(countryNames).map(([iso2, entry]) => [entry.name.toLocaleLowerCase('tr'), iso2])
 )
 
-// SerpAPI/Google Trends bölge etiketleri bazen ISO2 kod, bazen (hl parametresine göre)
-// yerelleştirilmiş ülke adı olarak dönüyor (bkz. server/turkish-learning-interest.js) —
-// her iki biçimi de country-centroids.json'daki gerçek iso2 koduna eşlemeye çalışır,
-// eşleşme yoksa null döner (uydurma bir eşleşme yapılmaz).
 export function resolveIso2FromLabel(label) {
   if (!label) return null
   const trimmed = String(label).trim()
@@ -18,8 +14,6 @@ export function resolveIso2FromLabel(label) {
   return ISO2_BY_NAME.get(trimmed.toLocaleLowerCase('tr')) || null
 }
 
-// Sırayla gösterim için — Lowy Institute tarzı kıta filtresiyle aynı mantık:
-// sabit, öngörülebilir bir sırayla listelenir.
 export const CONTINENTS = [
   { id: 'europe', name: 'Avrupa' },
   { id: 'middle_east', name: 'Orta Doğu' },
@@ -35,9 +29,6 @@ export function continentName(id) {
   return CONTINENT_NAME_BY_ID[id] || id
 }
 
-// countries: /api/visibility'den gelen gerçek ülke listesi (score, seriesCount, topSeries vb.).
-// Her kıta için: en yüksek skorlu ülke ve kıtadaki toplam/ortalama skor (gerçek TMDB popülerlik
-// verisine dayalı bir proxy — resmi izlenme/ihracat rakamı değil, bkz. ImpactReport'taki aynı uyarı).
 export function groupByContinent(countries) {
   const byContinent = new Map(CONTINENTS.map((c) => [c.id, { ...c, countries: [] }]))
 
@@ -73,13 +64,6 @@ const MAX_CONTINENT_ALTITUDE = 3.4
 const MIN_CONTINENT_SCALE = 1.15
 const MAX_CONTINENT_SCALE = 2.0
 
-// Kıta odaklanması (flyTo) için: üye ülkelerin gerçek merkez koordinatlarının (bkz.
-// country-centroids.json) ortalaması — uydurma/sabit bir kıta merkezi değil, elimizdeki
-// ülke listesine göre hesaplanan gerçek bir ağırlık merkezi. Yakınlaşma mesafesi de sabit
-// değil: kıtanın gerçek yayılımına (centroid'e olan en uzak ülkenin mesafesi) göre
-// hesaplanır — dar bir kıta (ör. Orta Doğu) aşırı yakınlaşmaz, geniş bir kıta (ör.
-// Asya-Pasifik) aşırı uzaklaşmaz; ikisi de rahatça "sınırların görülebildiği" bir çerçevede
-// kalır (fitBounds'un elle yapılan karşılığı — globe.gl'de native bir fitBounds yok).
 export function continentCentroid(countryList) {
   const points = (countryList || [])
     .map((c) => countryNames[c.iso2])
@@ -96,9 +80,6 @@ export function continentCentroid(countryList) {
   return { lat, lng, altitude, scale }
 }
 
-// Sol panelin sadeleştirilmiş "En Çok İzlenen Dizi" kartı için — kıtadaki tüm ülkelerin
-// seriesList'lerinden (zaten /api/visibility'de var) aynı dizinin göründüğü her ülkedeki
-// popülerliğini toplayıp en yükseği döner. Gerçek veriden hesaplanır, uydurma değil.
 export function topSeriesInContinent(countryList) {
   const totals = new Map()
   for (const country of countryList || []) {

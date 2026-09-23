@@ -3,9 +3,6 @@ const STROKE = 4
 const RADIUS = (SIZE - STROKE) / 2
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS
 
-// Göreli yüzdelik payı (bkz. src/lib/scoreShare.js) basit bir dairesel gösterge olarak
-// çizer — canlı bir kütüphane yerine tek bir stroke-dasharray hilesiyle, mevcut proje
-// stiliyle (küçük, bağımlılıksız inline bileşenler) tutarlı.
 export default function CircularProgress({ pct, color = '#f0ad4e', label }) {
   const clamped = Math.max(0, Math.min(100, pct))
   const offset = CIRCUMFERENCE * (1 - clamped / 100)

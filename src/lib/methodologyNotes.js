@@ -1,17 +1,31 @@
-// Denetim raporu C.5 — "Skorlama metodolojisi boşlukları". Rapordaki tespit kısaca şuydu:
-// haritanın ana skoru "dizi o ülkede flatrate/free yayında mı × küresel TMDB popülerliği"
-// toplamıdır — yani ERİŞİLEBİLİRLİĞİ ölçer, izlenmeyi değil; ayrıca nüfus/internet/dil
-// normalizasyonu yoktur. Arayüzdeki ipuçları ise "Popülerlik verisine dayalı gösterge." gibi
-// belirsiz ifadelerdi ve karar vericiyi yanlış bir kesinlik hissine bırakıyordu.
-//
-// Bu dosya tek bir doğruluk kaynağı: aynı cümle her yerde birebir aynı geçsin, biri güncellenip
-// diğeri eski kalmasın. Kod değişikliği değil ÇERÇEVELEME işi — sayılar aynı, iddiaları dürüst.
 
 /** Haritanın ve ülke/kıta skorlarının ne ölçtüğü. */
 export const VISIBILITY_SCORE_NOTE =
   'Bu skor ülkelerdeki fiili izlenme oranını değil; ilgili ülkede flatrate/ücretsiz yayında olan ' +
-  'yapımların küresel katalog popülerliğini yansıtır. Nüfus, internet erişimi veya dil için ' +
-  'normalize edilmemiştir — ülkeler arası karşılaştırmada bu sınırı göz önünde bulundurun.'
+  'yapımların küresel katalog popülerliğini yansıtır. Dil için normalize edilmemiştir — ülkeler ' +
+  'arası karşılaştırmada bu sınırı göz önünde bulundurun.'
+
+/** Haritanın VARSAYILAN metriği: nüfusa/internet kullanıcısına bölünmüş skor. */
+export const PER_CAPITA_SCORE_NOTE =
+  'Görünürlük skorunun milyon internet kullanıcısı başına değeri (internet verisi yoksa milyon ' +
+  'kişi başına; kaynak: World Bank). Ham toplam skor, ülkede yayında olan dizilerin KÜRESEL ' +
+  'popülerlik toplamı olduğu için büyük ölçüde katalog büyüklüğünü ölçüyordu (138 ülkede skor ile ' +
+  'dizi sayısı arasındaki korelasyon r = 0,97). Bölme, katalog büyüklüğünü pazar büyüklüğünden ' +
+  'ayırır; yine de erişilebilirliği ölçer, izlenmeyi değil.'
+
+/** Haritanın alternatif metriği: ham toplam. */
+export const TOTAL_SCORE_NOTE =
+  'Ham toplam görünürlük skoru — ülkede yayında olan yapımların küresel popülerliklerinin ' +
+  'toplamı. Pazarın MUTLAK büyüklüğünü okumak için doğru metrik, ama büyük ölçüde katalog ' +
+  'büyüklüğünü yansıtır (dizi sayısıyla korelasyon r = 0,97); ülkeler arası yoğunluk ' +
+  'karşılaştırması için Kişi Başına görünümü kullanın.'
+
+/** Haritanın renk ölçeğinin nasıl kurulduğu. */
+export const MAP_SCALE_NOTE =
+  'Renkler yüzdelik dilime göre atanır: bir ülkenin rengi, diğer ülkelerin yüzde kaçının üstünde ' +
+  'olduğunu gösterir, mutlak farkı değil. Böylece tek bir yüksek değerli ülke gradyanın tamamını ' +
+  'ezmez. Türkiye kaynak ülke olduğu için ölçeğe dahil edilmez ve ayrı renkte gösterilir. ' +
+  'Mutlak sayı için ülke paneline bakın.'
 
 /** Kıta düzeyinde aynı skorun ortalaması. */
 export const CONTINENT_SCORE_NOTE =

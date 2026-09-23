@@ -10,13 +10,6 @@ function round1(n) {
   return Math.round(n * 10) / 10
 }
 
-// Etki & İhracat Analizi sayfasının üstünde, hangi sekme açık olursa olsun görünen özet
-// sayaçlar. Örneklem BÜYÜKLÜĞÜ göstermek yerine (ör. "9 basın taraması") gerçek bir ORAN/skor
-// gösterir — sayaç kendi başına ne kadar veri toplandığını değil, o verinin ne söylediğini
-// özetler. Veri henüz oluşmamışsa (ör. hiç basın taraması yapılmadıysa) o kart dürüstçe "—"
-// gösterir, sıfır ya da uydurma bir sayı değil.
-// Denetim C.5: bu dört sayı karar vericinin ilk gördüğü rakamlar ve hiçbirinin ne ölçtüğü
-// yazmıyordu. Metinler tek kaynaktan (lib/methodologyNotes.js) geliyor.
 export default function ImpactStats() {
   const [stats, setStats] = useState(null)
   const [status, setStatus] = useState('loading')

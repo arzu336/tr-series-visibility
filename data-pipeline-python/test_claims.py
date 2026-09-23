@@ -281,7 +281,10 @@ class TestConfidenceScoring:
         assert c.source_trust_level is SourceTrustLevel.OFFICIAL
 
     def test_tek_korsan_telemetri_kaynak_LOW(self):
-        c = motor().generate_claims(
+        # TELEMETRY_ONLY kapısı yalnız-telemetri iddialarını VARSAYILAN modda düşürüyor
+        # (kullanıcı kararı: bültene/arayüze sızmasın). Güven matrisi keşif modunda test
+        # edilir — kapı güven skorunu değiştirmiyor, yalnızca nereye gidebileceğini sınırlıyor.
+        c = motor(exploratory=True).generate_claims(
             "wd:Q1",
             [
                 seri(
@@ -295,6 +298,9 @@ class TestConfidenceScoring:
         assert c.source_trust_level is SourceTrustLevel.UNOFFICIAL_TELEMETRY
         # Bülten metni kaynağın zayıflığını GİZLEMEMELİ.
         assert "gayriresmi" in c.claim_text
+        # Ve varsayılan yoldan GEÇEMEZ.
+        assert c.passed_gates is False
+        assert "telemetry_only" in c.failed_gates
 
     def test_iki_resmi_kaynak_HIGH(self):
         claims = motor().generate_claims(
@@ -327,7 +333,8 @@ class TestConfidenceScoring:
     def test_iki_korsan_kaynak_HALA_LOW(self):
         # Bilinçli karar: iki korsan kaynağın aynı şeyi söylemesi bağımsız teyit DEĞİLDİR,
         # ikisi de aynı korsan kitleyi ölçer — yanlılıkları ortaktır.
-        c = motor().generate_claims(
+        # (Yalnız-telemetri olduğu için varsayılan modda düşer; keşif modunda inceleniyor.)
+        c = motor(exploratory=True).generate_claims(
             "wd:Q1",
             [
                 seri(
@@ -343,6 +350,7 @@ class TestConfidenceScoring:
             ],
         )[0]
         assert c.confidence_score is ConfidenceScore.LOW
+        assert c.passed_gates is False
 
 
 # --- Dil / ülke karışmasının engellenmesi ------------------------------------------
@@ -432,3 +440,236 @@ class TestRejectionReporting:
         m = motor()
         assert m.generate_claims("wd:Q1", [seri([])]) == []
         assert m.generate_claims("wd:Q1", []) == []
+
+
+# --- Kohort normalizasyonu: fa.wikipedia korpus kayması ----------------------------
+class TestCohortNormalization:
+    """CANLI ÖLÇÜM: 51 Farsça dizinin 50'si aynı pencerede 3 kattan fazla büyüdü
+    (kohort medyanı 4,23x). Aynı dönemde tr 0,96x, ar 1,30x, ru 0,88x, es 0,93x.
+    Yani 50 dizi birden İran'da popüler olmadı — fa.wikipedia korpusunun TAMAMI kaydı.
+    Dizi bazlı kapılar bunu yakalayamaz; her iddia tek tek bakıldığında geçerlidir."""
+
+    FA_MEDYAN = 4.23
+
+    def _korpus(self, carpanlar, *, geo="fa"):
+        """Her dizi için taban 1000, güncel 1000*carpan olan basit bir korpus."""
+        return [
+            (f"wd:Q{i}", [seri([1000] * 3 + [round(1000 * c)] * 3, geo=geo)])
+            for i, c in enumerate(carpanlar)
+        ]
+
+    def test_kohort_medyani_korpustan_hesaplanir(self):
+        from claims import build_cohort_stats, cohort_key
+        from claims_models import GeoKind
+
+        korpus = self._korpus([3.0, 4.0, 4.23, 4.5, 5.0, 6.0])
+        stats = build_cohort_stats(korpus, as_of=SABIT_AS_OF)
+        k = cohort_key("views", "fa", GeoKind.LANGUAGE)
+        assert k in stats
+        assert stats[k].series_count == 6
+        assert 4.0 <= stats[k].median_ratio <= 4.6
+
+    def test_kohortla_BIRLIKTE_hareket_eden_dizi_iddia_URETMEZ(self):
+        from claims import build_cohort_stats
+
+        korpus = self._korpus([4.0, 4.1, 4.2, 4.23, 4.3, 4.4])
+        stats = build_cohort_stats(korpus, as_of=SABIT_AS_OF)
+
+        m = motor()
+        # 4,23x büyüyen bir dizi: ham yüzde +%323 ama kohort medyanıyla aynı.
+        sonuc = m.generate_claims("wd:Q1", [seri([1000] * 3 + [4230] * 3)], cohorts=stats)
+        assert sonuc == []
+        assert m.rejected[0].reason is RejectionReason.COHORT_NEUTRAL
+        assert "kohortla birlikte" in m.rejected[0].detail
+
+    def test_kohorttan_AYRISAN_dizi_iddia_URETIR(self):
+        from claims import build_cohort_stats
+
+        korpus = self._korpus([4.0, 4.1, 4.2, 4.23, 4.3, 4.4])
+        stats = build_cohort_stats(korpus, as_of=SABIT_AS_OF)
+
+        # 8x büyüyen dizi: kohort 4,2x iken bu gerçekten ayrışmış.
+        c = motor().generate_claims("wd:Q1", [seri([1000] * 3 + [8000] * 3)], cohorts=stats)[0]
+        assert c.excess_change_pct is not None
+        assert c.excess_change_pct > 50  # kohortun belirgin üzerinde
+        assert c.cohort_series_count == 6
+
+    def test_iddia_metni_HAM_yuzdeyi_kohortla_birlikte_verir(self):
+        from claims import build_cohort_stats
+
+        stats = build_cohort_stats(self._korpus([4.0, 4.1, 4.2, 4.23, 4.3, 4.4]), as_of=SABIT_AS_OF)
+        c = motor().generate_claims("wd:Q1", [seri([1000] * 3 + [8000] * 3)], cohorts=stats)[0]
+        # Ham yüzde tek başına yanıltıcı — kohort bağlamı aynı cümlede olmalı.
+        assert "kohortunun tamamı" in c.claim_text
+        assert "kohort medyanının" in c.claim_text
+
+    def test_dusen_kohortta_yatay_dizi_AYRISMA_sayilir(self):
+        from claims import build_cohort_stats
+
+        # Kohort yarıya inerken (0,5x) sabit kalan bir dizi, kohortun %100 üzerindedir.
+        stats = build_cohort_stats(self._korpus([0.45, 0.48, 0.5, 0.52, 0.55, 0.5]), as_of=SABIT_AS_OF)
+        m = motor()
+        sonuc = m.generate_claims("wd:Q1", [seri([1000] * 3 + [1000] * 3)], cohorts=stats)
+        # Ham değişim %0 — Effect-Size kapısı bunu kohorttan ÖNCE eler.
+        assert sonuc == []
+        assert m.rejected[0].reason is RejectionReason.EFFECT_TOO_SMALL
+
+    def test_KUCUK_kohortta_duzeltme_UYGULANMAZ(self):
+        from claims import build_cohort_stats
+
+        # 3 dizilik kohortun medyanı tek bir dizinin hareketini yansıtır — gürültü ekler.
+        stats = build_cohort_stats(self._korpus([4.0, 4.2, 4.4]), as_of=SABIT_AS_OF)
+        assert stats == {}
+        c = motor().generate_claims("wd:Q1", [seri([1000] * 3 + [4230] * 3)], cohorts=stats)[0]
+        assert c.cohort_change_pct is None  # düzeltme yok, iddia mutlak okunur
+
+    def test_kohort_VERILMEZSE_davranis_degismez(self):
+        # Geriye uyumluluk: mevcut çağıranlar kohort göndermiyor, sonuç aynı kalmalı.
+        a = motor().generate_claims("wd:Q1", [seri([1000] * 3 + [4230] * 3)])[0]
+        assert a.change_pct == 323.0
+        assert a.cohort_change_pct is None
+        assert a.excess_change_pct is None
+
+    def test_FARKLI_dil_kohortlari_karismaz(self):
+        from claims import build_cohort_stats, cohort_key
+        from claims_models import GeoKind
+
+        korpus = self._korpus([4.0, 4.2, 4.3, 4.4, 4.5, 4.6], geo="fa") + self._korpus(
+            [0.9, 0.95, 1.0, 1.05, 1.1, 0.96], geo="tr"
+        )
+        stats = build_cohort_stats(korpus, as_of=SABIT_AS_OF)
+        fa = stats[cohort_key("views", "fa", GeoKind.LANGUAGE)]
+        tr = stats[cohort_key("views", "tr", GeoKind.LANGUAGE)]
+        assert fa.median_ratio > 4
+        assert 0.9 < tr.median_ratio < 1.1
+
+
+# --- KEŞİF MODU: veri akar, kapı silinmez ------------------------------------------
+class TestKesifModu:
+    """Kullanıcı kararı: "tüm ham veri iddiaya dönüşebilsin, ama sahte sayı bültene girmesin".
+    Kapılar SİLİNMEDİ; keşif modunda adayı düşürmek yerine `passed_gates=False` ile
+    işaretliyorlar. Tüketen taraf (bülten, LLM özeti) yalnızca passed_gates=True olanı kullanır.
+    """
+
+    def test_dusuk_hacim_VARSAYILANDA_elenir(self):
+        assert motor().generate_claims("wd:Q1", [seri([20, 20, 20, 40, 40, 40])]) == []
+
+    def test_dusuk_hacim_KESIFTE_iddiaya_donusur_ama_ISARETLENIR(self):
+        c = motor(exploratory=True).generate_claims("wd:Q1", [seri([20, 20, 20, 40, 40, 40])])[0]
+        assert c.passed_gates is False
+        assert "volume" in c.failed_gates
+        assert c.change_pct == 100.0  # hesap yine doğru, sadece doğrulanmamış
+
+    def test_kucuk_degisim_KESIFTE_gecer(self):
+        c = motor(exploratory=True).generate_claims(
+            "wd:Q1", [seri([1000, 1000, 1000, 1030, 1030, 1030])]
+        )[0]
+        assert c.passed_gates is False
+        assert "effect_too_small" in c.failed_gates
+
+    def test_aykiri_pencere_KESIFTE_gecer_ama_isaretli(self):
+        c = motor(exploratory=True).generate_claims(
+            "wd:Q1", [seri(TestWindowStabilityGate.FA_GERCEK, baslangic=(2026, 1))]
+        )[0]
+        assert c.passed_gates is False
+        assert "window_unstable" in c.failed_gates
+
+    def test_birden_fazla_kapi_HEPSI_kaydedilir(self):
+        # Taban 180 (near_zero eşiği 50'nin üstünde), toplam 369 < 500 -> volume;
+        # değişim %5 < %10 -> effect_too_small. İki kapı birden, üçüncüsü DEĞİL.
+        c = motor(exploratory=True).generate_claims("wd:Q1", [seri([60, 60, 60, 63, 63, 63])])[0]
+        assert c.passed_gates is False
+        assert set(c.failed_gates) == {"volume", "effect_too_small"}
+
+    def test_cok_kucuk_taban_ayri_kapi_olarak_kaydedilir(self):
+        # Taban 30 < 50: hem volume hem near_zero_baseline tetiklenir, ikisi de kaydedilmeli.
+        c = motor(exploratory=True).generate_claims("wd:Q1", [seri([10, 10, 10, 11, 11, 11])])[0]
+        assert set(c.failed_gates) == {"volume", "near_zero_baseline"}
+
+    def test_TEMIZ_veri_kesif_modunda_da_DOGRULANMIS_kalir(self):
+        c = motor(exploratory=True).generate_claims("wd:Q1", [seri([1000] * 3 + [2000] * 3)])[0]
+        assert c.passed_gates is True
+        assert c.failed_gates == []
+
+    def test_dogrulanmamis_iddia_METINDE_de_uyarir(self):
+        # Çıktı bağlamından koparılıp kopyalansa bile uyarı onunla gitmeli.
+        c = motor(exploratory=True).generate_claims("wd:Q1", [seri([20, 20, 20, 40, 40, 40])])[0]
+        assert "DOĞRULANMAMIŞ" in c.claim_text
+        assert "volume" in c.claim_text
+
+    def test_varsayilan_mod_DEGISMEDI(self):
+        # Geriye uyumluluk: exploratory verilmezse hiçbir çağıranın davranışı değişmez.
+        m = motor()
+        assert m.exploratory is False
+        assert m.generate_claims("wd:Q1", [seri([0, 0, 0, 5000, 5000, 5000])]) == []
+
+
+class TestSifirTabanKesifte:
+    """Sıfır taban TEK İSTİSNA: keşif modunda bile yüzde üretilmez. 0'a bölme esnetilecek
+    bir eşik değil, tanımsız bir işlem. Olay `from_zero` ile taşınır."""
+
+    def test_sifirdan_cikis_YUZDE_uretmez(self):
+        c = motor(exploratory=True).generate_claims(
+            "wd:Q1", [seri([0, 0, 0, 5000, 5000, 5000])]
+        )[0]
+        assert c.change_pct is None
+        assert c.from_zero is True
+        assert "zero_baseline" in c.failed_gates
+
+    def test_sifirdan_cikis_OLAY_olarak_korunur(self):
+        c = motor(exploratory=True).generate_claims(
+            "wd:Q1", [seri([0, 0, 0, 5000, 5000, 5000])]
+        )[0]
+        assert c.baseline_value == 0
+        assert c.current_value == 15000
+        assert c.direction == "artis"  # yön var, yüzde yok
+        assert "SIFIRDAN" in c.claim_text
+
+    def test_uydurma_sonsuz_yuzde_URETILMEZ(self):
+        c = motor(exploratory=True).generate_claims("wd:Q1", [seri([0] * 3 + [9999] * 3)])[0]
+        assert c.change_pct is None
+        assert not isinstance(c.change_pct, float)
+
+
+class TestCikisSozlesmesi:
+    """Doğrulanmamış iddialar arayüze/bültene/LLM'e ASLA ulaşmamalı. Sözleşme kaynakta:
+    dışarı çıkış tek kapıdan geçiyor ve kapı varsayılan olarak kapalı."""
+
+    def _karisik(self):
+        m = motor(exploratory=True)
+        return m.generate_claims(
+            "wd:Q1",
+            [
+                seri([1000] * 3 + [2000] * 3, source="wikipedia:fa"),  # temiz
+                seri([20, 20, 20, 40, 40, 40], source="wikipedia:tr", geo="tr"),  # hacim kapısı
+            ],
+        )
+
+    def test_verified_only_yalnizca_temizi_birakir(self):
+        from claims import verified_only
+
+        hepsi = self._karisik()
+        temiz = verified_only(hepsi)
+        assert len(hepsi) > len(temiz)
+        assert all(c.passed_gates for c in temiz)
+
+    def test_to_public_payload_KIRLI_listede_HATA_verir(self):
+        from claims import UnverifiedClaimError, to_public_payload
+
+        with pytest.raises(UnverifiedClaimError, match="doğrulanmamış"):
+            to_public_payload(self._karisik())
+
+    def test_sessiz_suzme_BILINCLI_olmali(self):
+        # strict=False bilinçli bir tercih; varsayılan değil. Keşif çıktısını yanlışlıkla
+        # bülten yoluna vermek gürültüsüz başarısız olmamalı.
+        from claims import to_public_payload
+
+        sonuc = to_public_payload(self._karisik(), strict=False)
+        assert all(d["passed_gates"] for d in sonuc)
+
+    def test_temiz_liste_sorunsuz_gecer(self):
+        from claims import to_public_payload, verified_only
+
+        sonuc = to_public_payload(verified_only(self._karisik()))
+        assert len(sonuc) >= 1
+        assert all(d["passed_gates"] for d in sonuc)

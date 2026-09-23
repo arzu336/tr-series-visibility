@@ -3,14 +3,6 @@ import { getEnrichedVisibility } from '../data-pipeline.js'
 import { getExpandedCandidatePool, getTravelLeadingIndicator, LEADING_INDICATOR_LAG_WEEKS } from './tourismCorrelation.js'
 import { getSerpApiUsageThisMonth, TIMESERIES_TTL_MS } from './serpApiCache.js'
 
-// "3-6 Aylık Öncü Turizm Sinyali" — tourismCorrelation.js'in computeTourismCorrelation'ı ANLIK
-// bir istekte SADECE en yüksek görünürlüklü TEK ülke için öncü sinyal hesaplıyordu (bkz. o
-// dosyadaki getTravelLeadingIndicator çağrısı). Burada AYNI fonksiyon (artık travelQuery
-// parametreli) YİGM bültenine eşleşen ilk 15 ülke × 3 seyahat sorgusu ("Travel to Turkey",
-// "Istanbul", "Antalya") için haftalık olarak çalıştırılır, sonuç tourism_leading_signal'e yazılır.
-// Not: "Travel to Turkey" önceki gerçek testte İspanya'da neredeyse hep 0 çıkmıştı (bkz.
-// tourismCorrelation.js'teki not) — o bulgu burada yok sayılmıyor, sadece kullanıcının açıkça
-// istediği 3 sorgu da GERÇEK veriyle denenip sonuç ne çıkarsa dürüstçe kaydediliyor.
 const TRAVEL_QUERIES = ['Travel to Turkey', 'Istanbul', 'Antalya']
 const TOP_COUNTRY_COUNT = 15
 const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000
@@ -56,14 +48,11 @@ export async function runTourismTrendsCollectionIfNeeded() {
 
     outer: for (const candidate of candidates) {
       if (!candidate.topSeriesName) {
-        // Bu ülke için henüz "öne çıkan dizi" bilgisi yok — uydurma bir dizi adıyla arama
-        // yapılmaz, dürüstçe atlanır (bkz. computeTourismCorrelation'daki aynı prensip).
         skippedNoSeries++
         continue
       }
       for (const travelQuery of TRAVEL_QUERIES) {
         const usage = getSerpApiUsageThisMonth()
-        // Her tur 2 gerçek çağrı harcayabilir (dizi + seyahat sorgusu TIMESERIES).
         if (usage.used >= usage.budget - 1) {
           const remaining = (candidates.length - computed - skippedNoSeries) * TRAVEL_QUERIES.length
           console.warn(
@@ -103,23 +92,13 @@ export async function runTourismTrendsCollectionIfNeeded() {
   }
 }
 
-// /api/impact/tourism için özet — sadece HÂLÂ TAZE (expires_at > şimdi) satırlar döner, süresi
-// dolmuş bir sinyal sessizce "güncel" gibi gösterilmez. En güçlü (|correlation| en yüksek) sinyal
-// öne çıkarılır, ama TÜM satırlar da (frontend ileride isterse) dönülür.
 const getFreshSignalsStmt = db.prepare(
   'SELECT country_iso2, travel_query, top_series_name, lag_weeks, correlation, sample_size, computed_at FROM tourism_leading_signal WHERE expires_at > ?'
 )
 
-// Pearson r'nin p<0,05 (çift yönlü) için kritik değeri. Örneklem küçükken |r| tesadüfen yüksek
-// çıkabilir; bu eşik olmadan arayüz 0,27'lik bir gürültüyü "sinyal" diye gösterirdi. df = n-2 için
-// t kritik değeri Student-t tablosundan yaklaşık alınır (df>30 aralığında 2,04 civarı, normale
-// yakınsar) ve r_kritik = t / sqrt(df + t²) ile çevrilir. Yaklaşık bir eşiktir — kesin bir p
-// değeri iddia edilmez, sadece "bu örneklemde bu büyüklük ayırt edilebilir mi" sorusuna dürüst
-// bir evet/hayır verir.
 function kritikKorelasyon(sampleSize) {
   const df = sampleSize - 2
   if (df < 3) return null
-  // df>30 için t≈2,04; küçük örneklemlerde daha muhafazakâr (daha yüksek) eşikler.
   const t = df >= 30 ? 2.04 : df >= 20 ? 2.09 : df >= 10 ? 2.23 : 2.57
   return Math.round((t / Math.sqrt(df + t * t)) * 1000) / 1000
 }
@@ -139,15 +118,11 @@ export function getTourismLeadingSignalSummary() {
       correlation: r.correlation,
       sampleSize: r.sample_size,
       computedAt: r.computed_at,
-      // Yön, büyüklükten AYRI taşınır: negatif korelasyon "zayıf pozitif" değil, TERS yönlü
-      // hareket demektir ve arayüzde öyle gösterilmelidir.
       direction: r.correlation > 0 ? 'pozitif' : r.correlation < 0 ? 'negatif' : 'nötr',
       criticalR,
       significant: criticalR != null && Math.abs(r.correlation) >= criticalR,
     }
   })
-  // Sıralama |r|'ye göre yapılır ama ÖNCE anlamlı olanlar gelir — böylece arayüzde en üstteki
-  // satır her zaman "gösterilmeye değer" olandır.
   const sirali = [...signals].sort((a, b) => {
     if (a.significant !== b.significant) return a.significant ? -1 : 1
     return Math.abs(b.correlation) - Math.abs(a.correlation)
@@ -160,8 +135,6 @@ export function getTourismLeadingSignalSummary() {
     signalCount: signals.length,
     significantCount: anlamliSayisi,
     signals: sirali,
-    // Anlamlı bir sinyal YOKSA "en güçlü" diye bir şey öne çıkarmıyoruz — gürültüyü bulgu gibi
-    // sunmak bu projedeki en temel dürüstlük kuralına aykırı olurdu.
     strongestSignal: anlamliSayisi > 0 ? sirali[0] : null,
   }
 }

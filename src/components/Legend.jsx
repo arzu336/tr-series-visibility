@@ -1,21 +1,30 @@
-import { legendStops, proxyLegendStops } from '../lib/scale.js'
-import { VISIBILITY_SCORE_NOTE } from '../lib/methodologyNotes.js'
+import {
+  legendStops,
+  proxyLegendStops,
+  SOURCE_COUNTRY_COLOR,
+  SMALL_SAMPLE_COLOR,
+  MAP_METRICS,
+} from '../lib/scale.js'
+import {
+  VISIBILITY_SCORE_NOTE,
+  PER_CAPITA_SCORE_NOTE,
+  TOTAL_SCORE_NOTE,
+  MAP_SCALE_NOTE,
+} from '../lib/methodologyNotes.js'
 
-// Haritanın koyu lacivert "veri yok" dolgusu (Map2D/Globe3D'deki NO_DATA_COLOR ile aynı değer).
-// Lejantta gösterilmesi gerekiyor: kullanıcı bir ülkenin boş mu, düşük skorlu mu olduğunu
-// ayırt edemiyordu — koyu lacivert, camgöbeği skalasının en soğuk durağına yakın okunuyor.
 const NO_DATA_COLOR = '#131c31'
 
-// caption verilmezse (madde 1 — dizi bazlı harita filtresi aktif değilken) varsayılan TMDB
-// açıklaması gösterilir; seriesFilter aktifken App.jsx buraya gerçek anlamı (Google Trends
-// arama ilgisi) yansıtan bir açıklama geçer — aynı renk skalası farklı bir metriğe
-// uygulandığında kullanıcı bunun ne olduğunu yanlış anlamasın diye.
-//
-// `showLayers`: haritada gerçekten üç katman birden görünürken (varsayılan görünüm) tahmin ve
-// "veri yok" satırları da gösterilir. Dizi/oyuncu filtresi aktifken (caption verilmişken) harita
-// tek bir metriği boyar, o katmanlar o an ekranda yoktur ve lejantta gösterilmeleri yanıltıcı olur.
-export default function Legend({ caption }) {
+export default function Legend({ caption, metric = MAP_METRICS.PER_CAPITA }) {
   const showLayers = !caption
+  const kisiBasina = metric === MAP_METRICS.PER_CAPITA
+  const metrikBasligi = kisiBasina
+    ? 'Kültürel Görünürlük — Kişi Başına'
+    : 'Kültürel Görünürlük — Toplam'
+  const metrikNotu = `${kisiBasina ? PER_CAPITA_SCORE_NOTE : TOTAL_SCORE_NOTE}
+
+${MAP_SCALE_NOTE}
+
+${VISIBILITY_SCORE_NOTE}`
 
   return (
     <div className="legend">
@@ -29,8 +38,8 @@ export default function Legend({ caption }) {
       {/* Denetim C.5: varsayılan ipucu "Popülerlik × yayın erişimi — proxy gösterge." idi;
           ne ölçtüğünü değil, ne olmadığını da söylemiyordu. Artık tek kaynaktan (lib/
           methodologyNotes.js) gelen açık çerçeve. */}
-      <p className="legend__caption" title={caption || VISIBILITY_SCORE_NOTE}>
-        {caption ? caption.split(' — ')[0] : 'Kültürel Görünürlük Skoru'} ⓘ
+      <p className="legend__caption" title={caption || metrikNotu}>
+        {caption ? caption.split(' — ')[0] : metrikBasligi} ⓘ
       </p>
 
       {/* Haritada kullanılan AMA lejantta hiç açıklanmayan iki renk vardı: tahmin katmanının
@@ -51,6 +60,33 @@ export default function Legend({ caption }) {
               ⚡ Tahmin — arama ilgisi ⓘ
             </span>
           </div>
+          {/* Kaynak ülke: ölçeğe dahil DEĞİL. Türkiye ham veride en yüksek skora sahip (1690,
+              ikinci sıradaki 1126) ve min-max ölçekte gradyanın %34'ünü tek başına yiyordu.
+              Bir ihracat panelinde kaynak ülkenin "en görünür pazar" olarak okunması da
+              yanıltıcıydı. Renk bilerek skalanın dışında bir hue. */}
+          <div className="legend__layer">
+            <span className="legend__swatch" style={{ background: SOURCE_COUNTRY_COLOR }} />
+            <span
+              className="legend__layer-label"
+              title="Türkiye dizilerin kaynak ülkesi, bir ihracat pazarı değil. Renk ölçeğine dahil edilmez — edilseydi ölçeğin tavanını belirleyip diğer ülkeleri alt bölgeye sıkıştırırdı. Ülke verisi panelde tam olarak görünmeye devam eder."
+            >
+              Kaynak ülke — ölçek dışı ⓘ
+            </span>
+          </div>
+          {/* Yalnızca kişi başına metrikte anlamlı: paydası 1 milyon internet kullanıcısının
+              altındaki ülkelerde oran istikrarsız (San Marino gibi yerler eşiksiz hâlde
+              sıralamanın tepesine çıkıyordu). Ölçeğe alınmazlar ama haritadan silinmezler. */}
+          {kisiBasina && (
+            <div className="legend__layer">
+              <span className="legend__swatch" style={{ background: SMALL_SAMPLE_COLOR }} />
+              <span
+                className="legend__layer-label"
+                title="Bu ülkelerde 1 milyondan az internet kullanıcısı var. Kişi başına oran böyle küçük paydalarda istikrarsızlaşır (çok küçük bir nüfusa bölünen skor yapay olarak yükseğe fırlar), bu yüzden renk ölçeğine dahil edilmezler. Veri eksik DEĞİL — ülke paneli tam değerleri gösterir; güvenilir olmayan şey oranın kendisidir."
+              >
+                Yetersiz örneklem — ölçek dışı ⓘ
+              </span>
+            </div>
+          )}
           <div className="legend__layer">
             <span className="legend__swatch" style={{ background: NO_DATA_COLOR }} />
             <span

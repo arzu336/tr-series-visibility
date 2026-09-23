@@ -1,22 +1,7 @@
 import { getRawSeriesDataCached } from '../data-pipeline.js'
 
-// Denetim bulguları G-01 ve B-15: ücretli SerpAPI/LLM çağrısı tetikleyen uçlar ham
-// :seriesName / :iso2 parametrelerini doğrudan dış servise geçiriyordu. Önbellek anahtarı ham
-// dizeyi içerdiği için HER benzersiz değer yeni bir ücretli çağrıydı — onaylı tek bir kullanıcı
-// (hatta yanlışlıkla) aylık bütçeyi saatler içinde bitirebiliyordu. Bu modül iki katman ekler:
-//   1) Girdi doğrulama — bilinmeyen dizi adı / geçersiz ülke kodu dış servise HİÇ ulaşmaz (400).
-//   2) Kullanıcı başına GÜNLÜK canlı çağrı kotası — services/liveCallQuota.js'te (o modül
-//      bilerek yalnızca db.js'e bağımlı, çünkü llm.js de ondan import ediyor).
-
 const regionNames = new Intl.DisplayNames(['en'], { type: 'region' })
 
-// Denetim bulgusu D-3: `Intl.DisplayNames` yalnızca ülkeleri değil, ISO 3166-1'in "kullanıcı
-// tanımlı"/toplu kodlarını da tanır ve bunlara ad döndürür — dolayısıyla `geo=EU` gibi bir değer
-// doğrulamadan geçip ücretli bir dış çağrı açabiliyordu. Bunların hiçbiri tek bir ülke değildir:
-//   ZZ = Unknown Region (Intl'in joker kodu)   EU = Avrupa Birliği     EZ = Euro Bölgesi
-//   UN = Birleşmiş Milletler                    QO = Uzak Okyanusya (toplu bölge)
-//   XA/XB = Intl'in sözde-aksan test kodları    AC/TA = Ascension / Tristan da Cunha (dolaylı)
-// Liste bilinçli olarak KISA: amaç ülke listesini budamak değil, ülke OLMAYAN kodları elemek.
 const ULKE_OLMAYAN_KODLAR = new Set(['ZZ', 'EU', 'EZ', 'UN', 'QO', 'XA', 'XB'])
 
 /**

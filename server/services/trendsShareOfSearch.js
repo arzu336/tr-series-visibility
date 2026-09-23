@@ -1,26 +1,11 @@
 import { cacheFirstSerpApi, serpapiGet, TRENDS_TTL_MS } from './serpApiCache.js'
 
-// Modül B — bir ülkede yayında olan en fazla 5 Türk dizisini TEK bir SerpAPI google_trends
-// çağrısında (data_type=TIMESERIES, virgülle ayrılmış q) karşılaştırıp göreceli "Share of
-// Search" (arama payı, 0-100) çıkarır. server/serpapi.js'teki tekil-dizi GEO_MAP_0 sorgusundan
-// FARKLI bir uç nokta şekli — burada ayrı bir cache anahtar alanı (serp:sos:) kullanılıyor,
-// server/regional-interest.js'in kullandığı serp:trends: ile KARIŞTIRILMIYOR (farklı veri
-// şekli, farklı SerpAPI parametreleri).
-//
-// SerpAPI/Google Trends TEK sorguda EN FAZLA 5 terimi kabul ediyor (doğrulandı, bkz.
-// data-pipeline-python/trends_country_ranker.py docstring'i — 6. terimde "Maximum number of
-// queries accepted is 5" hatası dönüyor). Bu yüzden 5'ten fazla dizi ile çağrılırsa (ör.
-// countryScoringEngine.js top-5 seçimini atlarsa) burada bilerek İLK 5 alınır, sessizce
-// bölünüp gruplara ayrılmaz (o karmaşıklık sadece >5 gerçekten gerektiğinde,
-// trends_country_ranker.py'nin Python tarafında var).
 const MAX_TERMS = 5
 
 function normalizeTitle(title) {
   return title.trim().toLocaleLowerCase('tr')
 }
 
-// iso2 opsiyonel — TrendsExplorer.jsx'in Kıyaslama Modu KÜRESEL (geo verilmez) çalışır; ülke
-// bazlı çağıran countryScoringEngine.js davranışı DEĞİŞMEDEN aynı kalır.
 function shareOfSearchCacheKey(iso2, titles) {
   const sorted = titles.map(normalizeTitle).sort()
   return `serp:sos:${iso2 ? iso2.toUpperCase() : 'WW'}:${sorted.join('|')}`
@@ -33,9 +18,6 @@ async function fetchShareOfSearchRaw(titles, iso2, timeframe) {
 
   const averages = data.interest_over_time?.averages || []
   const rawByTitle = new Map(averages.map((a) => [a.query, a.value]))
-  // Share of Search: bu ülke/zaman aralığında dizilerin BİRBİRİNE GÖRE arama hacmi payı.
-  // Toplam ilgi hiç yoksa (tüm değerler 0) bölme hatası yerine dürüstçe eşit pay (uydurma
-  // bir "kazanan" göstermemek için) değil, sıfır pay döndürülür — aşağıda total guard'ı.
   const total = averages.reduce((sum, a) => sum + (a.value || 0), 0)
   const items = titles.map((title) => {
     const raw = rawByTitle.get(title) ?? 0
@@ -66,12 +48,6 @@ export async function calculateShareOfSearch(iso2, titles, timeframe = 'today 12
   return cacheFirstSerpApi(key, TRENDS_TTL_MS, () => fetchShareOfSearchRaw(titles, iso2, timeframe))
 }
 
-// --- Bölgesel Üstünlük (ComparisonView.jsx) --------------------------------------------------
-// GERÇEK SerpAPI testiyle doğrulandı (2026-09-01): data_type=GEO_MAP_0 BİRDEN FAZLA sorguyu
-// kabul ETMİYOR ("Please change the data_type to one that supports multiple queries" hatası) —
-// çoklu terimle ülke bazlı karşılaştırma için doğru değer data_type=GEO_MAP (alt çizgisiz).
-// Yanıttaki compared_breakdown_by_region[].geo ZATEN iso2 kodu — ayrıca bir ülke-adı→iso2
-// eşleştirmesine (resolveIso2FromLabel) gerek yok, gerçek yanıtta doğrulandı.
 function regionalBreakdownCacheKey(titles) {
   const sorted = titles.map(normalizeTitle).sort()
   return `serp:regional-breakdown:${sorted.join('|')}`
@@ -122,8 +98,6 @@ export async function getRegionalBreakdown(titles, n = 10, timeframe = 'today 12
   const primaryTitle = titles[0]
   const shareOf = (row, title) => row.values.find((v) => v.title === title)?.value ?? 0
   const allRows = result.rows
-  // Sıralama ölçütü: ilk seçilen dizinin o ülkedeki payı (eşitlikte ikinci dizininki, vb.) —
-  // sabit 100 olan toplam değil (bkz. yukarıdaki ölçek notu).
   const topRows = [...allRows]
     .sort((a, b) => {
       for (const title of titles) {

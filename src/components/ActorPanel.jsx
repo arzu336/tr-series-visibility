@@ -4,18 +4,6 @@ import { fetchPersonImpact, fetchImdbData } from '../lib/api.js'
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185'
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 
-// Bir oyuncunun (CastBar.jsx'te tıklanan) zaten takip ettiğimiz Türk dizileri arasındaki
-// diğer rollerini ve bu dizilerin küresel görünürlük dağılımını gösterir — server/cast.js
-// bunu ayrı bir TMDB isteği yapmadan, zaten cache'lenmiş kadro verisinden hesaplar.
-// Eskiden ortada bir modal olarak açılıyordu; artık CountryPanel'in sağ paneldeki aynı
-// slotunun içinde render ediliyor (bkz. CountryPanel.jsx) — bu yüzden kendi backdrop/kapatma
-// çerçevesi yok, sadece içerik döndürür.
-//
-// Not: "yayın platformu" burada gösterilmiyor — server/tmdb.js'teki sağlayıcı verisi
-// (STREAMABLE_KEYS) doğası gereği ÜLKE BAZLI (aynı dizi bir ülkede Netflix'te, başka bir
-// ülkede farklı bir platformda olabilir); dizi başına tek bir "platform" alanı göstermek
-// gerçek veriyi yanlış temsil eder/uydurma bir basitleştirme olurdu, bu yüzden bilinçli
-// olarak eklenmedi (bkz. proje genelindeki "gerçek veri yoksa uydurulmaz" ilkesi).
 export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlobal }) {
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
@@ -48,9 +36,6 @@ export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlob
     }
   }, [personId])
 
-  // Oyuncunun listelenen her dizisi için gerçek IMDb puanını (zaten server tarafında
-  // 30 gün önbelleklenen OMDb verisi) paralel olarak çeker — CountryPanel/MapPopupCard'ın
-  // kullandığı aynı /api/imdb uç noktası, uydurma bir puan üretilmez.
   useEffect(() => {
     if (status !== 'ready' || !data?.series?.length) return
     let cancelled = false

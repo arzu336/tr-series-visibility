@@ -2,13 +2,6 @@ import { suggestControlCountry } from '../control-matching.js'
 import { getVisitorSeries, getTrackedIso2s, pickBeforeAfterPair } from './tourismData.js'
 import { cacheFirstSerpApi, fetchTrendsTimeSeriesRaw, timeSeriesCacheKey, TIMESERIES_TTL_MS } from './serpApiCache.js'
 
-// "Turizm ve İhracat Korelasyonu" modülünün ekonometrik çekirdeği. Önceki sürüm (server/impact.js
-// içindeydi) SADECE "son 7 günde yükselen" 3-5 ülkeye bakıyordu — YİGM bülteni aslında 81 ülkeyi
-// kapsıyor (doğrulandı, bkz. aşağıdaki not), bu yüzden örneklem yapay şekilde küçüktü. Burada
-// "yükseliyor mu" filtresi kaldırılıp GERÇEKTEN görünürlüğü yüksek olan ilk N pazara bakılıyor —
-// N gerçek veriyle test edildi, 81 YİGM-izlenen ülkenin TAMAMI zaten görünürlük skoru olan
-// ülkelerle örtüşüyor (2026-08-26'da doğrulandı), yani en az 15-20 aday her zaman bulunabiliyor.
-
 function mean(arr) {
   return arr.reduce((a, b) => a + b, 0) / arr.length
 }
@@ -52,12 +45,6 @@ export function differenceInDifferences({ treatmentBefore, treatmentAfter, contr
   }
 }
 
-// --- p-değeri: Pearson r için iki-kuyruklu t-testi ---------------------------------------------
-// Bu kod tabanında hiç istatistik kütüphanesi yok (bkz. yukarıdaki 3 fonksiyon da elle yazılmış)
-// — burada da aynı gelenek: standart "incomplete beta function" algoritmasıyla (Numerical
-// Recipes) t-dağılımının kuyruk olasılığı hesaplanıyor. GERÇEK referans kritik t-değerleriyle
-// doğrulandı (2026-08-26): df=10,t=2.228→p=0.0500; df=15,t=2.131→p=0.0500; df=10,t=3.169→
-// p=0.0100 — hepsi 4 basamağa kadar tutarlı.
 function logGamma(x) {
   const cof = [
     76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2,
@@ -121,15 +108,13 @@ function tDistTwoTailedP(t, df) {
   return incompleteBeta(x, df / 2, 0.5)
 }
 
-// n<3 iken serbestlik derecesi (df=n-2) sıfır/negatif olur, tanımsız — null döner (uydurma bir
-// p-değeri yerine dürüstçe "hesaplanamaz").
 export function pValueForPearsonR(r, n) {
   if (n < 3) return null
   const df = n - 2
   const rc = Math.max(-0.999999, Math.min(0.999999, r))
   if (rc === 0) return 1
   const t = rc * Math.sqrt(df / (1 - rc * rc))
-  return Math.round(tDistTwoTailedP(Math.abs(t), df) * 10000) / 10000 // 0-1 arası olasılık, 4 basamağa yuvarlı
+  return Math.round(tDistTwoTailedP(Math.abs(t), df) * 10000) / 10000
 }
 
 function round1(n) {
@@ -140,11 +125,6 @@ function round2(n) {
   return Math.round(n * 100) / 100
 }
 
-// --- Genişletilmiş aday havuzu -----------------------------------------------------------------
-// "Son 7 günde yükseliyor" filtresi YOK artık — bunun yerine dizi görünürlüğü GERÇEKTEN yüksek
-// olan (skор bazında) ilk N pazar, YİGM'in izlediği 81 ülkeyle kesişimi alınarak seçiliyor.
-// 2026-08-26'da gerçek veriyle doğrulandı: 81 YİGM ülkesinin TAMAMI aynı zamanda görünürlük
-// skoruna sahip — yani bu kesişim pratikte hep TOP_N_CANDIDATES kadar sonuç veriyor.
 const TOP_N_CANDIDATES = 20
 
 export function getExpandedCandidatePool(countries, n = TOP_N_CANDIDATES) {
@@ -161,9 +141,6 @@ export function getExpandedCandidatePool(countries, n = TOP_N_CANDIDATES) {
     }))
 }
 
-// Adayların hepsi zaten yüksek dizi görünürlüğüne sahip pazarlar olduğu için, birbirlerini
-// kontrol ülkesi olarak önermeleri yanlış olur (ikisi de "tedavi" grubunda sayılmalı) — tüm
-// aday havuzu dışlama kümesi olarak geçiliyor.
 async function withSuggestedControls(candidates) {
   const excludeIso2Set = new Set(candidates.map((c) => c.iso2))
   return Promise.all(
@@ -179,13 +156,6 @@ async function withSuggestedControls(candidates) {
   )
 }
 
-// --- Google Trends öncü seyahat sinyali (bkz. serpApiCache.js fetchTrendsTimeSeriesRaw) --------
-// 3-6 aylık gecikme aralığının ORTASI (16 hafta ≈ 4 ay) BİLEREK TEK BİR gecikme olarak sabit
-// tutuluyor — birden fazla gecikmeyi deneyip en yüksek korelasyonu veren gecikmeyi seçmek çoklu
-// karşılaştırma yanlılığı (p-hacking) yaratır. "Turkey Travel" gerçek testte İspanya'da 53
-// haftanın neredeyse tamamında 0 çıktı (arama hacmi çok düşük) — "Istanbul" tutarlı, gerçek
-// mevsimsel varyasyon gösterdi (2026-08-26 doğrulandı), bu yüzden öncü gösterge terimi olarak
-// "Istanbul" kullanılıyor.
 export const LEADING_INDICATOR_LAG_WEEKS = 16
 const LEADING_INDICATOR_TIMEFRAME = 'today 12-m'
 const TRAVEL_QUERY = 'Istanbul'
@@ -199,10 +169,6 @@ export function lagCorrelation(diziValues, travelValues, lagWeeks) {
   return { r: round2(pearsonCorrelation(xs, ys)), n }
 }
 
-// travelQuery parametreli hale getirildi (varsayılan hâlâ "Istanbul", tek-ülke korelasyon akışı
-// aşağıda değişmeden çalışır) — server/services/tourismTrendsCollector.js AYNI fonksiyonu 15
-// ülke × 3 sorgu ("Travel to Turkey"/"Istanbul"/"Antalya") için tekrar kullanır, gecikme/korelasyon
-// mantığı iki yerde ayrı ayrı yazılmaz.
 export async function getTravelLeadingIndicator(iso2, topSeriesName, travelQuery = TRAVEL_QUERY) {
   if (!topSeriesName) return null
   try {
@@ -244,10 +210,6 @@ export const PENDING_ANALYSIS = {
   ],
 }
 
-// Ana orkestrasyon: genişletilmiş aday havuzu → otomatik kontrol ülkesi eşleştirmesi → DiD →
-// Pearson r + p-değeri + %95 GA → (en yüksek görünürlüklü eşleşen aday için) öncü seyahat
-// sinyali. Hiçbir aşamada uydurma veri yok — veri örtüşmüyorsa o ülke listeden düşer, öncü
-// sinyal hesaplanamazsa null döner.
 export async function computeTourismCorrelation(countries) {
   const candidates = getExpandedCandidatePool(countries)
   if (candidates.length === 0) return null
@@ -283,10 +245,6 @@ export async function computeTourismCorrelation(countries) {
       didEstimate: did.didEstimate,
       treatmentChangePct: did.treatmentChangePct,
       controlChangePct: did.controlChangePct,
-      // Kullanıcının istediği 2 durumlu rozet (Pozitif Katkı / Nötr) — didEstimate negatifse de
-      // "Nötr" sayılır (üçüncü bir "Negatif" durumu BİLEREK eklenmedi, tek bir negatif DiD
-      // tahmini "dizi turizme zarar veriyor" gibi güçlü bir iddia için tek başına yeterli kanıt
-      // değil; ama pozitif bir katkıyı öne çıkarmak makul).
       impactBadge: did.didEstimate > 0 ? 'pozitif-katki' : 'notr',
     })
   }

@@ -53,18 +53,6 @@ function rowToEntry(row) {
   }
 }
 
-// Her dizi özetini dahili LLM sunucusuna gönderip tema/güven skoru çıkarır —
-// sadece henüz sınıflandırılmamış (yeni) diziler için, en fazla
-// CLASSIFY_CONCURRENCY kadar eşzamanlı istekle (TMDB'nin top-200 listesi
-// rotasyon yaptığında onlarca yeni dizi birden sıraya girebiliyor).
-// Denetim bulgusu O-4: index.js her `/api` isteğini `runWithUserContext(userId, …)` içinde
-// çalıştırıyor. TMDB'nin 24 saatlik önbelleği dolduğunda, o an gelen İLK kullanıcı isteği bu
-// katalog geneli sınıflandırmayı tetikliyor ve BEKLEYEN TÜM dizilerin LLM çağrıları o kullanıcının
-// 150'lik günlük kotasına yazılıyordu. Soğuk bir veritabanında bu yüzlerce çağrı demek: kullanıcı
-// hiçbir şey yapmadan kotasını tüketiyor, kota dolunca da themes.js kalan dizileri üstel geri
-// çekilmeli "hata" olarak kaydediyor — yani BİR kullanıcının kotası KURUM kataloğunun verisini
-// bozuyordu. Bu iş kimin tetiklediğinden bağımsız, kurumsal bir arka plan işidir: kullanıcı
-// bağlamı dışında (userId=null) çalıştırılır, böylece kotaya hiç yazılmaz.
 export function ensureClassified(series) {
   return runWithUserContext(null, () => ensureClassifiedInner(series))
 }
@@ -117,9 +105,6 @@ export function setHumanOverride(seriesId, theme, reviewer) {
   return rowToEntry(selectOneStmt.get(id))
 }
 
-// İnsan override'ını siler, kaydı LLM'in orijinal sınıflandırmasına döndürür — Analist
-// Paneli'ndeki "AI önerisine geri dön" butonu için (bkz. AnalystDashboard.jsx). Orijinal
-// LLM sonucu (theme/confidence) hiç silinmiyor, sadece override_* kolonları NULL'a çekiliyor.
 export function clearHumanOverride(seriesId) {
   const id = Number(seriesId)
   const row = selectOneStmt.get(id)

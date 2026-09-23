@@ -8,9 +8,6 @@ import {
   ISO2_TO_FIPS,
 } from './gdeltNews.js'
 
-// Denetim raporu D.6 — GDELT DOC 2.0 geçişi. Buradaki örnek makaleler UYDURMA DEĞİL: canlı
-// api.gdeltproject.org yanıtından alınmış gerçek alan yapısıdır (url / url_mobile / title /
-// seendate / socialimage / domain / language / sourcecountry — özet alanı YOKTUR).
 const CANLI_ORNEK = [
   {
     url: 'https://1plus1.ua/slozy-dzhennet/novyny/slozy-dzhennet-5-prychyn',
@@ -84,9 +81,6 @@ describe('normalizeGdeltArticles', () => {
   })
 })
 
-// CANLI ÖLÇÜM: filtresiz bir GDELT sorgusundan (75 makale) dönen 22 gerçek `sourcecountry` değeri.
-// Katı ad eşitliği bunların 4'ünü reddediyordu (Bosnia-Herzegovina, Slovak Republic, Macedonia,
-// Turkey) — normalizasyon + FIPS dönemi alias tablosu hepsini kurtarıyor.
 const CANLI_ULKE_ADLARI = [
   ['Ukraine', 'UA'], ['Bulgaria', 'BG'], ['Pakistan', 'PK'], ['Bosnia-Herzegovina', 'BA'],
   ['Serbia', 'RS'], ['Poland', 'PL'], ['Hungary', 'HU'], ['Slovak Republic', 'SK'],
@@ -122,9 +116,6 @@ describe('ülke adı doğrulaması — canlı GDELT adlarıyla', () => {
   })
 })
 
-// Denetim bulgusu Y-2: FIPS tablosu 57 ülkeyle sınırlıydı ve haftalık tarama hedeflerinden Peru
-// ile Bolivya bile dışarıdaydı — bu ülkelerde sorgu filtresiz gidiyor, ad doğrulaması her şeyi
-// eliyor ve ortaya çıkan boş sonuç 14 gün "yetersiz-veri" olarak önbelleğe yazılıyordu.
 describe('GDELT ülke kapsamı (Y-2)', () => {
   it('haftalık tarama hedeflerinin TAMAMI destekleniyor', () => {
     const hedefler = ['AR', 'PE', 'BO', 'SA', 'EG', 'MA', 'UA', 'RS', 'BA', 'KZ', 'UZ', 'TM']
@@ -132,22 +123,19 @@ describe('GDELT ülke kapsamı (Y-2)', () => {
   })
 
   it('ISO2 ile FIPS ayrışan tuzak çiftleri doğru eşlenir', () => {
-    // Bunların hepsi karışması kolay gerçek çiftler; biri ters yazılırsa sonuç sessizce boşalır.
-    expect(ISO2_TO_FIPS.CH).toBe('SZ') // İsviçre
-    expect(ISO2_TO_FIPS.SZ).toBe('WZ') // Esvatini
-    expect(ISO2_TO_FIPS.ZA).toBe('SF') // Güney Afrika
-    expect(ISO2_TO_FIPS.ZM).toBe('ZA') // Zambiya
-    expect(ISO2_TO_FIPS.SN).toBe('SG') // Senegal
-    expect(ISO2_TO_FIPS.SG).toBe('SN') // Singapur
-    expect(ISO2_TO_FIPS.CL).toBe('CI') // Şili
-    expect(ISO2_TO_FIPS.CI).toBe('IV') // Fildişi Sahili
-    expect(ISO2_TO_FIPS.BO).toBe('BL') // Bolivya
-    expect(ISO2_TO_FIPS.TR).toBe('TU') // Türkiye
+    expect(ISO2_TO_FIPS.CH).toBe('SZ')
+    expect(ISO2_TO_FIPS.SZ).toBe('WZ')
+    expect(ISO2_TO_FIPS.ZA).toBe('SF')
+    expect(ISO2_TO_FIPS.ZM).toBe('ZA')
+    expect(ISO2_TO_FIPS.SN).toBe('SG')
+    expect(ISO2_TO_FIPS.SG).toBe('SN')
+    expect(ISO2_TO_FIPS.CL).toBe('CI')
+    expect(ISO2_TO_FIPS.CI).toBe('IV')
+    expect(ISO2_TO_FIPS.BO).toBe('BL')
+    expect(ISO2_TO_FIPS.TR).toBe('TU')
   })
 
   it('desteklenmeyen ülke için DIŞ ÇAĞRI YAPILMADAN unsupported döner', async () => {
-    // Filistin bilerek dışarıda (GDELT'te tek kod yok: WE/GZ ayrımı). Ağ erişimi olmadan
-    // çözülmesi, çağrının gerçekten yapılmadığını kanıtlar.
     await expect(fetchNewsArticlesGdelt('herhangi bir dizi', 'PS')).resolves.toEqual({
       unsupported: true,
       news: [],

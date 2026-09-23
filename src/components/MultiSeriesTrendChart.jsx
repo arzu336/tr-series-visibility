@@ -7,12 +7,6 @@ const PAD_X = 30
 const PAD_TOP = 20
 const PAD_BOTTOM = 28
 
-// Kıyaslama Modu'nun çoklu çizgi grafiği — SeriesTrendChart.jsx'in tek-seri kalıbının (hover
-// crosshair, tooltip) çok-seri hâli. Her dizinin KENDİ zaman serisi ayrı ayrı çekildiği için
-// (farklı önbellek yaşları yüzünden hafta ızgaraları birebir örtüşmeyebilir) diziler ORTAK bir
-// takvim/zaman eksenine (min-max timestamp aralığı) konumlanır — indekse göre değil, gerçek
-// tarihe göre — bu yüzden nokta sayıları farklı olsa da doğru hizalanırlar.
-// series: [{ name, color, timeline: [{timestamp, value}] }]
 export default function MultiSeriesTrendChart({ series }) {
   const [hoverX, setHoverX] = useState(null)
 
@@ -36,9 +30,6 @@ export default function MultiSeriesTrendChart({ series }) {
     points: s.timeline.map((p) => ({ x: xOf(p.timestamp), y: yOf(p.value), timestamp: p.timestamp, value: p.value })),
   }))
 
-  // Ortak dikey çizgi + tooltip: fare X konumuna göre HER dizi KENDİ en yakın noktasını bağımsız
-  // bulur (aynı hafta ızgarasında olduklarını varsaymaz) — kullanıcı talebi: "o haftaki TÜM
-  // dizilerin puanlarını gösteren ortak bir tooltip".
   const hovered =
     hoverX == null
       ? null

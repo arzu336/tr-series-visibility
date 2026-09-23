@@ -14,12 +14,6 @@ function ToneBadge({ tone }) {
   return <span className="badge badge--info">Nötr</span>
 }
 
-// Analist Paneli §3 — "Basın & Medya Algısı Denetimi". media_sentiment tablosunun SQL ile
-// doğrudan listelenebilmesi için tasarlandığı yorumla uyumlu (bkz. server/db.js). ÖNEMLİ:
-// bir satır TEK bir haber değil, bir dizinin bir ülkede TARANMIŞ haber GRUBUDUR (LLM haberleri
-// toplu değerlendiriyor, bkz. server/llm.js analyzeMediaSentiment) — bu yüzden "ton düzeltme"
-// bu taramanın genel tonunu düzeltir; analistin kararına dayanak olsun diye taranan haber
-// başlıkları da satırla birlikte gösterilir.
 export default function MediaSentimentAuditSection({ canEdit = true }) {
   const [items, setItems] = useState([])
   const [status, setStatus] = useState('loading')
@@ -45,8 +39,6 @@ export default function MediaSentimentAuditSection({ canEdit = true }) {
     load()
   }, [load])
 
-  // "Tek tıkla değiştirme" — ayrı bir taslak/Kaydet akışı yerine dropdown'un onChange'i
-  // doğrudan kaydeder (kullanıcı talebi: "tek tıkla değiştirmesini sağla").
   const handleChangeTone = async (item, sentiment) => {
     if (sentiment === item.effectiveSentiment) return
     setSavingId(item.id)

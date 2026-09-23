@@ -16,14 +16,6 @@ function wait(ms) {
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CA_PATH = path.join(__dirname, 'internal-ca-chain.pem')
 
-// Bu iç LLM sunucusunun TLS el sıkışmasında sadece leaf sertifikayı gönderiyor,
-// ara sertifikayı göndermiyor — Node'un varsayılan güven deposu zinciri
-// tamamlayamıyor (tarayıcılar/Windows bunu otomatik tamamlıyor, Node etmiyor).
-// Zinciri (leaf+ara+kök) elle çıkarıp global fetch dispatcher'ına tanıtıyoruz.
-// ÖNEMLİ: `ca` verilince Node'un varsayılan güvenilen kök sertifika listesi
-// TAMAMEN değişiyor (eklenmiyor) — bu yüzden tls.rootCertificates'i de dahil
-// ediyoruz, yoksa SerpAPI/TMDB gibi normal genel internet siteleri "fetch
-// failed" ile başarısız olur (bu proje daha önce tam olarak bu hataya düştü).
 if (fs.existsSync(CA_PATH)) {
   const extraCa = fs.readFileSync(CA_PATH, 'utf8')
   setGlobalDispatcher(new Agent({ connect: { ca: [...tls.rootCertificates, extraCa] } }))
@@ -38,10 +30,6 @@ function extractJson(text) {
   return JSON.parse(text.slice(start, end + 1))
 }
 
-// Dahili OpenAI-uyumlu LLM sunucusuna tek seferlik bir prompt gönderip JSON
-// cevap döndürür. Model "reasoning" tipi olduğu için enable_thinking kapatılıyor,
-// yoksa cevaptan önce uzun bir düşünme metni geliyor ve JSON'a ulaşamadan
-// max_tokens'a takılıyor.
 async function callLLMForJson(prompt, maxTokens = 300) {
   const baseUrl = process.env.LLM_BASE_URL
   const apiKey = process.env.LLM_API_KEY
@@ -50,15 +38,7 @@ async function callLLMForJson(prompt, maxTokens = 300) {
     throw new Error('LLM_BASE_URL / LLM_MODEL tanımlı değil (.env dosyasını kontrol et)')
   }
 
-  // Kullanıcı başına günlük canlı çağrı kotası (denetim G-01): LLM de ücretli/sınırlı bir
-  // kaynak. Yeniden denemeler tek bir mantıksal çağrı sayılır — döngünün DIŞINDA bir kez ücret
-  // işlenir. Scheduler gibi kullanıcısız bağlamlarda bu bir no-op'tur.
   const releaseUserCall = chargeCurrentUserForLiveCall()
-  // Denetim bulgusu O-5: `releaseUserCall` alınıyor ama HİÇBİR hata yolunda çağrılmıyordu —
-  // zaman aşımına uğrayan ya da 5xx dönen her LLM çağrısı kullanıcının günlük kotasından
-  // düşüyordu. Bu, liveCallQuota.js'in kendi sözleşmesine ("başarısız çağrı kotadan düşmez") ve
-  // serpApiCache.js'in davranışına aykırıydı. Tek tek `throw` noktalarına eklemek yerine
-  // `finally` kullanılıyor: ileride eklenecek bir çıkış yolu da otomatik olarak kapsanır.
   let basariyla = false
   try {
     let lastError
@@ -91,8 +71,6 @@ async function callLLMForJson(prompt, maxTokens = 300) {
           const content = data.choices?.[0]?.message?.content
           if (!content) throw new Error('LLM boş cevap döndü')
           const sonuc = extractJson(content)
-          // Ayrıştırma da başarılı olduktan SONRA çağrı "gerçekten oldu" sayılır; extractJson
-          // fırlatırsa kota iade edilir.
           basariyla = true
           return sonuc
         }
@@ -110,7 +88,6 @@ async function callLLMForJson(prompt, maxTokens = 300) {
   }
 }
 
-// Dizi özetinden tema/güven skoru çıkarır.
 export async function classifyWithLLM(overview, themes) {
   const prompt = `Aşağıda bir Türk dizisinin özeti var. Şunları belirle:
 1. theme: Bu listeden TAM OLARAK bir tanesini seç: ${themes.join(', ')}
@@ -131,10 +108,6 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
   }
 }
 
-// Dizi özetinden hangi destinasyon(lar)ın (Türkiye'deki turistik yer/bölge) öne çıktığını
-// çıkarır — server/destinations.js'teki eski anahtar kelime taramasının (detectDestinations)
-// yerini alan birincil yöntem: sinopsis çoğu zaman yer adını birebir geçirmiyor, LLM bağlamdan
-// çıkarabiliyor. Hiçbiri uymuyorsa boş dizi döner — uydurma bir eşleşme dayatılmaz.
 export async function classifyDestinationsWithLLM(overview, name, destinations) {
   const list = destinations.map((d) => `${d.id}: ${d.name}`).join('\n')
   const prompt = `Aşağıda bir Türk dizisinin adı ve özeti var. Bu listedeki destinasyonlardan
@@ -162,11 +135,6 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
   return candidateIds.filter((id) => validIds.has(id))
 }
 
-// Tema Bazlı AI Yorumu (bkz. server/services/themeInsight.js): modele SADECE verilen sayılarla
-// konuşmasını söylüyoruz — yeni bir istatistik, oran veya karşılaştırma UYDURMAMASI için prompt
-// açıkça kısıtlanıyor. Sonuç, sayısal dağılımın YANINDA gösterilen bir yorum katmanıdır; sayısal
-// veri hiçbir zaman bu fonksiyonun başarısına bağımlı değildir (bkz. themeInsight.js'teki
-// try/catch — LLM başarısız olursa dağılım yine de döner).
 export async function generateThemeInsight(distribution) {
   const lines = distribution
     .map((d) => `- ${d.theme}: ${d.seriesCount} dizi, ${d.countriesReached} ülkede yayında`)
@@ -194,12 +162,9 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
   return parsed.insight.trim()
 }
 
-// TrendsExplorer.jsx'in "Küresel Zaman Serisi" grafiğinin altındaki AI yorumu (generateThemeInsight
-// ile aynı disiplin: SADECE verilen sayılarla konuş, yeni istatistik/sebep UYDURMA — "neden arttı"
-// gibi bir nedensellik iddiası özellikle yasaklı, çünkü elimizde bunu destekleyecek bir olay verisi
-// yok, sadece arama hacmi sayıları var).
-export async function generateSeriesTrendInsight(seriesName, stats) {
-  const prompt = `Aşağıda "${seriesName}" adlı Türk dizisinin son 12 aydaki KÜRESEL Google Trends arama
+export async function generateSeriesTrendInsight(seriesName, stats, scopeLabel = null) {
+  const kapsam = scopeLabel ? `${scopeLabel} Google Trends arama` : 'KÜRESEL Google Trends arama'
+  const prompt = `Aşağıda "${seriesName}" adlı Türk dizisinin son 12 aydaki ${kapsam}
 ilgisi (0-100 bağıl ölçek) özet istatistikleri var. Bu sayılara dayanarak, TEK CÜMLELİK ya da EN
 FAZLA İKİ CÜMLELİK, kısa bir Türkçe yorum yaz.
 
@@ -208,6 +173,7 @@ KURALLAR:
 - Artış/azalışın "NEDENİNİ" uydurma (ör. "yeni bölüm çıktığı için" gibi) — sadece TREND'i tarif et,
   sebep iddia etme, çünkü elinde bunu destekleyecek bir veri yok.
 - Kesin/iddialı ifadelerden kaçın (bu bir gözlem, kesin bulgu değil).
+- Ölçek yalnızca bu kapsam içinde bağıldır; BAŞKA bir ülkeyle/kapsamla kıyaslama yapma.
 
 İstatistikler:
 - Zirve: Hafta ${stats.peakWeek} (${stats.peakValue} puan)
@@ -226,16 +192,7 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
   return parsed.insight.trim()
 }
 
-// Proje raporu §4.6 "Basın/Haber Duygu Analizi" — bkz. server/services/newsSentiment.js.
-// Girdi (haber başlığı/özeti) Google News'ten gelen DIŞ/GÜVENİLMEYEN metin — prompt bunu açıkça
-// "SADECE sınıflandırılacak veri" olarak çerçeveler ve içindeki olası talimatları uygulamamasını
-// söyler (bkz. destinasyon/tema sınıflandırmasındaki aynı "uydurma, emin değilsen dürüst ol"
-// disiplini).
 export async function analyzeMediaSentiment(articles, seriesName) {
-  // Denetim raporu D.6 sonrası: `source` artık yayının ALAN ADI ("bild.de", "almasryalyoum.com")
-  // — GDELT yayın adı değil domain döndürüyor ve bu, tonu değerlendirirken gerçek bir ipucu.
-  // `snippet` GDELT'te HİÇ YOK; çoğu satır yalnızca başlıktan ibaret olacak (SerpAPI döneminden
-  // kalan satırlarda hâlâ dolu olabildiği için şablon onu opsiyonel tutmaya devam ediyor).
   const list = articles
     .slice(0, 15)
     .map((a, i) => `${i + 1}. [${a.source || 'bilinmeyen kaynak'}] ${a.title}${a.snippet ? ' — ' + a.snippet : ''}`)
@@ -266,8 +223,6 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
   if ([positive, neutral, negative].some((n) => Number.isNaN(n))) {
     throw new Error('LLM geçerli duygu skorları döndürmedi')
   }
-  // LLM toplamı tam 1.0 vermeyebilir (yuvarlama) — dürüstçe normalize ediyoruz, uydurma bir
-  // düzeltme değil, aynı oranların ölçeklenmesi.
   const sum = positive + neutral + negative || 1
   if (!['positive', 'neutral', 'negative'].includes(parsed.dominant)) {
     throw new Error(`LLM geçersiz dominant değer döndürdü: ${parsed.dominant}`)
@@ -285,25 +240,9 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
   }
 }
 
-// --- Ülke Veri Özeti (Etki & İhracat / Ülke Odaklı Birleştirme) --------------------------------
-// KULLANICI KARARI — bu fonksiyonun en önemli kısıtı: SİSTEM AKSİYON ÖNERMEZ.
-// Modelin işi "ne yapılmalı" değil, "veri ne gösteriyor" sorusunu cevaplamaktır. Karar verici
-// uzmanın kendisidir; ona reçete sunmak, elindeki objektif tabloyu bir direktifle gölgelemek
-// olurdu. Prompt bunu hem POZİTİF (ne yapmalı) hem NEGATİF (ne yapmamalı) olarak söylüyor,
-// çıktı da ayrıca doğrulanıyor (bkz. aşağıdaki DIREKTIF_KALIPLARI).
-//
-// İkinci kısıt, projenin genel kuralı: SADECE verilen sayılarla konuş. Model burada kendi
-// yüzdesini üretemez — hesaplar zaten services/countrySummary.js'te yapılmış ve "hesaplanamaz"
-// olanlar gerekçesiyle işaretlenmiştir.
-// DİKKAT — burada `\b` KULLANILAMAZ: JavaScript'te sözcük sınırı ASCII tabanlıdır ve Türkçe
-// harfler (ı, ö, ü, ş, ğ, ç) `\w` sayılmaz. "artırılmalı" sonundaki `ı` zaten sözcük-dışı
-// karakter olduğu için `\bartırılmalı\b` HİÇBİR ZAMAN eşleşmiyordu — kalıpların birkaçı
-// sessizce ölüydü ve direktif denetimi çalışıyor sanılıyordu. Unicode harf sınıfıyla kurulan
-// lookaround (`u` bayrağıyla) doğru sınırı verir.
 const SINIR_ONU = '(?<!\\p{L})'
 const SINIR_SONU = '(?!\\p{L})'
 const kalip = (govde) => new RegExp(`${SINIR_ONU}(?:${govde})${SINIR_SONU}`, 'iu')
-// Sonu açık kalıplar (ek alabilen kökler) için yalnızca baş sınırı aranır.
 const kokKalip = (govde) => new RegExp(`${SINIR_ONU}(?:${govde})`, 'iu')
 
 const DIREKTIF_KALIPLARI = [
@@ -378,8 +317,6 @@ Sadece şu formatta JSON döndür, başka hiçbir açıklama veya düşünce met
     if (!metin || typeof metin !== 'string') {
       throw new Error(`LLM "${alan}" boyutu için geçerli bir gözlem döndürmedi`)
     }
-    // Sözleşmenin ihlali sessizce geçmemeli: model direktif üretirse bu bir hatadır,
-    // "biraz fazla yardımsever bir cümle" değil.
     const ihlal = direktifIceriyorMu(metin)
     if (ihlal) {
       throw new Error(`LLM "${alan}" boyutunda aksiyon önerisi üretti (yasak kalıp: ${ihlal}): ${metin.slice(0, 120)}`)

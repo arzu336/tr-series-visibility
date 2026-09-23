@@ -17,7 +17,7 @@ export default function AdminUsersPanel({ currentUserId }) {
   const [error, setError] = useState(null)
   const [actingId, setActingId] = useState(null)
   const [search, setSearch] = useState('')
-  const [resetResult, setResetResult] = useState(null) // { name, tempPassword }
+  const [resetResult, setResetResult] = useState(null)
 
   const load = useCallback(() => {
     setStatus('loading')
@@ -48,11 +48,6 @@ export default function AdminUsersPanel({ currentUserId }) {
     }
   }
 
-  // Kalıcı ve geri alınamaz olduğu için tek tıkla değil, native confirm ile bir kez daha
-  // soruluyor — onaylı (hâlâ giriş yapabilen) bir hesap için uyarı metni daha net ("hesabı
-  // ve tüm erişimini" gibi), reddedilmiş bir hesap zaten giriş yapamıyordu. Kendi hesabını
-  // silme ve son yöneticiyi silme sunucuda da engelleniyor (bkz. server/users.js deleteUser) —
-  // buradaki disabled/title'lar sadece kullanıcıya erken, açık bir geri bildirim.
   const handleDelete = async (u) => {
     const warning =
       u.status === 'approved'

@@ -10,9 +10,6 @@ function displayName(entry) {
 
 const TOP_N = 10
 
-// Duolingo'nun herkese açık API'si ülke bazlı değil, KÜRESEL tek bir "Türkçe öğrenen toplam
-// kullanıcı" sayısı veriyor (bkz. server/duolingo.js) — bu yüzden ülke bazlı Google Trends
-// listesiyle karıştırılmadan, açıkça "🌍 Küresel" etiketli ayrı bir kart olarak gösteriliyor.
 function GlobalDuolingoCard() {
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')
@@ -63,8 +60,6 @@ export default function TurkishLearningIndex() {
         setStatus('ready')
       })
       .catch((err) => {
-        // SERPAPI_API_KEY yoksa, kota dolmuşsa veya geçici bir ağ hatası olursa: sahte bir
-        // sayı göstermek yerine dürüst "veri birikiyor" durumuna düşülür (bkz. impact.js).
         console.error('[TurkishLearningIndex]', err.message)
         setStatus('pending')
       })

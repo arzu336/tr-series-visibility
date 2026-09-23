@@ -1,20 +1,11 @@
 import { mapWithConcurrency } from './utils/concurrency.js'
 
-// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
-// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
 const EXTERNAL_TIMEOUT_MS = 15000
 
 const TMDB_BASE = 'https://api.themoviedb.org/3'
 const TOP_N_SERIES = 400
 const PAGE_SIZE = 20
-// "Yayında" kabul edilen erişim türleri: abonelik (flatrate) ve ücretsiz (free).
-// rent/buy hariç tutulur çünkü tek seferlik satın alma, yaygın kültürel erişimi göstermez.
-// reklamlı (ads) da hariç tutulur — reklam destekli kataloglar ülkeden ülkeye çok
-// tutarsız ve genelde ana abonelik kataloğunun küçük bir alt kümesidir.
 export const STREAMABLE_KEYS = ['flatrate', 'free']
-// 429 (rate limit) da retry edilebilir — TMDB, çok sayıda eşzamanlı istek altında bunu
-// döndürebiliyor; bkz. mapWithConcurrency (200 dizilik toplu çekimlerde eşzamanlılığı
-// sınırlayan asıl önlem, bu sadece ikinci savunma katmanı).
 const RETRYABLE_STATUSES = [429, 502, 503, 504]
 const RETRY_DELAYS_MS = [500, 1500]
 
@@ -46,9 +37,6 @@ async function tmdbGet(path, params = {}) {
   throw lastError
 }
 
-// TR/US/KR/ES gibi herhangi bir menşe ülkenin en popüler dizilerini çeker — Küresel
-// Kıyaslama Modülü (server/benchmark.js) ve ana TR hattı (getRawSeriesData) aynı fonksiyonu
-// paylaşır, davranış farkı sadece origin/dil parametreleri.
 async function getTopSeriesByOrigin(originCountry, originalLanguage, n = TOP_N_SERIES) {
   const pagesNeeded = Math.ceil(n / PAGE_SIZE)
   const pages = await Promise.all(
@@ -64,21 +52,10 @@ async function getTopSeriesByOrigin(originCountry, originalLanguage, n = TOP_N_S
   )
   const seen = new Set()
   const results = pages.flatMap((p) => p.results || []).filter((show) => {
-    // Sayfalar paralel çekildiği için popülerlik sıralaması sayfa sınırında kayabilir
-    // ve aynı dizi iki sayfada birden görünebilir — id bazlı dedup gerekiyor.
     if (seen.has(show.id)) return false
     seen.add(show.id)
     return true
   })
-  // TMDB'nin `name` alanı İSTENEN language parametresine (tr-TR) göre yerelleştirilmiş bir
-  // başlık döner — ama bu, crowdsourced bir veritabanı: bazı dizilerde tr-TR çevirisi hiç
-  // girilmemiş/yanlış girilmiş olabiliyor (canlı doğrulandı: id 242551 "Rüzgarlı Tepe",
-  // TMDB'nin tr-TR `name` alanı yanlışlıkla Arapça "تل الرياح" dönüyor, original_name ise
-  // doğru Türkçe başlığı veriyor). `original_name` locale'e bakmaksızın dizinin GERÇEK
-  // orijinal-dil başlığıdır ve zaten with_original_language=originalLanguage ile filtrelendiği
-  // için (bu fonksiyonun tek çağrı yeri de dahil, bkz. getRawSeriesData/benchmark.js) bu alan
-  // her zaman istenen dilde — bu yüzden `name` yerine önceliklendirildi, yalnızca boşsa
-  // (olağanüstü bir durum) `name`'e düşülür.
   return results.slice(0, n).map((show) => ({
     id: show.id,
     name: show.original_name || show.name,
@@ -96,10 +73,6 @@ export async function getWatchProviders(seriesId) {
 
 const CAST_LIMIT = 5
 
-// Oyuncu & Karakter Bazlı Küresel Etki Modülü: her dizinin ilk 5 oyuncusunu (billing
-// sırasına göre, TMDB'nin "order" alanı) çeker — Cast Bar, harita içi karakter pini ve
-// server/cast.js'teki oyuncu-etki sorgusu bu veriyi paylaşır. getWatchProviders ile aynı
-// payload disiplini: 200 dizi × sınırlı alan sayısı, tüm oyuncu kadrosu değil.
 export async function getCredits(seriesId) {
   const data = await tmdbGet(`/tv/${seriesId}/credits`, { language: 'tr-TR' })
   const cast = (data.cast || []).sort((a, b) => a.order - b.order).slice(0, CAST_LIMIT)
@@ -111,13 +84,6 @@ export async function getCredits(seriesId) {
   }))
 }
 
-// TMDB'nin TV detay/discover uçları imdb_id vermiyor — ayrı bir uç (external_ids) gerekiyor.
-// server/imdb.js bunu OMDb API'ye gitmeden önce dizinin gerçek IMDb kimliğini bulmak için kullanır.
-//
-// `wikidataId` de aynı uçtan geliyor (ek istek YOK) ve Wikipedia okunma katmanının giriş
-// noktası: wikidata_id -> Wikidata sitelinks -> dil başına makale başlığı zinciri, diziyi adıyla
-// aramaya göre çok daha sağlam (ad eşleştirmesi farklı alfabelerde ve alt başlıklarda kırılıyor).
-// Bkz. server/services/wikipediaPageviews.js.
 export async function getExternalIds(seriesId) {
   const data = await tmdbGet(`/tv/${seriesId}/external_ids`)
   return { imdbId: data.imdb_id || null, wikidataId: data.wikidata_id || null }

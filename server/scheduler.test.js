@@ -1,17 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// AÇLIK REGRESYONU (canlı veriyle teşhis edildi):
-// 24 saatlik kapı setInterval'in içindeydi, yani günlük tazeleme VE haftalık zenginleştirme
-// zinciri birlikte günde yalnızca bir kez tetikleniyordu. GDELT geçişinden sonra basın taraması
-// ~10 saate çıkıp hiç bitmeyince, zincirde ONUN ARKASINDA duran işlere sıra gelmedi. Canlı
-// app.db'deki kanıt:
-//     lastScheduledRefreshAt       2026-09-21   (günlük tazeleme çalışıyor)
-//     lastAutoNewsScanAt           YOK          (tur bir kez bile tamamlanamadı)
-//     lastTourismTrendsCollectAt   2026-08-26   (7 günlük kapısına rağmen 26 gün donmuş)
-// Kapı artık SADECE günlük bölümü sarıyor; zincir her tetiklemede sırasını alıyor.
-//
-// db.js bilerek taklit ediliyor: bu test canlı app.db'yi ne açar ne de meta anahtarlarına yazar.
-
 const metaDeposu = new Map()
 
 vi.mock('./db.js', () => ({
@@ -37,6 +25,7 @@ vi.mock('./services/autoNewsScheduler.js', () => ({ runAutoNewsScanIfNeeded: kay
 vi.mock('./services/tourismTrendsCollector.js', () => ({ runTourismTrendsCollectionIfNeeded: kaydet('zincir:tourismTrends') }))
 vi.mock('./services/socialEnricher.js', () => ({ runSocialEnrichmentIfNeeded: kaydet('zincir:social') }))
 vi.mock('./services/actorTrendsCollector.js', () => ({ runActorTrendsCollectionIfNeeded: kaydet('zincir:actor') }))
+vi.mock('./services/netflixPipelineRunner.js', () => ({ runNetflixSyncIfNeeded: kaydet('zincir:netflix') }))
 
 const { runScheduledRefreshInner, META_KEY } = await import('./scheduler.js')
 
@@ -57,13 +46,11 @@ describe('zamanlanmış tetikleme', () => {
   })
 
   it('günlük kapı KAPALIYKEN zincir YİNE DE çalışır (açlık regresyonunun tam senaryosu)', async () => {
-    // Günlük tazeleme az önce yapılmış: 24 saat dolmadı.
     metaDeposu.set(META_KEY, String(Date.now() - 60_000))
 
     await runScheduledRefreshInner()
 
     expect(cagriSirasi.filter((a) => a.startsWith('gunluk:'))).toEqual([])
-    // Kritik satır: bu kırmızıya dönerse öncü turizm sinyali toplayıcısı yine 26 gün susar.
     expect(cagriSirasi).toContain('zincir:tourismTrends')
     expect(cagriSirasi).toContain('zincir:news')
   })
@@ -91,6 +78,46 @@ describe('zamanlanmış tetikleme', () => {
 
     expect(cagriSirasi).not.toContain('zincir:social')
     expect(cagriSirasi).not.toContain('zincir:actor')
+  })
+
+  it('haftalık Netflix senkronizasyonu zincirde tetiklenir — günlük kapı kapalıyken de', async () => {
+    metaDeposu.set(META_KEY, String(Date.now() - 60_000))
+
+    await runScheduledRefreshInner()
+
+    expect(cagriSirasi).toContain('zincir:netflix')
+  })
+
+  it('Netflix senkronizasyonu zincirin SONUNDA çalışır (15 dk sürebilir, önündekileri geciktirmez)', async () => {
+    await runScheduledRefreshInner()
+
+    const netflixSira = cagriSirasi.indexOf('zincir:netflix')
+    expect(netflixSira).toBeGreaterThan(cagriSirasi.indexOf('zincir:news'))
+    expect(netflixSira).toBeGreaterThan(cagriSirasi.indexOf('zincir:tourismTrends'))
+    expect(netflixSira).toBe(cagriSirasi.length - 1)
+  })
+
+  it('Netflix senkronizasyonu FIRLATSA BİLE tetikleme çökmez ve bir sonraki tur çalışır', async () => {
+    const { runNetflixSyncIfNeeded } = await import('./services/netflixPipelineRunner.js')
+    vi.mocked(runNetflixSyncIfNeeded).mockRejectedValueOnce(new Error('python: command not found'))
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+
+    await expect(runScheduledRefreshInner()).resolves.toBeUndefined()
+    expect(consoleError).toHaveBeenCalledWith('[scheduler] Netflix senkronizasyonu başarısız:', 'python: command not found')
+
+    cagriSirasi.length = 0
+    await runScheduledRefreshInner()
+    expect(cagriSirasi).toContain('zincir:netflix')
+    consoleError.mockRestore()
+  })
+
+  it('önündeki iş çökse bile Netflix senkronizasyonuna sıra gelir', async () => {
+    const { runTourismTrendsCollectionIfNeeded } = await import('./services/tourismTrendsCollector.js')
+    vi.mocked(runTourismTrendsCollectionIfNeeded).mockRejectedValueOnce(new Error('SerpAPI kotası'))
+
+    await runScheduledRefreshInner()
+
+    expect(cagriSirasi).toContain('zincir:netflix')
   })
 
   it('günlük tazeleme tamamlanınca kapısını kapatır', async () => {

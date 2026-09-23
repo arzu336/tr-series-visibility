@@ -39,6 +39,7 @@ import { queryTrends } from './serpapi.js'
 import { querySocialListening } from './social-listening.js'
 import { buildImpactReport, buildCulturalImpact, buildTourismImpact, buildExportImpact } from './impact.js'
 import { buildCountryConvergence } from './services/countrySummary.js'
+import { sanitizeClaimsPayload } from './services/claimsGate.js'
 import { generateCountryDataSummary } from './llm.js'
 import { getImdbDataForTmdbSeries } from './imdb.js'
 import { buildPersonImpact } from './cast.js'
@@ -62,6 +63,7 @@ import { enrichSeriesNewsNow } from './services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from './services/socialEnricher.js'
 import { getCached } from './cache.js'
 import { isValidIso2, normalizeIso2, resolveKnownSeriesName, resolveKnownSeriesNames } from './services/requestGuards.js'
+import { countryNameFromIso2 } from './services/countryLookup.js'
 import { runWithUserContext } from './services/liveCallQuota.js'
 import {
   COOKIE_NAME,
@@ -91,43 +93,17 @@ import {
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '.env') })
-const SESSION_MAX_AGE_S = 7 * 24 * 60 * 60 // 7 gün
+const SESSION_MAX_AGE_S = 7 * 24 * 60 * 60
 
 const app = express()
 
-// Denetim bulgusu G-12: rota içi catch blokları üst servis hata metnini (SerpAPI'nin `data.error`
-// alanı, LLM'in ≤300 karakterlik ham cevap gövdesi, TMDB/OMDb durum metinleri) istemciye AYNEN
-// döndürüyordu. Bu metinler iç mimariyi, sağlayıcı adlarını, kota durumunu ve bazen sorgu
-// parametrelerini sızdırır. Ayrıntı SUNUCUDA loglanmaya devam ediyor (her 502 noktasında bir
-// console.error var — teşhis kaybı yok); istemci tek ve genel bir mesaj görür.
-// NOT: 400'ler bilerek dokunulmadı — onlar bizim kendi doğrulama mesajlarımız ("Şifre en az 8
-// karakter olmalı", "Bilinmeyen dizi" gibi), kullanıcıya dönük ve kasıtlı.
 const UPSTREAM_ERROR_MESSAGE = 'Dış veri kaynağına şu anda ulaşılamıyor. Lütfen daha sonra tekrar deneyin.'
 
-// G-12 (üst servis metnini gizle) ile G-01 (kullanıcı kotası) ayrı paketlerde doğruydu ama
-// BİRLİKTE bir kör nokta üretti: kota aşımı da jenerik 502'ye dönüşüyordu ve kullanıcı günlük
-// sınırına ulaştığını HİÇ öğrenemiyordu — "dış kaynağa ulaşılamıyor" deyip duruyordu.
-// Kota hataları `status = 429` taşır (services/liveCallQuota.js kullanıcı sınırı,
-// services/serpApiCache.js aylık kurum bütçesi) ve bu mesajlar BİZE ait, kullanıcıya dönük ve
-// güvenlidir — üst servisten gelen ham metin değildir, o yüzden aynen iletilir.
 function sendUpstreamError(res, err) {
   if (err?.status === 429) return res.status(429).json({ error: err.message })
   return res.status(502).json({ error: UPSTREAM_ERROR_MESSAGE })
 }
 
-// Denetim bulgusu G-08: hicbir guvenlik basligi yoktu. helmet varsayilanlari (nosniff,
-// X-Frame-Options: SAMEORIGIN, Referrer-Policy, HSTS, X-DNS-Prefetch-Control...) + uygulamaya
-// gore ELLE daraltilmis bir CSP. Sunucu uretimde dist/'i de servis ettigi (asagida
-// express.static) icin bu CSP gercek uygulama sayfasina uygulanir — bu yuzden calisma
-// zamaninda gercekten yuklenen TEK dis kaynak acikca izinli:
-//   - image.tmdb.org      -> dizi afisleri (img)
-// Kure dokulari (unpkg) ve ulke sinirlari GeoJSON'u (GitHub raw) B-06 kapsaminda public/map/
-// altina alindi; artik kendi origin'imizden geliyorlar, bu yuzden CSP'den cikarildilar.
-// styleSrc'ta 'unsafe-inline': React'in style={{...}} nitelikleri; scriptSrc'ta YOK.
-// upgradeInsecureRequests kapali: kurum ici HTTP dagitimini kirmasin. Cerez tarafi da bununla
-// tutarli: Secure bayragi artik ISTEGIN protokolunden turetiliyor (auth.js isSecureRequest) —
-// bu yorum daha once "zaten req.secure'a bagli" diyordu ama kod NODE_ENV'e bakiyordu (denetim
-// O-3); iddia ile kod artik ayni.
 app.use(
   helmet({
     contentSecurityPolicy: {
@@ -136,9 +112,6 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        // unpkg.com ve raw.githubusercontent.com KALDIRILDI: küre dokuları ve ülke sınırı
-        // GeoJSON'u artık public/map/ altında, uygulamanın kendi origin'inden geliyor
-        // (denetim B-06). Dışarıya kalan tek çalışma zamanı bağımlılığı TMDB afişleri.
         imgSrc: ["'self'", 'data:', 'blob:', 'https://image.tmdb.org'],
         connectSrc: ["'self'"],
         workerSrc: ["'self'", 'blob:'],
@@ -147,51 +120,21 @@ app.use(
         upgradeInsecureRequests: null,
       },
     },
-    // COEP acilirsa CORP basligi gondermeyen capraz-origin gorseller (TMDB afisleri)
-    // engellenir; kapatiyoruz.
     crossOriginEmbedderPolicy: false,
-    // TMDB afisleri farkli origin'den geldigi icin same-origin degil, cross-origin kaynak
-    // paylasimina izin veren varsayilan gerekli.
     crossOriginResourcePolicy: { policy: 'cross-origin' },
   })
 )
 
-// Ters proxy (nginx/IIS) arkasında express-rate-limit her isteği proxy'nin IP'siyle görüyordu:
-// herhangi birinin 10 hatalı girişi TÜM kurumun girişini kilitliyor, 300 istek/15 dk kurum
-// geneline bölünüyordu (denetim G-02/B-07 — kendi kendine DoS).
-//
-// Denetim bulgusu O-2: bu ayar KOŞULSUZDU ve buradaki eski yorum "proxy yoksa X-Forwarded-For
-// gelmeyeceği için davranış değişmez" diyordu — bu YANLIŞ. Proxy olmadan da istemci bu başlığı
-// kendisi uydurabilir; Express onu `req.ip` olarak kabul eder ve saldırgan her istekte farklı bir
-// sahte IP göndererek giriş/kayıt/genel hız sınırlarının ÜÇÜNÜ de sürekli sıfırlar. Yani G-02'yi
-// düzeltmek için eklenen satır, proxy'siz kurulumda G-02'nin koruduğu şeyi deliyordu.
-//
-// Artık dağıtım topolojisi açıkça beyan ediliyor. Varsayılan KAPALI: doğrudan çalıştırma
-// (README'deki `npm start`) güvenli tarafta kalır; ters proxy arkasına konurken TRUST_PROXY=true
-// verilir. Değer hop sayısı da olabilir (ör. TRUST_PROXY=2).
 const trustProxyEnv = String(process.env.TRUST_PROXY || '').trim().toLowerCase()
 if (trustProxyEnv && trustProxyEnv !== 'false' && trustProxyEnv !== '0') {
-  // Sayı verildiyse hop sayısı, 'true' verildiyse tek hop.
   const hop = Number(trustProxyEnv)
   app.set('trust proxy', Number.isInteger(hop) && hop > 0 ? hop : 1)
   console.log(`[server] trust proxy açık (${Number.isInteger(hop) && hop > 0 ? hop : 1} hop)`)
 }
 
-// CORS artık her origin'i credential ile yansıtmıyor (denetim G-03): üretimde yalnızca
-// APP_ORIGIN (+ isteğin kendi origin'i), geliştirmede yerel/LAN origin'leri. Vite dev sunucusu
-// /api'yi aynı origin'den proxy'lediği için normal geliştirme akışı zaten CORS'a takılmaz; bu
-// izin doğrudan tarayıcıdan başka bir origin ile bağlanan durumlar içindir.
 const IS_PRODUCTION = process.env.NODE_ENV === 'production'
 const ALLOWED_ORIGINS = [process.env.APP_ORIGIN].filter(Boolean)
 
-// Geliştirmede sabit ['http://localhost:5173', 'http://127.0.0.1:5173'] listesi çok dardı:
-// Vite 5173 doluyken 5174'e düşüyor, tarayıcı bazen `[::1]` (IPv6 loopback) kullanıyor, telefondan
-// test için `--host` ile LAN IP'si gerekiyor ve VS Code'un yerleşik önizleme penceresi de başka bir
-// port açıyor. Bunların hepsi geçerli geliştirme senaryosu ama listede olmadıkları için 403
-// alıyorlardı (canlı olarak yaşandı). Artık liste yerine DESEN: sadece loopback ve özel LAN
-// aralıkları, herhangi bir portta. Genel internetteki hiçbir origin buraya uymaz.
-// ÜRETİMDE (NODE_ENV=production) devrede DEĞİL — orada yalnızca APP_ORIGIN + isteğin kendi
-// origin'i geçerlidir, denetim G-03'ün gerektirdiği sıkılık aynen korunur.
 const LOCAL_DEV_ORIGIN_RE =
   /^https?:\/\/(localhost|127\.\d+\.\d+\.\d+|\[::1\]|10\.\d+\.\d+\.\d+|192\.168\.\d+\.\d+|172\.(1[6-9]|2\d|3[01])\.\d+\.\d+)(:\d+)?$/
 
@@ -200,32 +143,20 @@ function isAllowedOrigin(origin, selfOrigins) {
   return !IS_PRODUCTION && LOCAL_DEV_ORIGIN_RE.test(origin)
 }
 
-// DİKKAT (canlı testte yakalandı): sunucu üretimde dist/'i de servis ediyor ve Vite'ın
-// ürettiği <script type="module" crossorigin> / <link crossorigin> etiketleri AYNI ORIGIN'e
-// giden isteklerde bile Origin başlığı gönderir. Bu yüzden isteğin KENDİ origin'i de her
-// zaman izinli olmalı — aksi halde uygulama kendi JS/CSS'ini 403 alır ve hiç açılmaz.
-// Bu yüzden basit `origin` listesi yerine req'e erişebilen delege biçimi kullanılıyor.
 app.use(
   cors((req, callback) => {
     const origin = req.headers.origin
     const host = req.headers.host
     const selfOrigins = host ? [`http://${host}`, `https://${host}`] : []
-    // Origin başlığı olmayan istekler (curl, sunucu-sunucu) zaten tarayıcı kaynaklı
-    // çapraz-site istekleri değildir, engellenmez.
     if (!origin || isAllowedOrigin(origin, selfOrigins)) {
       return callback(null, { origin: true, credentials: true })
     }
-    // Red sessizdi: kullanıcı tarayıcıda "CORS izni yok" görüyor, sunucuda HANGİ origin'in
-    // reddedildiğine dair hiçbir iz kalmıyordu — teşhis edilemez bir hata sınıfı.
     console.warn(`[cors] Reddedilen origin: ${origin} (host: ${host || 'yok'})`)
     const err = new Error('Bu origin için CORS izni yok')
-    err.status = 403 // aşağıdaki hata middleware'i bunu 500 değil 403 olarak döndürsün
+    err.status = 403
     callback(err)
   })
 )
-// /api/visibility ~700KB ham JSON dönüyor (200 dizi × ülke başına tekrar eden
-// sinopsis metni) — gzip bunu ~6-7 kata kadar küçültüyor, gerçek darboğaz
-// sunucu hesaplaması değil (warm cache'te <150ms), aktarım boyutuydu.
 app.use(compression())
 app.use(express.json())
 
@@ -237,9 +168,6 @@ app.use((req, res, next) => {
   next()
 })
 
-// Şifre deneme/kayıt spam'ini sınırlar — brute-force saldırısı olmasa bile
-// (ör. sızmış bir e-posta/şifre listesiyle otomatik deneme), bu limit olmadan
-// hiçbir engel yoktu. IP bazlı; başarılı istekler de sayılır (basit ve yeterli).
 const loginLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 10,
@@ -255,13 +183,6 @@ const registerLimiter = rateLimit({
   message: { error: 'Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar deneyin.' },
 })
 
-// Genel /api/* koruması — önceden SADECE giriş/kayıt sınırlıydı, geri kalan onlarca uç
-// (görünürlük verisi, SerpAPI'ye dayalı sorgular, admin işlemleri...) hiç sınırsızdı. Bu limit
-// loginLimiter/registerLimiter'ın YERİNE değil, ÜSTÜNE gelir (express-rate-limit middleware'leri
-// aynı rotada üst üste yığılabilir) — /api/auth/login hem bu genel limite hem kendi çok daha sıkı
-// limitine tabi olur, ikisi çakışmaz. Eşik gerçek kullanımı (ör. ComparisonView.jsx'in "Karşılaştır"
-// tıklamasında art arda ~8-10 istek atması) sıkıştırmayacak kadar geniş tutuldu — amaç normal
-// yoğun kullanımı değil, otomatik/kötüye kullanım trafiğini frenlemek.
 const generalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
   limit: 300,
@@ -271,9 +192,6 @@ const generalApiLimiter = rateLimit({
 })
 app.use('/api', generalApiLimiter)
 
-// Kimlik doğrulama uçları her zaman erişilebilir; geri kalan tüm /api rotaları
-// geçerli bir oturum ister. İsme bağlı hesaplar: kayıt olan biri admin onaylayana kadar
-// "pending" kalır, giriş yapamaz.
 app.post('/api/auth/register', registerLimiter, (req, res) => {
   try {
     const { name, email, role, password } = req.body || {}
@@ -287,9 +205,6 @@ app.post('/api/auth/register', registerLimiter, (req, res) => {
 app.post('/api/auth/login', loginLimiter, (req, res) => {
   const { email, password } = req.body || {}
   const user = email ? findUserByEmail(email) : null
-  // Denetim G-10: kullanıcı yoksa scrypt hiç çalışmıyor, cevap ölçülebilir şekilde daha hızlı
-  // dönüyor ve bu tek başına "bu e-posta kayıtlı mı" sorusunu yanıtlıyordu. burnPasswordVerification
-  // var-olmayan kullanıcı yolunda da aynı scrypt maliyetini ödetir.
   const passwordOk = user
     ? verifyPassword(password || '', user.passwordHash)
     : burnPasswordVerification(password)
@@ -319,16 +234,12 @@ app.post('/api/auth/logout', (req, res) => {
   res.json({ ok: true })
 })
 
-// /auth/* öneki genel oturum-zorunlu middleware'i atladığı için (aşağıda),
-// oturumu burada elle doğruluyoruz.
 app.post('/api/auth/change-password', (req, res) => {
   const userId = getSessionUserId(req.cookies[COOKIE_NAME])
   if (!userId) return res.status(401).json({ error: 'Giriş gerekli' })
   try {
     const { currentPassword, newPassword } = req.body || {}
     changeUserPassword(userId, currentPassword, newPassword)
-    // Şifre değişti → eski çerezler (başka cihaz/oturum) geçersiz olmalı; mevcut istemciye
-    // taze bir oturum verilir ki kullanıcı kendi kendini dışarı atmasın.
     deleteSessionsForUser(userId)
     const token = createSession(userId)
     res.setHeader('Set-Cookie', sessionCookieHeader(token, SESSION_MAX_AGE_S, req))
@@ -343,9 +254,6 @@ app.use('/api', (req, res, next) => {
   const userId = getSessionUserId(req.cookies[COOKIE_NAME])
   if (!userId) return res.status(401).json({ error: 'Giriş gerekli' })
 
-  // Denetim G-05: oturum satırının varlığı tek başına yeterli değildi — silinmiş, reddedilmiş
-  // veya onayı geri alınmış bir kullanıcının çerezi 7 güne kadar geçerli kalıyordu. Her istekte
-  // kullanıcının HÂLÂ var ve 'approved' olduğu doğrulanıyor.
   const user = getUser(userId)
   if (!user || user.status !== 'approved') {
     deleteSessionsForUser(userId)
@@ -354,15 +262,9 @@ app.use('/api', (req, res, next) => {
   }
 
   req.currentUser = user
-  // Ücretli çağrıların kullanıcı başına günlük kotaya yazılabilmesi için (bkz.
-  // services/liveCallQuota.js) — isteğin tüm asenkron zinciri bu bağlamda çalışır.
   runWithUserContext(userId, next)
 })
 
-// Analist Paneli'ndeki sınıflandırma/destinasyon düzeltme ve onaylama
-// fonksiyonları yalnızca Yönetici (admin) rolüne açık — Analist ve Okuyucu
-// hesaplar görebilir ama kaydedemez. İstemci tarafı (nav sekmesini gizleme)
-// tek başına yeterli değil, bu yüzden sunucu da aynı kısıtı uygular.
 function requireAdmin(req, res, next) {
   const userId = getSessionUserId(req.cookies[COOKIE_NAME])
   const user = userId ? getUser(userId) : null
@@ -373,8 +275,6 @@ function requireAdmin(req, res, next) {
   next()
 }
 
-// Sadece yöneticiler /api/admin/* rotalarına erişebilir — nav sekmesini gizlemek yeterli
-// değil, sunucu tarafında da doğrulanır.
 app.use('/api/admin', (req, res, next) => {
   const userId = getSessionUserId(req.cookies[COOKIE_NAME])
   const user = userId ? getUser(userId) : null
@@ -401,7 +301,7 @@ app.post('/api/admin/users/:id/approve', (req, res) => {
 app.post('/api/admin/users/:id/reject', (req, res) => {
   try {
     const entry = setUserStatus(req.params.id, 'rejected', req.currentUser.id)
-    deleteSessionsForUser(req.params.id) // reddedilen hesabın açık oturumu kalmasın
+    deleteSessionsForUser(req.params.id)
     res.json(publicUser(entry))
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -418,23 +318,20 @@ app.post('/api/admin/users/:id/access-level', (req, res) => {
   }
 })
 
-// E-posta altyapısı yok — "şifremi unuttum" bu yüzden self-servis değil,
-// yönetici geçici bir şifre üretip güvenli bir kanaldan iletiyor.
 app.post('/api/admin/users/:id/reset-password', (req, res) => {
   try {
     const tempPassword = resetUserPassword(req.params.id)
-    deleteSessionsForUser(req.params.id) // eski şifreyle açılmış oturumlar da kapansın
+    deleteSessionsForUser(req.params.id)
     res.json({ tempPassword })
   } catch (err) {
     res.status(400).json({ error: err.message })
   }
 })
 
-// Kendi hesabını ve son yöneticiyi silmeye karşı kilit users.js deleteUser içinde (bkz. orada).
 app.post('/api/admin/users/:id/delete', (req, res) => {
   try {
     deleteUser(req.params.id, req.currentUser.id)
-    deleteSessionsForUser(req.params.id) // silinen kullanıcının çerezi anında geçersiz
+    deleteSessionsForUser(req.params.id)
     res.json({ ok: true })
   } catch (err) {
     res.status(400).json({ error: err.message })
@@ -455,7 +352,6 @@ app.get('/api/taxonomy', (req, res) => {
   res.json({ themes: THEMES })
 })
 
-// Ay/yıl periyodu görünümü — server/period-history.js. `range` yoksa/geçersizse aylık.
 app.get('/api/history/global-periods', (req, res) => {
   try {
     const range = req.query.range === 'yearly' ? 'yearly' : 'monthly'
@@ -479,9 +375,6 @@ app.get('/api/history/:iso2/periods', (req, res) => {
   }
 })
 
-// T.C. Kültür ve Turizm Bakanlığı (YİGM) sınır bülteninden otomatik çekilen turist giriş
-// verisinin ham, ülke bazlı listesi — src/components/ContinentSidebar.jsx kıtaya göre süzüyor
-// (bkz. findTopLearningCountry ile aynı client-side filtre deseni).
 app.get('/api/tourism-summary', (req, res) => {
   try {
     res.json({ items: getAllLatestArrivals() })
@@ -491,9 +384,6 @@ app.get('/api/tourism-summary', (req, res) => {
   }
 })
 
-// CountryPanel'deki "Yayındaki diziler" listesinin Aylık/Yıllık/5 Yıllık dönemlere göre
-// yeniden sıralanabilmesi için — tüm dizilerin (tmdb_id) o dönemdeki ortalama popülerliğini
-// döner, ülkeye göre süzme client-side yapılır (bkz. server/series-period-history.js).
 app.get('/api/series-popularity', (req, res) => {
   try {
     const range = ['monthly', 'yearly', '5yearly'].includes(req.query.range) ? req.query.range : 'monthly'
@@ -515,10 +405,6 @@ app.get('/api/theme-insight', async (req, res) => {
   }
 })
 
-// try/catch BİLEREK: bu, projedeki tek try/catch'siz async rotaydı ve soğuk önbellekte TMDB
-// hata verdiğinde (intranette egress yoksa olası) reddedilen promise Express 4 tarafından
-// yutulup Node'un varsayılan --unhandled-rejections=throw davranışıyla SÜRECİ KAPATIYORDU
-// (denetim bulgusu B-01). Diğer tüm rotalarla aynı desene getirildi.
 app.get('/api/themes', async (req, res) => {
   try {
     const raw = await getRawSeriesDataCached()
@@ -544,10 +430,6 @@ app.get('/api/themes', async (req, res) => {
   }
 })
 
-// Denetim bulgusu G-11: `reviewer` istek gövdesinden alınıyordu — yönetici, denetim izine
-// istediği ismi (ya da hiç isim vermeyip themes.js'teki 'anonim' fallback'ini) yazdırabiliyordu,
-// yani kürasyon kaydı sahte doldurulabilirdi. Artık YALNIZCA oturumdan geliyor; gövdedeki alan
-// tamamen yok sayılıyor. req.currentUser'ı /api middleware'i dolduruyor (bkz. G-05).
 function reviewerFrom(req) {
   return req.currentUser?.name || req.currentUser?.email || 'bilinmeyen kullanıcı'
 }
@@ -571,8 +453,6 @@ app.post('/api/themes/:seriesId/override', requireAdmin, (req, res) => {
   }
 })
 
-// İnsan override'ını siler, kaydı LLM'in orijinal sınıflandırmasına döndürür — Analist
-// Paneli'ndeki "AI önerisine geri dön" eylemi.
 app.post('/api/themes/:seriesId/clear-override', requireAdmin, (req, res) => {
   try {
     const entry = clearHumanOverride(req.params.seriesId)
@@ -591,9 +471,6 @@ app.post('/api/themes/:seriesId/clear-override', requireAdmin, (req, res) => {
   }
 })
 
-// keywords eklendi (Analist Paneli'nin "anahtar kelime vurgulama" özelliği için) — bu, hangi
-// kelimenin bir dizinin özetinde bir destinasyonu tetiklediğini istemci tarafında vurgulayabilmek
-// için kullanılıyor, hassas bir veri değil (zaten server/destinations.js'te sabit/genel).
 app.get('/api/destinations/taxonomy', (req, res) => {
   res.json({ destinations: DESTINATIONS.map((d) => ({ id: d.id, name: d.name, keywords: d.keywords })) })
 })
@@ -644,10 +521,6 @@ app.post('/api/destinations/:seriesId/override', requireAdmin, (req, res) => {
   }
 })
 
-// İnsan etiketini siler, kaydı sinopsis bazlı otomatik tespite döndürür — Analist
-// Paneli'ndeki "AI önerisine geri dön" eylemi. setHumanTags(id, []) ile KARIŞTIRILMAMALI:
-// o "insan sıfır destinasyon onayladı" demek, bu ise "hiç insan onayı yok" demek (bkz.
-// destinations.js clearHumanTags).
 app.post('/api/destinations/:seriesId/clear-override', requireAdmin, (req, res) => {
   try {
     const entry = clearHumanTags(req.params.seriesId)
@@ -665,8 +538,6 @@ app.post('/api/destinations/:seriesId/clear-override', requireAdmin, (req, res) 
   }
 })
 
-// Analist Paneli'nin "Basın & Medya Algısı" denetim sekmesi — tema/destinasyon uçlarıyla aynı
-// erişim modeli: listeleme herkese (canEdit'siz de) açık, düzeltme sadece Yönetici'ye.
 app.get('/api/media-sentiment-audit', async (req, res) => {
   try {
     const raw = await getRawSeriesDataCached()
@@ -705,16 +576,6 @@ app.get('/api/trends/series', async (req, res) => {
   }
 })
 
-// TrendsExplorer.jsx — Kıyaslama Modu. En fazla 5 (arayüz 3'e sınırlıyor) dizinin göreceli
-// arama payı, KÜRESEL (geo verilmez — bkz. trendsShareOfSearch.js'teki iso2 genellemesi).
-// DİKKAT: bu route'un aşağıdaki /api/trends/:seriesName'den ÖNCE tanımlı olması ZORUNLU —
-// Express route'ları kayıt SIRASINA göre eşleştirir, sonra tanımlansaydı ":seriesName" joker
-// deseni "share-of-search"i sahte bir dizi adı sanıp önce yakalardı (gerçek bir bug olarak
-// yaşandı: SerpAPI'nin "share-of-search" diye bir dizi bulamaması gibi yanıltıcı bir hataya yol
-// açıyordu — aynı sebeple /api/trends/timeseries/:seriesName da spesifik önce gelmeli).
-// Aşağıdaki ücretli uçların HEPSİ, ham kullanıcı girdisini dış servise geçirmeden önce onu
-// canlı dizi listesine / geçerli ISO2 listesine karşı çözümler (denetim G-01). Bilinmeyen bir
-// değer 400 ile döner: ne SerpAPI çağrısı yapılır ne de o değerle yeni bir önbellek satırı açılır.
 app.get('/api/trends/share-of-search', async (req, res) => {
   try {
     const rawTitles = String(req.query.titles || '')
@@ -732,8 +593,6 @@ app.get('/api/trends/share-of-search', async (req, res) => {
   }
 })
 
-// ComparisonView.jsx — "Bölgesel Üstünlük". Aynı sebeple (yukarıdaki not) /api/trends/:seriesName'
-// den ÖNCE tanımlı.
 app.get('/api/trends/regional-breakdown', async (req, res) => {
   try {
     const rawTitles = String(req.query.titles || '')
@@ -750,16 +609,18 @@ app.get('/api/trends/regional-breakdown', async (req, res) => {
   }
 })
 
-// TrendsExplorer.jsx — Küresel 12 Aylık Trend Çizgisi. Tek dizi, geo verilmez (dünya geneli
-// haftalık arama hacmi) — bkz. serpApiCache.js'teki fetchTrendsTimeSeriesRaw'ın iso2-opsiyonel hâli.
-// Aynı gerekçeyle (yukarıdaki not) /api/trends/:seriesName'den ÖNCE tanımlı.
 app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
   try {
     const seriesName = await resolveKnownSeriesName(req.params.seriesName)
     if (!seriesName) return res.status(400).json({ error: 'Bilinmeyen dizi' })
-    const key = timeSeriesCacheKey(seriesName, null, 'today 12-m')
+    const { geo } = req.query
+    if (geo != null && geo !== '' && !isValidIso2(geo)) {
+      return res.status(400).json({ error: 'Geçersiz ülke kodu' })
+    }
+    const iso2 = geo ? normalizeIso2(geo) : null
+    const key = timeSeriesCacheKey(seriesName, iso2, 'today 12-m')
     const data = await cacheFirstSerpApi(key, TIMESERIES_TTL_MS, () =>
-      fetchTrendsTimeSeriesRaw(seriesName, null, 'today 12-m')
+      fetchTrendsTimeSeriesRaw(seriesName, iso2, 'today 12-m')
     )
     res.json(data)
   } catch (err) {
@@ -768,19 +629,21 @@ app.get('/api/trends/timeseries/:seriesName', async (req, res) => {
   }
 })
 
-// TrendsExplorer.jsx — zaman serisi grafiğinin altındaki AI yorumu. Yukarıdaki /api/trends/
-// timeseries/:seriesName ile AYNI cache anahtarını (timeSeriesCacheKey) kullanır — o rota zaten
-// çağrılmışsa burada YENİDEN bir SerpAPI isteği atılmaz, sadece LLM katmanı eklenir. Aynı
-// gerekçeyle (yukarıdaki not) /api/trends/:seriesName'den ÖNCE tanımlı.
 app.get('/api/trends/insight/:seriesName', async (req, res) => {
   try {
     const seriesName = await resolveKnownSeriesName(req.params.seriesName)
     if (!seriesName) return res.status(400).json({ error: 'Bilinmeyen dizi' })
-    const key = timeSeriesCacheKey(seriesName, null, 'today 12-m')
+    const { geo } = req.query
+    if (geo != null && geo !== '' && !isValidIso2(geo)) {
+      return res.status(400).json({ error: 'Geçersiz ülke kodu' })
+    }
+    const iso2 = geo ? normalizeIso2(geo) : null
+    const key = timeSeriesCacheKey(seriesName, iso2, 'today 12-m')
     const timeseries = await cacheFirstSerpApi(key, TIMESERIES_TTL_MS, () =>
-      fetchTrendsTimeSeriesRaw(seriesName, null, 'today 12-m')
+      fetchTrendsTimeSeriesRaw(seriesName, iso2, 'today 12-m')
     )
-    const data = await getSeriesTrendInsight(seriesName, timeseries.timeline)
+    const scopeLabel = iso2 ? `${countryNameFromIso2(iso2)}'daki` : null
+    const data = await getSeriesTrendInsight(seriesName, timeseries.timeline, scopeLabel)
     res.json(data)
   } catch (err) {
     console.error('[trends/insight] hata:', err.message)
@@ -812,10 +675,6 @@ app.get('/api/social/:seriesName', async (req, res) => {
   }
 })
 
-// TrendsExplorer.jsx — "Gelişmiş Medya & Sosyal Taramayı Çalıştır". Mevcut haftalık toplu işlerin
-// (autoNewsScheduler/socialEnricher) TEK bir dizi + en görünür 15 ülke için anlık, kullanıcı
-// tetiklemeli versiyonu — aynı fetch/cache fonksiyonlarını çağırır, yeni bir mantık YOK. SerpAPI
-// kotası harcadığı için (en fazla 15×3 = 45 gerçek çağrı) yöneticiyle sınırlı.
 app.post('/api/series/enrich-now/:id', requireAdmin, async (req, res) => {
   try {
     const seriesId = Number(req.params.id)
@@ -826,10 +685,6 @@ app.post('/api/series/enrich-now/:id', requireAdmin, async (req, res) => {
       return
     }
     const { topCountries } = await getEnrichmentTargets()
-    // Sıralı (paralel DEĞİL) — ikisi de aynı paylaşılan aylık SerpAPI bütçe sayacını kontrol
-    // edip artırıyor (bkz. serpApiCache.js), paralel çalıştırılırsa iki döngü birbirinin
-    // kontrolünü geçersiz kılıp bütçeyi hafifçe aşabilir (aynı sebep scheduler.js'in 3 haftalık
-    // işi de sıralı çalıştırmasının nedeni).
     const news = await enrichSeriesNewsNow(seriesId, series.name, topCountries)
     const social = await enrichSeriesSocialNow(series.name, topCountries)
     res.json({ ok: true, seriesId, seriesName: series.name, countriesTargeted: topCountries.length, news, social })
@@ -849,10 +704,6 @@ app.get('/api/imdb/:tmdbId', async (req, res) => {
   }
 })
 
-// data-pipeline-python/batch_run.py'nin ürettiği Dizilah topluluk puanı + IMDb ülke
-// bazlı yerelleştirilmiş isim verisi — pipeline hiç çalıştırılmamışsa ya da bu dizi
-// için veri yoksa (services/pipelineData.js) dürüstçe { dizilah: null, imdb: null }
-// döner, hata fırlatmaz.
 app.get('/api/series-enrichment/:tmdbId', (req, res) => {
   try {
     const data = getSeriesEnrichment(Number(req.params.tmdbId))
@@ -886,14 +737,6 @@ app.get('/api/regional-interest/:seriesName/:iso2', async (req, res) => {
   }
 })
 
-// Proje raporu §4.6 "Basın/Haber Duygu Analizi" — dizi ve ülke bazlı duygu oranları, baskın
-// ton, LLM'in kurumsal Türkçe özeti ve son 5 haber künyesi. seriesId TMDB kimliği; dizi adı
-// canlı raw-series-providers önbelleğinden çözülür (data-pipeline.js'in doldurduğu, bkz.
-// server/data-pipeline.js) — bu önbellek henüz hiç dolmamışsa (uygulama az önce başladıysa)
-// dürüstçe 404 döneriz, uydurma bir isimle SerpAPI'ye gitmeyiz. Bu kod tabanında henüz o
-// ülkeye özel yerelleştirilmiş bir dizi adı kaynağı yok (bkz. data-pipeline-python'daki AYRI
-// imdb_localized_titles, Node tarafından erişilemiyor) — localTitle bilerek null geçilir,
-// fetchAndAnalyzeSentiment bu durumda dürüstçe seriesName'e düşer.
 app.get('/api/media-sentiment/:seriesId/:iso2', async (req, res) => {
   try {
     const seriesId = Number(req.params.seriesId)
@@ -912,10 +755,6 @@ app.get('/api/media-sentiment/:seriesId/:iso2', async (req, res) => {
   }
 })
 
-// TrendsExplorer.jsx — Tekli Analiz'in "Küresel Ayak İzi & Medya Algısı" bloğu. Yukarıdaki
-// /api/media-sentiment/:seriesId/:iso2 TEK bir ülke içindir (tetiklemeli) — burası o ana kadar
-// taranmış TÜM ülkelerin bu dizi için özetidir, senkron SQLite okuması (yeni bir SerpAPI çağrısı
-// YAPMAZ, sadece var olan kayıtları özetler).
 app.get('/api/media-sentiment-summary/:seriesId', (req, res) => {
   try {
     const data = getMediaSentimentForSeries(Number(req.params.seriesId))
@@ -926,10 +765,6 @@ app.get('/api/media-sentiment-summary/:seriesId', (req, res) => {
   }
 })
 
-// TrendsExplorer.jsx — Tekli Analiz'in "Dizi Başlık & Tema Bloğu". Poster/yayın tarihi/özet
-// raw-series-providers önbelleğinden (ülkeden bağımsız, bkz. /api/media-sentiment üstündeki aynı
-// desen), tema getThemeStore'dan, bölüm sayısı (varsa) offline pipeline'dan (getSeriesEnrichment) —
-// pipeline hiç çalıştırılmamışsa dürüstçe null, uydurma bir sayı üretilmez.
 app.get('/api/series/:tmdbId', (req, res) => {
   try {
     const seriesId = Number(req.params.tmdbId)
@@ -957,11 +792,6 @@ app.get('/api/series/:tmdbId', (req, res) => {
   }
 })
 
-// Proje raporu — TMDB'nin tek küresel popülerlik skoruna bağımlılığı azaltan 4 faktörlü
-// (Share of Search %40, Netflix Top 10 %30, Basın Algısı %15, Yayın Varlığı %15) ülke
-// liderlik tablosu (bkz. server/services/countryScoringEngine.js). Share of Search canlı bir
-// SerpAPI çağrısı gerektirdiği için (cache-first olsa da ilk seferinde kota harcar) diğer
-// GET uçları gibi anlık değil — bu yüzden burada da aynı honest-502 deseni korunuyor.
 app.get('/api/country-leaderboard/:iso2', async (req, res) => {
   try {
     if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
@@ -983,9 +813,6 @@ app.get('/api/duolingo-stats', async (req, res) => {
   }
 })
 
-// Etki & İhracat analizi YÖNETİCİ görünümüne alındı (arayüzde sekme yalnızca yöneticiye
-// gösteriliyor). Uçların da korunması şart: yalnızca düğmeyi gizlemek, oturumu olan herkesin
-// /api/impact* adreslerini doğrudan çağırabildiği anlamına gelirdi — yani görsel bir önlem.
 app.get('/api/impact', requireAdmin, async (req, res) => {
   try {
     const { data, raw, destinationStore } = await getEnrichedVisibility()
@@ -997,9 +824,6 @@ app.get('/api/impact', requireAdmin, async (req, res) => {
   }
 })
 
-// "Etki & İhracat Analizi" ekranının 3 sekmesi (Kültürel/Turizm/İhracat) — /api/impact geriye
-// dönük uyumluluk için aynen duruyor, ama yeni önyüz (ImpactAnalysisTabs.jsx) artık sadece
-// aktif sekmenin ihtiyaç duyduğu veriyi çekiyor.
 app.get('/api/impact/cultural', requireAdmin, (req, res) => {
   try {
     res.json(buildCulturalImpact())
@@ -1030,19 +854,17 @@ app.get('/api/impact/export', requireAdmin, async (req, res) => {
   }
 })
 
-// Ülke Odaklı Çoklu Veri Birleştirme — üç sekmenin verisi TEK bir ülke için tek potada.
-// `?insight=1` verildiğinde ayrıca LLM'in objektif gözlem özeti eklenir.
-//
-// LLM ÇAĞRISI VERİYİ BLOKLAMAZ: özet üretilemezse (kota, zaman aşımı, ya da modelin sözleşmeyi
-// ihlal edip aksiyon önerisi üretmesi) `llmSummary: null` ve `llmError` döner — ölçülmüş veri
-// tablosu her hâlükârda gelir. Bu, projenin genel ilkesiyle aynı: sayısal veri hiçbir zaman
-// LLM'in başarısına bağımlı değildir.
 app.get('/api/impact/country-summary/:iso2', requireAdmin, async (req, res) => {
   try {
     if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
     const iso2 = normalizeIso2(req.params.iso2)
     const { data } = await getEnrichedVisibility()
     const convergence = await buildCountryConvergence(iso2, data.countries)
+
+    const { removed } = sanitizeClaimsPayload(convergence)
+    if (removed > 0) {
+      console.log(`[impact/country-summary] ${iso2}: ${removed} doğrulanmamış iddia elendi`)
+    }
 
     if (req.query.insight !== '1') return res.json(convergence)
 
@@ -1081,19 +903,11 @@ app.get('/api/turkish-learning-index', async (req, res) => {
   }
 })
 
-// Prod: build edilmiş frontend'i de servis et
 const distPath = path.join(__dirname, '..', 'dist')
-// Denetim bulgusu D-16: varsayılan `maxAge: 0` ile 2 MB'lık küre dokuları ve 488 KB'lık ülke
-// GeoJSON'u HER açılışta yeniden doğrulanıyordu (koşullu istek + ağ gidiş-dönüşü). Bu dosyalar
-// depoya alınmış, sürüm kontrollü ve İÇERİĞİ DEĞİŞMEYEN varlıklar (bkz. public/map/) — değişmeleri
-// gerekirse yeni bir dağıtımla gelirler. `immutable`, tarayıcıya "süre dolana kadar sormaya bile
-// gerek yok" der; intranet gibi düşük bant genişlikli ortamda açılış maliyetini doğrudan düşürür.
 app.use(
   '/map',
   express.static(path.join(distPath, 'map'), { maxAge: '30d', immutable: true })
 )
-// Geri kalan build çıktısı (index.html ve hash'li asset'ler) varsayılan davranışta kalır:
-// index.html asla önbelleklenmemeli, hash'li dosyalar zaten adlarıyla sürümlenir.
 app.use(express.static(distPath))
 app.get('*', (req, res, next) => {
   if (req.path.startsWith('/api')) return next()
@@ -1103,10 +917,6 @@ app.get('*', (req, res, next) => {
 })
 
 const port = process.env.PORT || 3001
-// Son savunma katmanı (denetim B-01/L3): yakalanmamış bir promise reddi ya da senkron
-// istisna SÜRECİ KAPATMASIN — loglanır, sunucu ayakta kalır. Express'in varsayılan hata
-// sayfası yerine JSON döndüren bir hata middleware'i de eklendi (istemci her zaman JSON
-// bekliyor; ayrıca üretim dışında stack trace sızdırmasın diye mesaj genel tutuldu).
 process.on('unhandledRejection', (reason) => {
   console.error('[process] yakalanmamış promise reddi:', reason instanceof Error ? reason.message : reason)
 })
@@ -1116,9 +926,6 @@ process.on('uncaughtException', (err) => {
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  // CORS reddi gibi BİLİNÇLİ retler kendi durum kodunu taşır (err.status) ve gerçek sebebini
-  // söyleyebilir; geri kalan her şey beklenmeyen bir hatadır → 500 + genel mesaj (denetim L3:
-  // üst servis hata metinleri/stack trace istemciye sızmasın).
   const status = Number.isInteger(err.status) ? err.status : 500
   console.error('[express] işlenmemiş hata:', err.message)
   if (res.headersSent) return

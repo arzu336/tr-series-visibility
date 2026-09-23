@@ -69,6 +69,8 @@ class RejectionReason(str, Enum):
     WINDOW_GAP = "window_gap"  # pencere takvimsel olarak bitişik değil
     EFFECT_TOO_SMALL = "effect_too_small"  # değişim raporlanmaya değmeyecek kadar küçük
     WINDOW_UNSTABLE = "window_unstable"  # pencere içinde aykırı ay var — toplam temsili değil
+    COHORT_NEUTRAL = "cohort_neutral"  # dizi kendi dil kohortuyla birlikte hareket etti
+    TELEMETRY_ONLY = "telemetry_only"  # yalnızca gayriresmî/telemetri kaynağa dayanıyor
 
 
 class MetricPoint(BaseModel):
@@ -102,6 +104,22 @@ class MetricSeries(BaseModel):
     points: list[MetricPoint] = Field(default_factory=list)
 
 
+class CohortStats(BaseModel):
+    """Bir (metrik, coğrafi birim) kohortunun toplu hareketi.
+
+    NEDEN GEREKLİ — canlı veriyle yakalandı: 51 Farsça dizinin 50'si aynı pencerede 3 kattan
+    fazla büyüdü (kohort medyanı 4,23x). Aynı dönemde tr 0,96x, ar 1,30x, ru 0,88x, es 0,93x.
+    Yani 50 dizi birden İran'da popüler olmadı — fa.wikipedia korpusunun TAMAMI kaydı.
+    Dizi bazlı hiçbir kapı bunu yakalayamaz çünkü her iddia tek tek bakıldığında geçerlidir;
+    sorun toplu düzeydedir. Kohort medyanı, "bu dizi kendi kohortundan ayrıştı mı" sorusunu
+    sorulabilir hale getirir.
+    """
+
+    key: str  # "views|fa|language"
+    median_ratio: float  # kohortun medyan (güncel / taban) çarpanı
+    series_count: int
+
+
 class SupportingData(BaseModel):
     """İddianın arkasındaki ham noktalar — bülten üç ay sonra denetlenebilsin diye.
     Bu alan olmadan 'yeniden üretilebilirlik' iddiası boştur."""
@@ -120,7 +138,29 @@ class Claim(BaseModel):
     window: str  # "2026-06..2026-08 vs 2026-03..2026-05"
     baseline_value: float
     current_value: float
-    change_pct: float
+    # KEŞİF MODU: sıfır tabanda yüzde TANIMSIZDIR (0'a bölme). Uydurma bir sayı üretmek
+    # yerine None kalır ve `from_zero` bayrağı "sıfırdan bir şeye çıktı" bilgisini taşır —
+    # bu gerçek bir olaydır, yalnızca yüzde olarak ifade edilemez.
+    change_pct: Optional[float] = None
+    from_zero: bool = False
+
+    # --- Doğrulama kapısı sonucu -------------------------------------------------------
+    # Varsayılan modda üretilen her iddia tüm kapılardan geçmiştir (passed_gates=True).
+    # Keşif modunda kapıya takılan adaylar da iddiaya dönüşür ama passed_gates=False olur ve
+    # hangi kapılara takıldığı `failed_gates`te taşınır.
+    #
+    # TÜKETEN TARAFIN SÖZLEŞMESİ: bülten, LLM özeti ve karar destek çıktıları YALNIZCA
+    # passed_gates=True olanları kullanır. Keşif çıktısı ayrı bir bölümde, "doğrulanmamış"
+    # etiketiyle gösterilir.
+    passed_gates: bool = True
+    failed_gates: list[str] = Field(default_factory=list)
+
+    # Kohort bağlamı. `cohort_change_pct` kohortun kendi hareketi, `excess_change_pct` ise
+    # dizinin ondan SAPMASI — bülten metni bunu kullanmalı. Kohort verilmediyse ikisi de None
+    # kalır ve iddia mutlak (kohortsuz) okunur.
+    cohort_change_pct: Optional[float] = None
+    excess_change_pct: Optional[float] = None
+    cohort_series_count: Optional[int] = None
     confidence_score: ConfidenceScore
     geo_or_lang: str
     geo_kind: GeoKind
@@ -129,6 +169,9 @@ class Claim(BaseModel):
 
     @property
     def direction(self) -> str:
+        """Yön. Sıfır tabanda yüzde yok ama yön VAR: sıfırdan bir şeye çıkmak artıştır."""
+        if self.change_pct is None:
+            return "artis" if self.from_zero else "belirsiz"
         return "artis" if self.change_pct > 0 else "dusus"
 
 

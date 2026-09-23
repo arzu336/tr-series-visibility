@@ -1,19 +1,12 @@
 import { getCached, setCached } from './cache.js'
 import { getDuolingoTrend, maybeRecordDuolingoSnapshot } from './duolingo-history.js'
 
-// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
-// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
 const EXTERNAL_TIMEOUT_MS = 15000
 
 const DUOLINGO_COURSES_URL = 'https://www.duolingo.com/api/1/courses/list'
 const RAW_CACHE_KEY = 'duolingo-courses'
-const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 saat — data-pipeline.js'teki aynı TTL
+const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
-// Duolingo'nun herkese açık kurs listesi ucu (test edildi, gerçek veri döner) — ülke bazlı
-// değil, KÜRESEL tek bir "Türkçe öğrenen toplam kullanıcı" sayısı verir (bkz.
-// src/components/TurkishLearningIndex.jsx'teki açıkça "🌍 Küresel" etiketli ayrı kart —
-// ülke bazlı Google Trends endeksiyle karıştırılmaz). Yunus Emre Enstitüsü eklenmedi:
-// resmi sitesi JS ile render ediliyor, basit bir HTTP isteğiyle içeriği alınamıyor.
 async function fetchCourses() {
   const cached = getCached(RAW_CACHE_KEY)
   if (cached) return cached

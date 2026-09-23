@@ -5,13 +5,6 @@ import { fileURLToPath } from 'node:url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 dotenv.config({ path: path.join(__dirname, '..', '.env') })
 
-// Wikipedia okunma katmanının geri doldurma aracı. Zamanlayıcıya BAĞLI DEĞİL: ilk dolum
-// elle/kontrollü çalıştırılır (binlerce dış istek), düzenli tazeleme ayrı ele alınır.
-//
-// Kullanım:
-//   npm run backfill:wikipedia                 -> eksikleri tamamlar (yeniden çalıştırmak güvenli)
-//   npm run backfill:wikipedia -- --limit 25   -> küçük örnekle dene
-//   npm run backfill:wikipedia -- --force      -> var olanları da tazeler
 const argv = process.argv.slice(2)
 const bayrak = (ad) => argv.includes(`--${ad}`)
 const deger = (ad) => {

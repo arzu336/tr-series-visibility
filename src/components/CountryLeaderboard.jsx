@@ -9,13 +9,6 @@ const BADGE_LEVEL_CLASS = {
   weak: 'leaderboard__badge--weak',
 }
 
-// Proje raporu — TMDB'nin tek küresel popülerlik skoruna bağımlılığı azaltan 4 faktörlü ülke
-// sıralaması (bkz. server/services/countryScoringEngine.js). Kullanıcı talebiyle SADELEŞTİRİLDİ:
-// "Arama Payı" yüzdeleri, mini kırılım çubukları ve kanıt metinleri kaldırıldı — analistin/
-// sunucu tarafında zaten hesaplanan skor hâlâ SIRALAMAYI belirliyor (kod tarafında hiçbir şey
-// değişmedi), sadece EKRANDA artık ham sayı yerine net bir 1-5 sıralaması ve tek, sade bir güven
-// rozeti gösteriliyor. Panel satırını genişletmek (CountryPanel.jsx) zaten bilinçli bir kullanıcı
-// eylemi olduğu için otomatik yüklenir.
 export default function CountryLeaderboard({ iso2 }) {
   const [state, setState] = useState({ status: 'loading', data: null, error: null })
 

@@ -145,6 +145,35 @@ CREATE TABLE IF NOT EXISTS canonical_alias (
     created_at TEXT NOT NULL
 );
 
+-- --- Gayriresmî telemetri (kaynak-bağımsız) --------------------------------------------
+-- FlixPatrol, Telegram, korsan izleme siteleri gibi RESMÎ OLMAYAN kaynaklardan gelen her
+-- sinyal buraya yazılır. Tablo bilerek kaynak-bağımsız: yarın lisanslı bir API ya da başka
+-- bir telemetri eklenince yeni tablo açılmaz, `source` sütunu ayırır.
+--
+-- GÜVEN ETİKETLERİ SÜTUN VARSAYILANI DEĞİL, YAZMA KAPISINDA ZORLANIR
+-- (bkz. telemetry_store.save_telemetry): çağıran taraf sözlüğünde "official" gönderse bile
+-- kayıt gayriresmî olarak yazılır. Etiketi çağırana bırakmak, tek bir dikkatsiz çağrının
+-- korsan kaynaklı veriyi resmî ölçümle aynı sınıfa sokması demekti.
+--
+-- canonical_id NULL OLABİLİR ve bu kasıtlıdır: eşleşmeyen dizi adı için kimlik UYDURULMAZ.
+-- Eşleşmeyenler ayrıca unresolved_queue'ya düşer (bkz. identity.py aynı ilke).
+CREATE TABLE IF NOT EXISTS unofficial_telemetry (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    source TEXT NOT NULL,
+    source_ref TEXT NOT NULL,
+    raw_title TEXT NOT NULL,
+    canonical_id TEXT,
+    platform TEXT,
+    country_slug TEXT,
+    country_iso2 TEXT,
+    rank INTEGER,
+    metric_value REAL,
+    source_trust_level TEXT NOT NULL,
+    confidence_score TEXT NOT NULL,
+    observed_at TEXT NOT NULL,
+    UNIQUE (source, source_ref, raw_title)
+);
+
 -- Çözülemeyen kayıtlar. SİLİNMEZ: 'drop' geri alınamaz ve denetlenemez. Kaynak sonradan
 -- sert kimlik kazanırsa aynı satır yeniden çözülebilir. candidates SADECE insan incelemesi
 -- içindir — otomatik birleştirmede asla kullanılmaz.

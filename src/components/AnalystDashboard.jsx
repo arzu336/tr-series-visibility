@@ -15,8 +15,6 @@ import MediaSentimentAuditSection from './MediaSentimentAuditSection.jsx'
 const CONFIDENCE_THRESHOLD = 70
 const OVERVIEW_PREVIEW_LENGTH = 90
 
-// Bir satırın gerçekte nerede yayında olduğunu/kadrosunu görmek için — Analist Paneli kendi
-// ülke/harita verisini tutmuyor, App.jsx'teki mevcut "dizi ara" akışına (SeriesPanel) devrediyor.
 function MapLinkButton({ seriesId, onViewSeriesOnMap }) {
   if (!onViewSeriesOnMap) return null
   return (
@@ -31,9 +29,6 @@ function MapLinkButton({ seriesId, onViewSeriesOnMap }) {
   )
 }
 
-// highlightTerms verilirse (tema/destinasyon ipucu kelimeleri, bkz. src/lib/highlightKeywords.js)
-// gösterilen metin (KISALTILMIŞ hali dahil — tam metin değil, ekranda GÖRÜNEN kısım) içindeki
-// eşleşmeler <mark> ile vurgulanır; analist özeti tıklayıp açmadan gerekçeyi görebilsin.
 function OverviewCell({ overview, highlightTerms }) {
   const [expanded, setExpanded] = useState(false)
   const text = overview || '—'
@@ -52,10 +47,6 @@ function OverviewCell({ overview, highlightTerms }) {
   )
 }
 
-// Kaynak sütununda "İnsan" yazan satırlar için — kürasyonu KİMİN NE ZAMAN yaptığını (kullanıcı
-// talebi: "Kürasyon Geçmişi") üzerine gelince gösteren küçük bir bilgi ikonu. Ayrı bir tooltip
-// kütüphanesi yerine native title="" kullanılıyor — projede zaten aynı desen (bkz. TrendsExplorer.jsx
-// "Taranmış ülke sayısı..." rozeti) kullanılıyor, ek bağımlılık gerektirmiyor.
 export function HumanAuditIcon({ reviewer, at }) {
   if (!at) return null
   const formatted = new Date(at).toLocaleDateString('tr-TR')
@@ -83,8 +74,6 @@ function EditControls({ item, taxonomy, draft, onDraftChange, onApprove, saving 
   )
 }
 
-// Klasik "kutu kutu" checkbox duvarı yerine: seçilenler chip olarak üstte,
-// arama kutusuna yazınca eşleşen kalan destinasyonlar açılır listede seçilir.
 function DestinationTagPicker({ taxonomy, draft, onToggle }) {
   const [query, setQuery] = useState('')
   const selected = taxonomy.filter((d) => draft.includes(d.id))
@@ -199,8 +188,6 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
     }
   }
 
-  // İnsan etiketini siler, kaydı sinopsis bazlı otomatik tespite döndürür (bkz.
-  // server/destinations.js clearHumanTags) — insan onayının yanlış/eskimiş olduğu durumlar için.
   const handleRevert = async (item) => {
     setSavingId(item.id)
     try {
@@ -312,8 +299,6 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
           </thead>
           <tbody>
             {tagged.map((item) => {
-              // Bu dizi için etiketli destinasyonların HEPSİNİN anahtar kelimeleri — özette
-              // hangisinin geçtiği tek bakışta görünsün diye (bkz. src/lib/highlightKeywords.js).
               const highlightTerms = item.effectiveDestinations.flatMap(
                 (id) => taxonomy.find((d) => d.id === id)?.keywords ?? []
               )
@@ -397,7 +382,7 @@ function sortItems(list, sortBy) {
 }
 
 export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) {
-  const [tab, setTab] = useState('themes') // themes | destinations
+  const [tab, setTab] = useState('themes')
   const [items, setItems] = useState([])
   const [taxonomy, setTaxonomy] = useState([])
   const [status, setStatus] = useState('loading')
@@ -444,8 +429,6 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
     }
   }
 
-  // İnsan override'ını siler, kaydı LLM'in orijinal sınıflandırmasına döndürür (bkz.
-  // server/themes.js clearHumanOverride) — yanlış/eskimiş bir insan düzeltmesini geri almak için.
   const handleRevert = async (item) => {
     setSavingId(item.id)
     try {
@@ -467,9 +450,6 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
     })
   }
 
-  // "İncelenmesi Gerekenler" listesindeki seçili tüm kayıtları tek seferde onaylar — her biri
-  // kendi taslağı varsa onu, yoksa LLM'in mevcut önerisini ("Onayla" butonuyla birebir aynı
-  // anlam) kaydeder. Tek tek "Onayla"ya basmak yerine büyük bir birikim hızlıca eritilebilsin diye.
   const handleBulkApprove = async (visibleList) => {
     const targets = visibleList.filter((item) => selectedIds.has(item.id))
     if (targets.length === 0) return
@@ -487,10 +467,6 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
     }
   }
 
-  // handleBulkApprove'dan farkı: her kaydı KENDİ taslağı/mevcut temasıyla değil, TEK bir
-  // seçilmiş temayla (bulkTheme) onaylar — kullanıcı talebi: "Seçilen 4 dizinin temasını tek
-  // tıkla 'Adalet' yapıp onaylasın". Bireysel taslaklar (drafts) bu eylemde YOK SAYILIR, çünkü
-  // amaç zaten hepsini aynı temaya sabitlemek.
   const handleBulkChangeThemeAndApprove = async (visibleList) => {
     const targets = visibleList.filter((item) => selectedIds.has(item.id))
     if (targets.length === 0 || !bulkTheme) return

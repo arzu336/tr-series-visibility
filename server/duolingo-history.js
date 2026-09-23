@@ -1,8 +1,5 @@
 import db from './db.js'
 
-// server/benchmark-history.js / server/history.js ile birebir aynı yöntem (7 günlük
-// pencere, "yetersiz-veri" dürüstlüğü) — burada tek bir küresel sayı (Duolingo'daki toplam
-// Türkçe öğrenci sayısı) izleniyor, ülke bazlı değil.
 const SNAPSHOT_INTERVAL_MS = 12 * 60 * 60 * 1000
 const TARGET_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
 const MIN_WINDOW_MS = 24 * 60 * 60 * 1000

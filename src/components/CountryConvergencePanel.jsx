@@ -1,13 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { fetchCountrySummary, fetchVisibility } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
-
-// --- ÜLKE BAZLI VERİ FİLTRELEME VE ANOMALİ ÖZETİ -----------------------------------------------
-// Üç sekmenin (Kültürel / Turizm / İhracat) verisini TEK bir ülke için birleştirip gösterir.
-//
-// BU BİLEŞEN AKSİYON ÖNERMEZ. Kullanıcı karar verici uzmandır; burada yalnızca "veri ne
-// gösteriyor" sorusunun cevabı vardır. Sunucu tarafı da aynı sözleşmeye bağlı (bkz.
-// server/llm.js generateCountryDataSummary — direktif üreten bir yanıt HATA sayılır).
+import { onlyVerifiedClaims } from '../lib/claimsGate.js'
 
 const BOYUTLAR = [
   { key: 'cultural', baslik: '1 · Kültürel & Dizi Sinyali' },
@@ -15,8 +9,6 @@ const BOYUTLAR = [
   { key: 'export', baslik: '3 · İhracat & Ticari Veri Dengesi' },
 ]
 
-// Sunucudaki alan adlarının okunur karşılıkları. Eşlenmeyen bir alan ham adıyla görünür —
-// sessizce gizlenmez, çünkü gizlenen alan "veri yok" sanılır.
 const ALAN_ADLARI = {
   mediaTone: 'Olumlu medya tonu (%)',
   dominantTheme: 'Baskın tema',
@@ -33,7 +25,7 @@ const ALAN_ADLARI = {
   dataSource: 'Veri kaynağı türü',
 }
 
-const GIZLI_ALANLAR = new Set(['sources', 'scannedSeries'])
+const GIZLI_ALANLAR = new Set(['sources', 'scannedSeries', 'hasOfficialPlatformData'])
 
 function ulkeAdi(iso2) {
   return countryNames[iso2]?.name || iso2
@@ -75,7 +67,9 @@ function DegerHucresi({ deger }) {
 }
 
 function BoyutKarti({ baslik, veri, gozlem }) {
-  const satirlar = Object.entries(veri).filter(([k]) => !GIZLI_ALANLAR.has(k))
+  const satirlar = Object.entries(veri)
+    .filter(([k]) => !GIZLI_ALANLAR.has(k))
+    .map(([alan, deger]) => [alan, Array.isArray(deger) ? onlyVerifiedClaims(deger) : deger])
   return (
     <section className="convergence__dimension">
       <h4 className="convergence__dimension-title">{baslik}</h4>
@@ -119,7 +113,7 @@ export default function CountryConvergencePanel() {
   const [ulkeler, setUlkeler] = useState([])
   const [iso2, setIso2] = useState('')
   const [veri, setVeri] = useState(null)
-  const [durum, setDurum] = useState('idle') // idle | loading | ready | error
+  const [durum, setDurum] = useState('idle')
   const [hata, setHata] = useState(null)
   const [gozlemDurumu, setGozlemDurumu] = useState('idle')
 
@@ -207,6 +201,13 @@ export default function CountryConvergencePanel() {
             </h4>
             {!veri.isTracked && (
               <span className="badge badge--uncertain">Bu ülke görünürlük verisinde izlenmiyor</span>
+            )}
+            {/* Rozet SADECE netflix_country_rankings'te gerçek satır varsa görünür — sunucu
+                tarafı bunu `hasOfficialPlatformData` ile tek yerden karara bağlıyor. */}
+            {veri.dimensions.export.hasOfficialPlatformData && (
+              <span className="badge badge--ok" title="Netflix Top 10 kaydı mevcut — resmî platform verisi.">
+                Resmî Platform Verisi Var
+              </span>
             )}
             <span className="convergence__gapcount">
               {veri.dataGaps.length} alanda ölçüm yok

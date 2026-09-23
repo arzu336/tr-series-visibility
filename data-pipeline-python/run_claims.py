@@ -8,15 +8,49 @@ Zinciri uçtan uca çalıştırır:
 from __future__ import annotations
 
 import sqlite3
+import sys
 from collections import Counter
 from pathlib import Path
 
-from claims import ClaimEngine
+from claims import ClaimEngine, build_cohort_stats
 from claims_models import GeoKind, MetricPoint, MetricSeries, SourceTrustLevel
 
 BASE_DIR = Path(__file__).resolve().parent
 PIPELINE_DB = BASE_DIR / "data" / "pipeline.db"
 NODE_DB = BASE_DIR.parent / "server" / "data" / "app.db"
+
+
+def seriler_of(node, tmdb_id) -> list[MetricSeries]:
+    """Bir dizinin dil başına Wikipedia okunma serileri.
+
+    geo_kind=LANGUAGE: Wikimedia makale bazında ÜLKE kırılımı vermiyor, bu bir dil sinyalidir.
+    """
+    seriler = []
+    for lang in [
+        r["lang"]
+        for r in node.execute(
+            "SELECT DISTINCT lang FROM series_language_interest WHERE tmdb_id = ?", (tmdb_id,)
+        )
+    ]:
+        noktalar = [
+            MetricPoint(year=r["year"], month=r["month"], value=r["views"])
+            for r in node.execute(
+                "SELECT year, month, views FROM series_language_interest "
+                "WHERE tmdb_id = ? AND lang = ? ORDER BY year, month",
+                (tmdb_id, lang),
+            )
+        ]
+        seriler.append(
+            MetricSeries(
+                metric_type="views",
+                source=f"wikipedia:{lang}",
+                trust=SourceTrustLevel.OFFICIAL,
+                geo_or_lang=lang,
+                geo_kind=GeoKind.LANGUAGE,
+                points=noktalar,
+            )
+        )
+    return seriler
 
 
 def main() -> int:
@@ -35,7 +69,24 @@ def main() -> int:
     diziler = [r["tmdb_id"] for r in node.execute("SELECT DISTINCT tmdb_id FROM series_language_interest")]
     print(f"{len(diziler)} dizinin Wikipedia serisi var, {len(kanonik)} kanonik kimlik yüklendi.\n")
 
-    motor = ClaimEngine()
+    # 1. GEÇİŞ — kohort istatistikleri. Tek geçişte yapılamaz: bir dizinin kohorttan
+    # sapmasını ölçmek için önce TÜM korpusun medyan hareketi bilinmeli.
+    korpus = []
+    for tmdb_id in diziler:
+        canonical_id = kanonik.get(tmdb_id)
+        if canonical_id is None:
+            continue
+        korpus.append((canonical_id, seriler_of(node, tmdb_id)))
+    cohorts = build_cohort_stats(korpus)
+    print(f"{len(cohorts)} kohort hesaplandı (>= 5 dizi olanlar).")
+    for k, v in sorted(cohorts.items(), key=lambda kv: -kv[1].series_count)[:6]:
+        print(f"  {k:24s} medyan {v.median_ratio:5.2f}x  ({v.series_count} dizi)")
+    print()
+
+    # 2. GEÇİŞ — iddialar, kohort bağlamıyla.
+    kesif = "--exploratory" in sys.argv
+    motor = ClaimEngine(exploratory=kesif)
+    print(("KEŞİF MODU" if kesif else "VARSAYILAN MOD") + " — kapı davranışı\n")
     tum_claims = []
     kimliksiz = 0
 
@@ -45,31 +96,17 @@ def main() -> int:
             kimliksiz += 1
             continue
 
-        seriler = []
-        for lang in [r["lang"] for r in node.execute(
-            "SELECT DISTINCT lang FROM series_language_interest WHERE tmdb_id = ?", (tmdb_id,)
-        )]:
-            noktalar = [
-                MetricPoint(year=r["year"], month=r["month"], value=r["views"])
-                for r in node.execute(
-                    "SELECT year, month, views FROM series_language_interest "
-                    "WHERE tmdb_id = ? AND lang = ? ORDER BY year, month",
-                    (tmdb_id, lang),
-                )
-            ]
-            seriler.append(
-                MetricSeries(
-                    metric_type="views",
-                    source=f"wikipedia:{lang}",
-                    trust=SourceTrustLevel.OFFICIAL,
-                    geo_or_lang=lang,
-                    geo_kind=GeoKind.LANGUAGE,  # ÜLKE DEĞİL
-                    points=noktalar,
-                )
-            )
-        tum_claims.extend(motor.generate_claims(canonical_id, seriler))
+        tum_claims.extend(
+            motor.generate_claims(canonical_id, seriler_of(node, tmdb_id), cohorts=cohorts)
+        )
 
+    dogrulanmis = [c for c in tum_claims if c.passed_gates]
     print(f"ÜRETİLEN İDDİA : {len(tum_claims)}")
+    print(f"  doğrulanmış  : {len(dogrulanmis)}")
+    print(f"  doğrulanmamış: {len(tum_claims) - len(dogrulanmis)}")
+    sifirdan = [c for c in tum_claims if c.from_zero]
+    if sifirdan:
+        print(f"  sıfırdan çıkış: {len(sifirdan)} (yüzde üretilmedi)")
     print(f"REDDEDİLEN ADAY: {len(motor.rejected)}")
     if kimliksiz:
         print(f"(kanonik kimliği olmayan {kimliksiz} dizi atlandı)")

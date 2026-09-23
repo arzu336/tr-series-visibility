@@ -6,8 +6,6 @@ import DonutChart from './DonutChart.jsx'
 import DonutRankedList from './DonutRankedList.jsx'
 import PeriodChart from './PeriodChart.jsx'
 
-// ImpactReport.jsx'te (ve CountryLeaderboard.jsx'te) kullanılan AYNI, doğrulanmış kategorik
-// palet (dataviz skill, --mode dark) — en fazla 5 dilim olduğu için yeterli.
 const SLOT_COLORS = ['#3987e5', '#d55181', '#9085e9', '#d95926', '#199e70']
 
 function nameOf(iso2) {

@@ -18,11 +18,6 @@ const MONTH_NAMES_TR = [
   'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
 ]
 
-// Turizm kısmı artık gerçek veri: server/services/tourismData.js, T.C. Kültür ve Turizm
-// Bakanlığı'nın (YİGM) aylık sınır bültenini otomatik çekiyor (bkz. /api/tourism-summary).
-// Dizi ihracatı (ülke bazlı $) kısmı ise hâlâ kamuya açık değil (araştırıldı — sadece toplam
-// ulusal rakam yayınlanıyor) — server/impact.js'teki PENDING_ANALYSIS ile aynı dürüstlük
-// ilkesiyle, o kısım için uydurma bir rakam üretilmiyor.
 function ExportTourismStats({ tourismItems, continentCountries }) {
   const iso2Set = new Set((continentCountries || []).map((c) => c.iso2))
   const matched = (tourismItems || [])
@@ -54,8 +49,6 @@ function ExportTourismStats({ tourismItems, continentCountries }) {
   )
 }
 
-// learningIndex.byCountry ülke adı/kod bazlı Google Trends ilgi skorunu taşır — seçili kıtadaki
-// ülkelerle (iso2) kesiştirip en yüksek ilgiye sahip olanı buluyoruz.
 function findTopLearningCountry(byCountry, continentCountries) {
   const iso2Set = new Set((continentCountries || []).map((c) => c.iso2))
   return byCountry
@@ -64,10 +57,6 @@ function findTopLearningCountry(byCountry, continentCountries) {
     .sort((a, b) => b.value - a.value)[0]
 }
 
-// Lowy Institute tarzı: yoğun istatistik duvarı yerine, herkesin (üst düzey yönetici, yaşlı
-// kullanıcı dahil) tek bakışta anlayabileceği 3 büyük net kart. Ayrıntılı dökümler (Top-5
-// liste, ortalama skor, ihracat/turizm) silinmiyor — "Detaylı İstatistikler" altında,
-// isteğe bağlı açılan ikincil bir bölümde kalıyor.
 export default function ContinentSidebar({
   countries,
   onSelectCountry,
@@ -121,8 +110,6 @@ export default function ContinentSidebar({
         : null,
     [learningIndex, learningStatus, selected]
   )
-  // Duolingo'nun gerçek küresel (ülke bazlı DEĞİL) momentum verisi — bkz. server/duolingo.js.
-  // Kıtaya özgüymüş gibi sunulmaması için ayrı, açıkça "küresel" etiketli bir alt satır.
   const globalMomentum =
     duolingo?.status === 'ready' && duolingo.trend?.direction !== 'yetersiz-veri' ? duolingo.trend : null
 

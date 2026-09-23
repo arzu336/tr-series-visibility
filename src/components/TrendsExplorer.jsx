@@ -14,11 +14,6 @@ import {
 import countryNames from '../data/country-centroids.json'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 
-// Denetim bulgusu O-7: B-13 düzeltmesinden sonra sunucu ülke alanında artık `r.geo` (ISO2 kodu)
-// döndürüyor — doğru karar, ama bu kart değeri HAM basıyordu. 7 günlük `serp:trends:*` önbelleği
-// devrettiğinde liste ülke adı yerine "DE, SA, EG…" gösterecekti (henüz görünmüyordu çünkü
-// önbellekte eski, adlı kayıtlar vardı — zaman ayarlı bir regresyon). Etiket artık her iki biçimi
-// de kabul edip ada çeviriyor; çözemezse gelen değeri olduğu gibi gösterir (uydurma yapmaz).
 function ulkeAdi(deger) {
   const iso2 = resolveIso2FromLabel(deger)
   return countryNames[iso2]?.name || deger
@@ -38,11 +33,6 @@ function yearOf(dateStr) {
   return dateStr ? dateStr.slice(0, 4) : null
 }
 
-// Blok 1 — Dizi Başlık & Tema. /api/series/:id (poster/yıl/tema/bölüm sayısı) + /api/imdb/:id
-// (puan) ayrı iki kaynak — biri yoksa/hata verirse diğeri dürüstçe kendi boş durumunu gösterir,
-// birbirini bloke etmez. Google Bilgi Grafiği puanları/izleyici beğeni yüzdesi de burada — eskiden
-// "Sosyal & Video Nabzı"ndaydı ama IMDb puanının hemen yanında durması daha tutarlı (kullanıcı
-// geri bildirimi: "alakasız gözüküyor", tüm puan kaynakları artık tek yerde).
 function SeriesHeaderBlock({ meta, metaStatus, imdb, imdbStatus, social }) {
   if (metaStatus === 'loading') return <p className="dashboard__empty">Yükleniyor…</p>
   if (metaStatus === 'error' || !meta) return <p className="dashboard__empty">Dizi bilgisi alınamadı.</p>
@@ -93,9 +83,6 @@ function SeriesHeaderBlock({ meta, metaStatus, imdb, imdbStatus, social }) {
   )
 }
 
-// Blok 3 (sol) — en çok arandığı ilk 8 ülke, zaten sorgulanmış result.byCountry'den (yeni bir
-// istek YOK). Haritada Göster burada kalıyor çünkü tam ülke listesine (result.byCountry, 8'den
-// fazla) ihtiyaç duyuyor.
 function GlobalFootprintCard({ result, seriesId, onShowOnMap }) {
   const byCountry = result?.byCountry
   const withInterest = [...(byCountry || [])].filter((row) => row.value > 0).sort((a, b) => b.value - a.value)
@@ -147,10 +134,6 @@ function ToneBadge({ tone }) {
   return <span className="badge badge--info">Nötr</span>
 }
 
-// Blok 3 (sağ) — bu dizi için o ana kadar TARANMIŞ ülkelerin basın/medya duygu dağılımı
-// (getMediaSentimentForSeries, senkron SQLite okuması). "Tüm Ülkeleri Tara" aynı anda hem basın
-// hem sosyal veriyi tazeler (enrichSeriesNow) — buton burada, sonucu hem bu kart hem Blok 4'ü
-// etkiler, bu yüzden altında kısa bir not var.
 function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, scanResult, scanError }) {
   return (
     <div className="subcard">
@@ -214,14 +197,10 @@ function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, sca
   )
 }
 
-// Blok 4 — resmi dizi tanıtımı (YouTube). Bilgi Grafiği puanları artık Blok 1'de (kullanıcı geri
-// bildirimi: burada "alakasız gözüküyordu") — bu blok artık tek amaçlı.
 function SocialPulseBlock({ social }) {
   if (!social?.youtube) {
     return <p className="dashboard__empty">Bu dizi için video verisi bulunamadı.</p>
   }
-  // Denetim G-13: link SerpAPI'nin youtube motorundan geliyor — şema doğrulanmadan href'e
-  // verilemez. Güvenli değilse video başlığı linksiz, düz metin olarak gösterilir.
   const videoUrl = safeExternalUrl(social.youtube.link)
   return (
     <p className="dashboard__hint" style={{ margin: 0 }}>
@@ -242,36 +221,67 @@ function SocialPulseBlock({ social }) {
   )
 }
 
+function TimeSeriesScopePicker({ byCountry, value, onChange, disabled }) {
+  const ulkeler = [...(byCountry || [])]
+    .filter((row) => row.value > 0)
+    .map((row) => ({ iso2: resolveIso2FromLabel(row.country), value: row.value }))
+    .filter((row) => row.iso2)
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 12)
+
+  return (
+    <div className="ts-scope">
+      <span className="ts-scope__label">Kapsam:</span>
+      <div className="ts-scope__chips">
+        <button
+          type="button"
+          className={`ts-scope__chip${value === null ? ' ts-scope__chip--active' : ''}`}
+          onClick={() => onChange(null)}
+          disabled={disabled}
+          aria-pressed={value === null}
+        >
+          🌍 Küresel
+        </button>
+        {ulkeler.map((row) => (
+          <button
+            key={row.iso2}
+            type="button"
+            className={`ts-scope__chip${value === row.iso2 ? ' ts-scope__chip--active' : ''}`}
+            onClick={() => onChange(row.iso2)}
+            disabled={disabled}
+            aria-pressed={value === row.iso2}
+          >
+            {ulkeAdi(row.iso2)}
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 function SingleSeriesMode({ seriesList, onShowOnMap }) {
   const [selected, setSelected] = useState('')
   const [result, setResult] = useState(null)
   const [social, setSocial] = useState(null)
   const [imdb, setImdb] = useState(null)
-  const [imdbStatus, setImdbStatus] = useState('idle') // idle | loading | ready | unavailable
-  const [status, setStatus] = useState('idle') // idle | querying | ready | error
+  const [imdbStatus, setImdbStatus] = useState('idle')
+  const [status, setStatus] = useState('idle')
   const [error, setError] = useState(null)
   const [timeSeries, setTimeSeries] = useState(null)
-  const [timeSeriesStatus, setTimeSeriesStatus] = useState('idle') // idle | loading | ready | unavailable
+  const [timeSeriesStatus, setTimeSeriesStatus] = useState('idle')
   const [insight, setInsight] = useState(null)
-  const [insightStatus, setInsightStatus] = useState('idle') // idle | loading | ready
+  const [insightStatus, setInsightStatus] = useState('idle')
+  const [tsGeo, setTsGeo] = useState(null)
+  const [queriedName, setQueriedName] = useState(null)
+  const [timeSeriesError, setTimeSeriesError] = useState(null)
   const [meta, setMeta] = useState(null)
-  const [metaStatus, setMetaStatus] = useState('idle') // idle | loading | ready | error
+  const [metaStatus, setMetaStatus] = useState('idle')
   const [sentimentSummary, setSentimentSummary] = useState(null)
-  const [sentimentStatus, setSentimentStatus] = useState('idle') // idle | loading | ready
-  const [enrichStatus, setEnrichStatus] = useState('idle') // idle | running | done | error
+  const [sentimentStatus, setSentimentStatus] = useState('idle')
+  const [enrichStatus, setEnrichStatus] = useState('idle')
   const [enrichResult, setEnrichResult] = useState(null)
   const [enrichError, setEnrichError] = useState(null)
 
-  // Temiz Başlangıç: URL'de ?series= yoksa arama kutusu BOŞ gelir, placeholder ile net bir
-  // seçim arayüzü sunar — daha önceki "listedeki ilk diziyi otomatik doldur" davranışı bilerek
-  // kaldırıldı (kullanıcı hangi diziyi sorguladığını fark etmeden sonuç görüyordu).
-  //
-  // ?series= tüketildikten hemen sonra adres çubuğundan (replaceState, YENİDEN YÜKLEME
-  // OLMADAN) siliniyor — kullanıcı geri bildirimi: "sayfayı yenilediğimde boş gelsin". Bu
-  // parametre hâlâ "Dizi Analizine Git" (App.jsx pushState) ile aynı oturumda çalışır VE
-  // doğrudan paylaşılan bir ?series= linki İLK açılışta hâlâ otomatik sorgular — sadece o
-  // ilk kullanımdan sonra tarayıcının adres çubuğu temizlenir ki bu sekmede bir SONRAKİ
-  // F5, eski aramayı tekrar tekrar geri getirmesin.
   useEffect(() => {
     if (seriesList.length === 0) return
     const fromUrl = new URLSearchParams(window.location.search).get('series')
@@ -283,14 +293,47 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [seriesList])
 
-  // Denetim bulgusu B-14: bu bileşen sorgu başına 6-7 bağımsız fetch atıyor ve hiçbiri iptal
-  // edilmiyordu. A dizisi uçuştayken B seçilirse A'nın geç dönen sosyal/IMDb/meta/duygu cevabı
-  // B'nin başlığı altına yerleşiyordu — kullanıcıya yanlış diziye ait veri gösteren sessiz bir
-  // veri bütünlüğü hatası. api.js sarmalayıcıları AbortSignal almadığı için (her fonksiyonun
-  // imzasını değiştirmek gerekirdi) raporun da önerdiği ve App.jsx'te zaten kullanılan iptal
-  // jetonu deseni: her sorgu artan bir jeton alır, geç gelen cevap güncel jetonu taşımıyorsa
-  // hiçbir state'e yazmaz.
   const queryTokenRef = useRef(0)
+
+  const tsTokenRef = useRef(0)
+
+  const loadTimeSeries = (name, iso2) => {
+    const token = ++tsTokenRef.current
+    const isStaleTs = () => tsTokenRef.current !== token
+
+    setTimeSeriesStatus('loading')
+    setTimeSeries(null)
+    setTimeSeriesError(null)
+    fetchTrendsTimeSeries(name, iso2)
+      .then((data) => {
+        if (isStaleTs()) return
+        setTimeSeries(data.timeline)
+        setTimeSeriesStatus(data.timeline?.length > 1 ? 'ready' : 'unavailable')
+      })
+      .catch((err) => {
+        if (isStaleTs()) return
+        setTimeSeriesError(err.message || null)
+        setTimeSeriesStatus('unavailable')
+      })
+
+    setInsightStatus('loading')
+    setInsight(null)
+    fetchTrendsInsight(name, iso2)
+      .then((data) => {
+        if (isStaleTs()) return
+        setInsight(data)
+        setInsightStatus('ready')
+      })
+      .catch(() => {
+        if (!isStaleTs()) setInsightStatus('ready')
+      })
+  }
+
+  const handleGeoChange = (iso2) => {
+    if (iso2 === tsGeo) return
+    setTsGeo(iso2)
+    if (queriedName) loadTimeSeries(queriedName, iso2)
+  }
 
   const handleQuery = async (seriesName) => {
     const name = seriesName ?? selected
@@ -309,6 +352,8 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
     setEnrichStatus('idle')
     setEnrichResult(null)
     setEnrichError(null)
+    setTsGeo(null)
+    setQueriedName(name)
     try {
       const data = await fetchTrends(name)
       if (isStale()) return
@@ -322,36 +367,13 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
     }
     if (isStale()) return
 
-    setTimeSeriesStatus('loading')
-    setTimeSeries(null)
-    fetchTrendsTimeSeries(name)
-      .then((data) => {
-        if (isStale()) return
-        setTimeSeries(data.timeline)
-        setTimeSeriesStatus(data.timeline?.length > 1 ? 'ready' : 'unavailable')
-      })
-      .catch(() => {
-        if (!isStale()) setTimeSeriesStatus('unavailable')
-      })
-
-    setInsightStatus('loading')
-    setInsight(null)
-    fetchTrendsInsight(name)
-      .then((data) => {
-        if (isStale()) return
-        setInsight(data)
-        setInsightStatus('ready')
-      })
-      .catch(() => {
-        if (!isStale()) setInsightStatus('ready')
-      })
+    loadTimeSeries(name, null)
 
     fetchSocialListening(name)
       .then((data) => {
         if (!isStale()) setSocial(data)
       })
       .catch(() => {
-        // Fragman/Bilgi Grafiği ikincil bilgi — bulunamazsa/erişilemezse sessizce atlanır.
       })
 
     const selectedId = seriesList.find((s) => s.name === name)?.id
@@ -401,7 +423,6 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
       const data = await enrichSeriesNow(selectedId)
       setEnrichResult(data)
       setEnrichStatus('done')
-      // Tarama basın + sosyal veriyi tazeledi — her iki kartı da güncel sonuçla yeniden çeker.
       fetchMediaSentimentSummary(selectedId).then(setSentimentSummary).catch(() => {})
       fetchSocialListening(selected).then(setSocial).catch(() => {})
     } catch (err) {
@@ -462,14 +483,31 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
           </section>
 
           <section className="dashboard__section">
-            <h3 className="dashboard__section-title">Küresel Zaman Serisi (Son 12 Ay)</h3>
+            <h3 className="dashboard__section-title">
+              Zaman Serisi (Son 12 Ay) — {tsGeo ? ulkeAdi(tsGeo) : 'Küresel'}
+            </h3>
+            <TimeSeriesScopePicker
+              byCountry={result?.byCountry}
+              value={tsGeo}
+              onChange={handleGeoChange}
+              disabled={timeSeriesStatus === 'loading'}
+            />
             {timeSeriesStatus === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
             {timeSeriesStatus === 'unavailable' && (
-              <p className="dashboard__empty">Bu dizi için küresel zaman serisi verisi bulunamadı.</p>
+              <p className="dashboard__empty">
+                {timeSeriesError
+                  ? timeSeriesError
+                  : `Bu dizi için ${tsGeo ? `${ulkeAdi(tsGeo)} bazlı` : 'küresel'} zaman serisi verisi bulunamadı.`}
+              </p>
             )}
             {timeSeriesStatus === 'ready' && (
               <>
-                <SeriesTrendChart timeline={timeSeries} />
+                <SeriesTrendChart timeline={timeSeries} scopeLabel={tsGeo ? ulkeAdi(tsGeo) : null} />
+                <p className="ts-scope__note">
+                  Google Trends 0-100 ölçeği <strong>her kapsam için kendi içinde bağıldır</strong>: bu
+                  grafik {tsGeo ? `${ulkeAdi(tsGeo)} içindeki` : 'dünya genelindeki'} zaman yönünü gösterir,
+                  ülkeler arası mutlak hacim karşılaştırması için kullanılamaz.
+                </p>
                 {insightStatus === 'loading' && <p className="dashboard__empty" style={{ marginTop: '0.6rem' }}>Yapay zeka yorumu hazırlanıyor…</p>}
                 {insightStatus === 'ready' && insight?.insightText && (
                   <div className="theme-insight__ai-box" style={{ marginTop: '0.8rem' }}>
@@ -490,7 +528,7 @@ export default function TrendsExplorer({ onShowOnMap }) {
   const [seriesList, setSeriesList] = useState([])
   const [listStatus, setListStatus] = useState('loading')
   const [listError, setListError] = useState(null)
-  const [mode, setMode] = useState('single') // single | compare
+  const [mode, setMode] = useState('single')
 
   useEffect(() => {
     fetchTrendSeriesList()

@@ -13,11 +13,6 @@ function nameOf(iso2) {
   return countryNames[iso2]?.name || iso2
 }
 
-// Küresel ortalamanın ALTINDA, hangi ülkede kaç dizi tarandığını ve o ülkedeki baskın tonu
-// gösteren kırılım — media_sentiment tablosu zaten country_iso2 tuttuğu için ek bir tarama
-// gerektirmez, sadece var olan veriyi ülkeye göre grupluyor (bkz. server/services/
-// newsSentiment.js getMediaSentimentByCountry). Hiç satır yoksa boş dizi gelir, hiçbir şey
-// render edilmez.
 function MediaSentimentByCountryTable({ rows }) {
   if (!rows || rows.length === 0) return null
   return (
@@ -48,10 +43,6 @@ function MediaSentimentByCountryTable({ rows }) {
   )
 }
 
-// Basın/medya algısı taraması sadece bir dizi satırı genişletilip AÇIKÇA istendiğinde çalışır
-// (bkz. server/services/newsSentiment.js, kota tasarrufu için) — bu özet o ana kadar TESADÜFEN
-// taranmış olan her ne varsa onun ortalamasıdır, istatistiksel temsili bir örneklem değildir.
-// Örneklem küçükken bunu gizlemek yerine açıkça söylüyoruz.
 function MediaSentimentSummary({ summary, byCountry }) {
   if (!summary || summary.status === 'pending' || summary.sampleSize === 0) {
     return (

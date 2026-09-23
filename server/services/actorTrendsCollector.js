@@ -3,11 +3,6 @@ import { getEnrichmentTargets, getTopActors } from './enrichmentTargets.js'
 import { cacheFirstSerpApi, fetchTrendsByCountryRaw, actorTrendsCacheKey, TRENDS_TTL_MS, getSerpApiUsageThisMonth } from './serpApiCache.js'
 import { resolveIso2FromLabel } from './countryLookup.js'
 
-// "En popüler 30 Türk oyuncusunun hedef ülkelerdeki Google Trends ilgisi" — kullanıcı talebi.
-// VERİMLİLİK: series-adı Trends sorgusuyla AYNI mekanizma (fetchTrendsByCountryRaw, data_type=
-// GEO_MAP_0, geo parametresi VERİLMEDEN) kullanılıyor — bu TEK bir çağrıda oyuncunun TÜM
-// ülkelerdeki ilgisini birden döner. Yani maliyet 30 oyuncu × hedef ülke sayısı DEĞİL, sadece 30
-// gerçek SerpAPI çağrısı (oyuncu başına 1) — bkz. enrichmentTargets.js'teki kapasite notu.
 const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000
 const META_KEY = 'lastActorTrendsCollectAt'
 const DELAY_AFTER_LIVE_CALL_MS = 1500
@@ -56,11 +51,6 @@ export async function runActorTrendsCollectionIfNeeded() {
         const key = actorTrendsCacheKey(actor.name)
         const result = await cacheFirstSerpApi(key, TRENDS_TTL_MS, () => fetchTrendsByCountryRaw(actor.name))
         scanned++
-        // Ham yanıt (result.byCountry) dünya genelinde onlarca ülke içerebilir — sadece platformun
-        // ZATEN takip ettiği hedef havuzla (getEnrichmentTargets) kesişenler kalıcı tabloya yazılır,
-        // uydurma/ilgisiz bir ülke listesi genişletilmez.
-        // Denetim B-20: yalnızca bu İÇ döngü transaction'a alınır — dış döngüde ağ çağrısı
-        // (await) var ve onu transaction içinde tutmak kilidi saniyelerce açık bırakırdı.
         inTransaction(() => {
           for (const entry of result.byCountry) {
             const iso2 = resolveIso2FromLabel(entry.country)
@@ -87,7 +77,6 @@ export async function runActorTrendsCollectionIfNeeded() {
   }
 }
 
-// Taranmış bir oyuncunun hedef ülkelerdeki güncel (süresi dolmamış) ilgi dağılımı.
 const getInterestStmt = db.prepare(
   'SELECT country_iso2, interest_value, computed_at FROM actor_country_interest WHERE actor_id = ? AND expires_at > ? ORDER BY interest_value DESC'
 )

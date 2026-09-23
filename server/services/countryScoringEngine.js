@@ -5,13 +5,6 @@ import { getPipelineDb } from './pipelineDb.js'
 
 const TOP_N_CANDIDATES = 5
 
-// TMDB'nin tek küresel popülerlik sayısı burada SADECE hangi 5 dizinin karşılaştırmaya
-// gireceğini belirlemek için (aday havuzu) kullanılır — o ülkede GERÇEKTEN yayında olan
-// (providersById'de kaydı olan) diziler arasından en popüler 5'i seçer. NİHAİ sıralama ise
-// aşağıdaki 4 faktörün ağırlıklı bileşimiyle belirlenir, TMDB skoru bileşime hiç girmez —
-// proje raporunun "TMDB'nin tekil global popülerlik skoruna bağımlılığı azalt" hedefi bu
-// ayrımla korunuyor: TMDB sadece "kimler yarışacak" sorusuna, resmi kaynaklar "kim kazandı"
-// sorusuna cevap veriyor.
 const WEIGHTS = {
   shareOfSearch: 0.4,
   netflix: 0.3,
@@ -32,7 +25,6 @@ function getNetflixScore(iso2, tmdbId) {
       evidence: `Resmi platform Top 10: ${row.weeks_in_top10} hafta, en iyi #${row.peak_rank} (${row.last_week_date || 'tarih yok'})`,
     }
   } catch (err) {
-    // Tablo henüz yok (netflix_pipeline.py hiç bu ülke için koşulmadı) — dürüstçe "veri yok".
     return null
   }
 }
@@ -44,8 +36,6 @@ const getMediaSentimentStmt = db.prepare(
 function getMediaSentimentScore(iso2, tmdbId) {
   const row = getMediaSentimentStmt.get(tmdbId, iso2, Date.now())
   if (!row || row.dominant_sentiment === 'yetersiz-veri' || row.positive_score == null) return null
-  // 100 = tamamen olumlu, 50 = nötr, 0 = tamamen olumsuz (bkz. server/llm.js
-  // analyzeMediaSentiment — positive/neutral/negative toplamı ~1.0).
   const value = Math.round(((row.positive_score - row.negative_score + 1) / 2) * 1000) / 10
   return { value, evidence: `Basın algısı: ${row.dominant_sentiment} (${row.total_news_count} haber)` }
 }
@@ -59,9 +49,6 @@ function getAvailabilityScore(providersForCountry) {
       if (p.provider_id != null) distinctProviders.add(p.provider_id)
     }
   }
-  // Basit, şeffaf bir ölçek: 4+ farklı platformda bulunmak "geniş yayın varlığı" sayılır
-  // (100), tek platform 25 — kesin bir sektör standardı değil, açıkça etiketlenen bir
-  // sezgisel (heuristic) puan.
   const value = Math.min(100, distinctProviders.size * 25)
   return {
     value,
@@ -70,10 +57,6 @@ function getAvailabilityScore(providersForCountry) {
 }
 
 function weightedComposite(factors) {
-  // factors: [{ key, weight, value: number|null, evidence }]. Eksik (null) faktörler
-  // toplama dahil edilmez, kalan faktörlerin ağırlığı KENDİ ARALARINDA yeniden normalize
-  // edilir — veri eksikliği asla 0 puan gibi cezalandırılmaz (bkz. proje genelindeki "veri
-  // yoksa dürüstçe eksik say, uydurma" prensibi).
   const available = factors.filter((f) => f.value != null)
   const weightSum = available.reduce((s, f) => s + f.weight, 0)
   if (weightSum === 0) return { score: null, usedFactors: [] }
@@ -84,9 +67,6 @@ function weightedComposite(factors) {
 function badgeFor(usedFactors) {
   const hasNetflix = usedFactors.includes('netflix')
   const hasShareOfSearch = usedFactors.includes('shareOfSearch')
-  // Etiketler kullanıcı talebiyle "resmi veri"/"yetersiz veri" ibarelerinden arındırıldı —
-  // level (verified/partial/weak) aynı kalıyor, sadece görünen metin değişti; hiçbir sayı
-  // olduğundan daha kesin gösterilmiyor, sadece kelime seçimi sadeleşti.
   if (hasNetflix && hasShareOfSearch) {
     return { label: 'Çift Kaynakla Doğrulandı', level: 'verified' }
   }

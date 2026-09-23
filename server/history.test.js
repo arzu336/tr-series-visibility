@@ -58,12 +58,11 @@ describe('getTrend', () => {
     const history = {
       TR: [
         { score: 50, capturedAt: daysAgo(20) },
-        { score: 100, capturedAt: daysAgo(7) }, // hedeflenen referans bu olmalı
+        { score: 100, capturedAt: daysAgo(7) },
         { score: 150, capturedAt: daysAgo(1) },
       ],
     }
     const result = getTrend(history, 'TR', 110)
-    // 100 -> 110 = +%10, 50 baz alınsaydı çok farklı bir sonuç çıkardı
     expect(result.changePct).toBe(10)
   })
 })

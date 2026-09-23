@@ -1,7 +1,3 @@
-// Denetim bulgusu B-18: oturum düştüğünde (7 günlük TTL dolduğunda ya da sunucu oturumu iptal
-// ettiğinde — bkz. G-05) her panel kendi içinde "Giriş gerekli" hatası basıyor, kullanıcı giriş
-// ekranına DÖNMÜYORDU: ekran yarı dolu, yarı hatalı bir hâlde kalıyordu. Artık 401'i tek bir
-// yerde yakalayıp uygulamaya haber veriyoruz; App.jsx bunu dinleyip oturumu sıfırlıyor.
 let unauthorizedHandler = null
 
 /** App.jsx mount'ta bir kez kaydeder; oturum düştüğünde çağrılır. */
@@ -12,13 +8,7 @@ export function setUnauthorizedHandler(fn) {
 async function handle(res, { isLoginAttempt = false } = {}) {
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    // Giriş denemesinin kendisi 401 dönebilir ("E-posta veya şifre yanlış") — bu bir oturum
-    // düşmesi DEĞİL, zaten giriş ekranındayız. Yönlendirme akışını tetiklememeli.
     if (res.status === 401 && !isLoginAttempt) {
-      // Sunucunun oturumsuz isteğe verdiği yanıt "Giriş gerekli" — bir API çağrısı için doğru ama
-      // GİRİŞ EKRANINDA gösterilecek bildirim olarak anlamsız (kullanıcı zaten oradadır). Bu tek
-      // durumda sebebi açıklayan metne çeviriyoruz; sunucunun daha spesifik mesajları (ör. hesap
-      // reddedildiğinde "Oturumunuz sonlandırıldı…") olduğu gibi geçer.
       const serverMessage = body.error
       const notice =
         !serverMessage || serverMessage === 'Giriş gerekli'
@@ -46,8 +36,6 @@ export async function fetchTaxonomy() {
   return handle(await fetch('/api/taxonomy'))
 }
 
-// Denetim G-11: `reviewer` artık gövdede GÖNDERİLMİYOR — sunucu denetim izi adını oturumdan
-// (req.currentUser) türetiyor, istemciden gelen bir isim kabul edilse sahte doldurulabilirdi.
 export async function submitThemeOverride(seriesId, theme) {
   return handle(
     await fetch(`/api/themes/${seriesId}/override`, {
@@ -82,12 +70,14 @@ export async function fetchRegionalBreakdown(titles) {
   return handle(await fetch(`/api/trends/regional-breakdown?titles=${encodeURIComponent(titles.join(','))}`))
 }
 
-export async function fetchTrendsTimeSeries(seriesName) {
-  return handle(await fetch(`/api/trends/timeseries/${encodeURIComponent(seriesName)}`))
+export async function fetchTrendsTimeSeries(seriesName, iso2 = null) {
+  const q = iso2 ? `?geo=${encodeURIComponent(iso2)}` : ''
+  return handle(await fetch(`/api/trends/timeseries/${encodeURIComponent(seriesName)}${q}`))
 }
 
-export async function fetchTrendsInsight(seriesName) {
-  return handle(await fetch(`/api/trends/insight/${encodeURIComponent(seriesName)}`))
+export async function fetchTrendsInsight(seriesName, iso2 = null) {
+  const q = iso2 ? `?geo=${encodeURIComponent(iso2)}` : ''
+  return handle(await fetch(`/api/trends/insight/${encodeURIComponent(seriesName)}${q}`))
 }
 
 export async function enrichSeriesNow(seriesId) {
@@ -122,8 +112,6 @@ export async function fetchExportImpact() {
   return handle(await fetch('/api/impact/export'))
 }
 
-// Ülke Odaklı Çoklu Veri Birleştirme. `withInsight` LLM'in objektif gözlem özetini de ister —
-// ayrı bir bayrak, çünkü LLM çağrısı kota harcıyor ve ölçülmüş veri tablosu onsuz da tamdır.
 export async function fetchCountrySummary(iso2, { withInsight = false } = {}) {
   const q = withInsight ? '?insight=1' : ''
   return handle(await fetch(`/api/impact/country-summary/${encodeURIComponent(iso2)}${q}`))

@@ -2,19 +2,9 @@ import db from '../db.js'
 import { fetchNewsArticlesGdeltCached } from './gdeltNews.js'
 import { analyzeMediaSentiment } from '../llm.js'
 
-// Proje raporu §4.6 "Basın/Haber Duygu Analizi". Kendi tablosu (media_sentiment, bkz. db.js) —
-// trends_cache gibi ham SerpAPI yanıtı değil, LLM analiziyle ZENGİNLEŞTİRİLMİŞ bir sonuç
-// tutulduğu için genel cache_entries'ten ayrı. 30 günden 14 güne indirildi (kullanıcı talebi 7
-// gündü — enrichmentTargets.js'teki kapasite notunda gerekçesiyle: bu, haftalık toplu taramanın
-// EN BÜYÜK kalemi olduğu için tam 7 güne inmek 875 kombinasyonluk havuzla bütçeyi aşardı, 14 gün
-// hem gerçek bir tazelik kazancı hem de bütçe içinde kalan bir denge).
 const NEWS_SENTIMENT_TTL_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_STORED_ARTICLES = 20
 
-// Denetim raporu D.6: haber kaynağı ücretli SerpAPI `google_news` motorundan ücretsiz GDELT
-// DOC 2.0'a taşındı (bkz. services/gdeltNews.js). Bu sabit satırın hangi sağlayıcıdan geldiğini
-// media_sentiment.source sütununa yazar; ESKİ sağlayıcıdan gelmiş bir satır, TTL'i dolmamış olsa
-// bile tazelenmesi gereken sayılır (aşağıya bakınız) — iki dönemin verisi karışmaz.
 const NEWS_SOURCE = 'gdelt'
 
 const getStmt = db.prepare('SELECT * FROM media_sentiment WHERE series_id = ? AND country_iso2 = ?')
@@ -44,11 +34,6 @@ const getSummaryStmt = db.prepare(`
   WHERE dominant_sentiment != 'yetersiz-veri' AND positive_score IS NOT NULL
 `)
 
-// Kültürel Etki sekmesindeki "Medya & Basın Algısı Özeti" — media_sentiment SADECE bir dizi/ülke
-// satırı genişletilip TARANDIĞINDA dolar (bkz. fetchAndAnalyzeSentiment), yani bu özet HER ZAMAN
-// o ana kadar rastgele hangi diziler/ülkeler taranmışsa onların ortalamasıdır — istatistiksel
-// olarak temsili bir örneklem DEĞİLDİR. sampleSize küçükken (örn. <5) çağıran taraf bunu dürüstçe
-// göstermeli; burada sadece HİÇ tarama yoksa (sampleSize=0) 'pending' dönülür.
 export function getMediaSentimentSummary() {
   const row = getSummaryStmt.get()
   if (!row || row.sampleSize === 0) {
@@ -73,9 +58,6 @@ const getByCountryStmt = db.prepare(`
   ORDER BY scannedCount DESC
 `)
 
-// Global özetteki gibi sürekli bir "algı skoru" değil, tabloda TEK bir okunabilir etiket
-// (Baskın Ton) gerekiyor — pozitif/negatif ortalama farkı %15 puanı aşmıyorsa 'neutral' sayılır
-// (küçük örneklemlerde tek bir haberin yönü tüm ülkeyi "kesin olumlu/olumsuz" gibi göstermesin).
 const TONE_MARGIN = 0.15
 function classifyTone(avgPositive, avgNegative) {
   if (avgPositive - avgNegative > TONE_MARGIN) return 'positive'
@@ -83,9 +65,6 @@ function classifyTone(avgPositive, avgNegative) {
   return 'neutral'
 }
 
-// Kültürel Etki sekmesindeki "Ülke Bazlı Medya Algısı" tablosu — her satır o ülkede TARANMIŞ
-// (bkz. getMediaSentimentSummary'deki aynı örneklem uyarısı) dizilerin ortalamasıdır. Hiç
-// tarama yoksa boş dizi döner, uydurma bir ülke satırı asla eklenmez.
 export function getMediaSentimentByCountry() {
   return getByCountryStmt.all().map((row) => ({
     iso2: row.country_iso2,
@@ -103,11 +82,6 @@ const getBySeriesStmt = db.prepare(`
   ORDER BY country_iso2
 `)
 
-// TrendsExplorer.jsx — Tekli Analiz'in "Küresel Ayak İzi & Medya Algısı" bloğu. getMediaSentimentSummary/
-// getMediaSentimentByCountry (yukarıda) TÜM dizilerin ortalaması — burası TEK bir dizinin, o ana kadar
-// taranmış ülkelerdeki dağılımı. 3 durumu ayrı tutuyoruz: hiç tarama yoksa 'pending' (buton dürüstçe
-// "tara" der), taranmış ama hepsi sıfır haber bulmuşsa 'no-data' (tarandı ama sonuç yok, tekrar taramak
-// muhtemelen aynı sonucu verir), gerçek veri varsa 'ready'.
 export function getMediaSentimentForSeries(seriesId) {
   const rows = getBySeriesStmt.all(seriesId)
   if (rows.length === 0) {
@@ -157,8 +131,6 @@ function rowToAuditEntry(row, seriesName) {
     seriesName: seriesName ?? null,
     countryIso2: row.country_iso2,
     totalNewsCount: row.total_news_count,
-    // Analistin "bu ton neden verildi" diye tüm metni okumadan karar verebilmesi için —
-    // taranan (en fazla 20) haberden ilk 5'i, ton düzeltmesine gerekçe olarak yeterli.
     articles: row.raw_articles
       ? JSON.parse(row.raw_articles)
           .slice(0, 5)
@@ -173,14 +145,6 @@ function rowToAuditEntry(row, seriesName) {
   }
 }
 
-// Analist Paneli'nin "Basın & Medya Algısı" denetim sekmesi. ÖNEMLİ SINIRLAMA: media_sentiment
-// satır başına bir "tarama"dır (bir dizinin bir ülkede taranan haber grubu, bkz.
-// fetchAndAnalyzeSentiment) — LLM haberleri TOPLU değerlendiriyor (server/llm.js
-// analyzeMediaSentiment), tek bir haberin kendi ayrı bir tonu YOK. Bu yüzden burada "ton
-// düzeltme" bu TARAMANIN genel tonunu düzeltir; analistin karar gerekçesini görebilmesi için
-// taranan haber başlıkları da (rawArticles'tan) satırla birlikte döner — liveSeriesById'de
-// olmayan (silinmiş/artık listede olmayan) diziler themes.js/destinations.js'teki aynı
-// "liveIds" filtresiyle dışlanır, hayalet kayıt gösterilmez.
 export function getMediaSentimentAuditRows(liveSeriesById) {
   return listAllStmt
     .all()
@@ -201,8 +165,6 @@ export function setSentimentOverride(id, sentiment, reviewer) {
   return rowToAuditEntry(getByIdStmt.get(numId))
 }
 
-// İnsan düzeltmesini siler, tarama LLM'in orijinal dominant_sentiment'ine geri döner —
-// themes.js clearHumanOverride / destinations.js clearHumanTags ile aynı "AI önerisine dön" ilkesi.
 export function clearSentimentOverride(id) {
   const numId = Number(id)
   const row = getByIdStmt.get(numId)
@@ -244,9 +206,6 @@ function rowToResult(row, extra) {
 export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle, countryIso2) {
   const iso2 = countryIso2.toUpperCase()
   const existing = getStmt.get(seriesId, iso2)
-  // Süresi dolmamış OLSA BİLE, satır önceki sağlayıcıdan (SerpAPI google_news) geldiyse yeniden
-  // taranır: iki kaynağın makale kümesi ve alan yapısı farklı (GDELT özet döndürmüyor), aynı
-  // tabloda karıştırılmaları sonuçları sessizce yanıltıcı hâle getirirdi.
   if (existing && Date.now() <= existing.expires_at && existing.source === NEWS_SOURCE) {
     return rowToResult(existing, { stale: false })
   }
@@ -258,10 +217,6 @@ export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle,
   let articles
   try {
     const sonuc = await fetchNewsArticlesGdeltCached(query, iso2)
-    // Denetim Y-2: GDELT'in ülke filtresi FIPS kodu ister ve elimizdeki tablo bazı bağımlı
-    // bölgeleri/Filistin'i kapsamıyor. Bu "haber bulunamadı" DEĞİL, "bu ülke için basın taraması
-    // yapılamıyor" demektir; media_sentiment'e yazılmaz (yoksa ortalamalara 'yetersiz-veri' olarak
-    // karışır) ve önbelleğe de alınmaz.
     if (sonuc.unsupported) {
       return {
         seriesId,
@@ -277,9 +232,6 @@ export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle,
     }
     articles = sonuc.news
   } catch (err) {
-    // Haber çağrısı başarısız oldu (GDELT hız sınırı/ağ) — eski (süresi dolmuş) bir kayıt varsa çökmeden
-    // onu stale:true ile döneriz, hiç kayıt yoksa hatayı olduğu gibi yukarı fırlatırız
-    // (server/services/serpApiCache.js'teki cacheFirstSerpApi ile aynı dayanıklılık deseni).
     if (existing) {
       console.error(`[newsSentiment] ${seriesName}/${iso2} için canlı istek başarısız (${err.message}), stale önbellek dönülüyor.`)
       return rowToResult(existing, { stale: true, staleReason: err.message })

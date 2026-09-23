@@ -2,12 +2,10 @@ import * as XLSX from 'xlsx'
 import db, { inTransaction } from '../db.js'
 import { resolveIso2FromLabel } from './countryLookup.js'
 
-// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
-// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
 const EXTERNAL_TIMEOUT_MS = 15000
 
 const INDEX_URL = 'https://yigm.ktb.gov.tr/TR-249702/sinir-istatistikleri.html'
-const SYNC_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000 // bülten ayda bir yayınlanıyor, günlük kontrol gereksiz
+const SYNC_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const META_KEY = 'lastTourismSyncAt'
 const SHEET_NAME = 'Milliyet'
 const SUBTOTAL_ROW_RE = /^TOPLAM|^DİĞ\.|^YABANCI TOPLAM/
@@ -35,18 +33,6 @@ const selectSeriesStmt = db.prepare(
 )
 const selectTrackedIso2Stmt = db.prepare('SELECT DISTINCT iso2 FROM tourist_arrivals')
 
-// yigm.ktb.gov.tr/TR-249702/sinir-istatistikleri.html her ay milliyet bazında bir .xls bülteni
-// yayınlıyor — sayfada güncel bülten linki düz HTML olarak var, metni her zaman
-// "<AY> <YIL> HABER BÜLTENİ" formatında (ör. "HAZİRAN 2026 HABER BÜLTENİ"), doğrulandı. Aynı
-// sayfada eski bir "flipbook" widget'ının içinde METİNSİZ, boş bir <a> de var (bir önceki
-// bültene ait kalıntı) — bu yüzden sadece HREF'e değil, görünür metne "HABER BÜLTENİ" geçen
-// linke bakıyoruz, karışmasın diye.
-//
-// Sadece EN GÜNCEL bülten çekiliyor, geriye dönük arşiv YOK: TR-249703/onceki-donemlere-ait-
-// istatistikler.html (arşiv sayfası) geçmiş ayların listesini bir Telerik RadComboBox (AJAX)
-// bileşeniyle dolduruyor — düz `fetch` + HTML ile taranamıyor (JS çalıştırmadan içerik gelmiyor).
-// Bunun yerine her bülten zaten SON 3 YILIN aynı ayını içeriyor (bkz. parseBulletin) — bu, en
-// azından yıl-yıl aynı ay kıyaslaması için anında geçmiş veri sağlıyor.
 export async function findLatestBulletin() {
   const res = await fetch(INDEX_URL, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
   if (!res.ok) throw new Error(`Sınır istatistikleri sayfası alınamadı (${res.status})`)
@@ -72,10 +58,6 @@ export async function findLatestBulletin() {
   throw new Error('Güncel sınır bülteni linki sayfada bulunamadı (site yapısı değişmiş olabilir)')
 }
 
-// "Milliyet" sayfası: satır 2 başlık (MİLLİYET | YIL1 | YIL2 | YIL3 | ...), sonraki satırlar
-// ülke adı + o 3 yılın aynı ayına ait ziyaretçi sayısı. "TOPLAM ..."/"DİĞ. ... ÜLKELERİ" satırları
-// kıta/grup alt toplamı — gerçek bir ülke değil, atlanıyor. Eşleşmeyen ülke adları (bkz.
-// countryLookup.js'teki not) sessizce atlanır, uydurma bir iso2 üretilmez.
 export function parseBulletin(buffer, bulletinMonth) {
   const workbook = XLSX.read(buffer, { type: 'buffer' })
   const sheet = workbook.Sheets[SHEET_NAME]
@@ -98,9 +80,6 @@ export function parseBulletin(buffer, bulletinMonth) {
     if (typeof name !== 'string' || !name.trim()) continue
     const trimmed = name.trim()
     if (SUBTOTAL_ROW_RE.test(trimmed)) continue
-    // Sayfa altındaki dipnot/iletişim satırları da col0'da metin taşıyor ama hiçbir yıl
-    // sütununda sayı yok — gerçek bir ülke satırı değiller, sessizce atlanır (unresolved
-    // listesine bile eklenmez, gürültü olmasın diye).
     const hasNumericYear = years.some((_, idx) => typeof row[1 + idx] === 'number')
     if (!hasNumericYear) continue
 
@@ -128,16 +107,11 @@ async function downloadAndParseBulletin(bulletin) {
   return parseBulletin(buffer, bulletin.month)
 }
 
-// Kalıcı senkronizasyon: en güncel bülteni bulur, indirir, parse eder ve tourist_arrivals'a
-// upsert eder. Tek bir hata (site erişilemez, format değişmiş, .xls bozuk) her şeyi düşürmez —
-// çağıran (scheduler.js) zaten try/catch içinde, burada sadece anlamlı bir hata fırlatılır.
 export async function syncTourismData() {
   const bulletin = await findLatestBulletin()
   const { entries, unresolvedNames } = await downloadAndParseBulletin(bulletin)
 
   const now = new Date().toISOString()
-  // Denetim B-20: bülten ~90 ülke satırı içeriyor — hepsi tek transaction'da yazılır ki yarım
-  // içe aktarılmış bir bülten kalmasın. Ağ işleri (indirme/parse) bu bloğun DIŞINDA bitti.
   inTransaction(() => {
     for (const e of entries) {
       upsertArrivalStmt.run(e.iso2, e.year, e.month, e.visitorCount, bulletin.url, now)
@@ -166,18 +140,10 @@ export function getVisitorSeries(iso2) {
   return selectSeriesStmt.all(iso2).map((r) => ({ year: r.year, month: r.month, visitorCount: r.visitor_count }))
 }
 
-// impact.js'in korelasyon adayı ülkeleri seçerken kullanır: bültende ayrı satırı olmayan
-// (küçük/az turistli, "DİĞER ÜLKELER" alt toplamına giren) ülkeler için World Bank kontrol-ülkesi
-// aramasına hiç girmeye gerek yok — bu Set ile önceden eleniyorlar.
 export function getTrackedIso2s() {
   return new Set(selectTrackedIso2Stmt.all().map((r) => r.iso2))
 }
 
-// getVisitorSeries(iso2) sonucundan (bir bültenin aynı ayı için birden çok yıl) en güncel
-// "önce/sonra" çiftini seçer — en çok yıl verisi olan ayı alır (şu an tek bülten kaynağı
-// olduğu için pratikte hep aynı ay), en yeni iki yılı before/after olarak döner. <2 veri
-// noktası varsa null — uydurma bir karşılaştırma yapılmaz. server/impact.js (DiD/Pearson) ve
-// getAllLatestArrivals (kıta özeti) aynı fonksiyonu paylaşır.
 export function pickBeforeAfterPair(series) {
   const byMonth = new Map()
   for (const s of series) {
@@ -199,10 +165,6 @@ function round1(n) {
   return Math.round(n * 10) / 10
 }
 
-// src/components/ContinentSidebar.jsx'teki kıta bazlı turizm kartı için: her izlenen ülkenin en
-// güncel önce/sonra çiftini + % değişimini döner. Kıta filtresi client-side yapılıyor (bkz.
-// findTopLearningCountry deseni — learningIndex de aynı şekilde global çekilip kıtaya göre
-// süzülüyor), burada sadece ham liste üretiliyor.
 export function getAllLatestArrivals() {
   const items = []
   for (const iso2 of getTrackedIso2s()) {

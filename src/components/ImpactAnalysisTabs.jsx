@@ -11,31 +11,18 @@ const TABS = [
   { key: 'export', label: '📈 İhracat & Ticari Etki' },
 ]
 
-// Yazdırma modunda sekme başlıklarının önündeki emoji atılır — basılı raporda süs değil,
-// bölüm başlığı olarak okunmalı.
 const PRINT_TITLES = {
   cultural: 'Kültürel Etki ve Kamu Diplomasisi',
   tourism: 'Turizm ve Destinasyon Etkisi',
   export: 'İhracat ve Ticari Etki',
 }
 
-// Sekmeler mount olduktan sonra kendi verilerini çeker; hepsi yüklenmeden yazdırmak yarım bir
-// PDF üretir. Yükleme göstergeleri (.status) kaybolana kadar beklenir, ama bir uç servis
-// takılırsa kullanıcı sonsuza kadar bekletilmez.
 const PRINT_READY_TIMEOUT_MS = 20000
 const PRINT_POLL_MS = 300
 
-// Eski monolitik ImpactReport.jsx'in (tek /api/impact çağrısı, tüm bölümler birden yüklenirdi)
-// yerine geçti — her sekme SADECE kendi ihtiyacı olan uca gider (/api/impact/cultural|tourism|
-// export), sekmeler arası geçişte gereksiz veri çekilmez. /api/impact eski tüketiciler için
-// aynen duruyor (bkz. server/impact.js), burası artık onu kullanmıyor.
 export default function ImpactAnalysisTabs({ onSelectCountry }) {
   const [tab, setTab] = useState('cultural')
-  // Denetim bulgusu B-22: "PDF Olarak Yazdır" doğrudan window.print() çağırıyordu, ama sekmeler
-  // koşullu mount edildiği için (aşağıdaki render) çıktıda YALNIZCA o an açık olan sekme yer
-  // alıyordu — README'nin "tüm rapor basılır" ifadesinin aksine. Artık yazdırmadan önce üç sekme
-  // de mount edilip verileri beklenir, sonra basılır ve normale dönülür.
-  const [printMode, setPrintMode] = useState('off') // off | hazirlaniyor
+  const [printMode, setPrintMode] = useState('off')
   const printAreaRef = useRef(null)
 
   useEffect(() => {
@@ -45,7 +32,6 @@ export default function ImpactAnalysisTabs({ onSelectCountry }) {
     const basladi = Date.now()
 
     const bittiMi = () => {
-      // Her sekme yüklenirken .status sınıflı bir kutu gösterir; hiçbiri kalmadıysa veri hazırdır.
       const bekleyen = printAreaRef.current?.querySelectorAll('.status')?.length ?? 0
       return bekleyen === 0 || Date.now() - basladi > PRINT_READY_TIMEOUT_MS
     }
@@ -56,9 +42,6 @@ export default function ImpactAnalysisTabs({ onSelectCountry }) {
         timer = setTimeout(dene, PRINT_POLL_MS)
         return
       }
-      // Tarayıcı yazdırma diyalogu kapanınca normal görünüme dönülür. onafterprint bazı
-      // tarayıcılarda print() dönüşünden sonra tetiklendiği için ikisi birden kullanılıyor;
-      // setPrintMode('off') iki kez çağrılsa da zararsız.
       const geriDon = () => setPrintMode('off')
       window.addEventListener('afterprint', geriDon, { once: true })
       window.print()

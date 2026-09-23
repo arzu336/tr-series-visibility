@@ -9,7 +9,6 @@ import {
   havuzdaCalistir,
 } from './wikipediaPageviews.js'
 
-// Wikipedia Pageviews API'si 2015-07'den itibaren veri veriyor; öncesi için boş döner.
 const EN_ERKEN = new Date(Date.UTC(2015, 6, 1))
 
 const sayArticlesStmt = db.prepare('SELECT COUNT(*) n FROM series_wiki_articles WHERE tmdb_id = ?')
@@ -27,8 +26,6 @@ export async function resolveArticles({ force = false, limit } = {}) {
   if (limit) seri = seri.slice(0, limit)
   if (!seri.length) return { cozulen: 0, wikidatasiz: 0, makale: 0, atlanan: 0 }
 
-  // TMDB external_ids: dizi başına 1 istek. TMDB'nin aylık bütçe sayacı yok (bkz. scheduler.js
-  // yorumu) — SerpAPI kotasına dokunmaz.
   const kimlikler = await havuzdaCalistir(seri, async (s) => {
     const { wikidataId } = await getExternalIds(s.id)
     return { tmdbId: s.id, ad: s.name, wikidataId }
@@ -67,8 +64,6 @@ export async function backfillPageviews({ force = false, limit, onProgress } = {
   let bosCift = 0
   let hatali = 0
   let islenen = 0
-  // Hataları sessizce saymak yetmiyor: ilk denemede 45 çiftin 36'sı düştü ve sebebi ancak
-  // mesajlar görülünce anlaşıldı. Örnek tutuluyor ki bir daha kör kalınmasın.
   const hataOrnekleri = []
 
   await havuzdaCalistir(hedefler, async (h) => {

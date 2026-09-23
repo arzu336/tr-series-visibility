@@ -1,8 +1,5 @@
 import db from './db.js'
 
-// server/history.js'teki visibility_history ham tablosu ülke başına en fazla 60 anlık görüntü
-// tutar (bkz. MAX_SNAPSHOTS_PER_COUNTRY, ~30 gün) — kalıcı ay/yıl karşılaştırması için bu ham
-// veri budanmadan önce buraya, budanmayan visibility_history_monthly'ye özetlenir.
 const ROLLUP_INTERVAL_MS = 24 * 60 * 60 * 1000
 const META_KEY = 'lastMonthlyRollupAt'
 
@@ -32,10 +29,6 @@ function periodKey(year, month) {
   return `${year}-${String(month).padStart(2, '0')}`
 }
 
-// Günde bir kez (bkz. server/scheduler.js) tamamlanmış (bugünün ayı DEĞİL) ve henüz özetlenmemiş
-// her (ülke, ay) için ham anlık görüntülerin ortalamasını alıp kalıcı tabloya yazar. Mevcut ayın
-// verisi kasıtlı olarak burada işlenmez — henüz tamamlanmamış bir ayı "sabit" gibi kaydetmek
-// yanıltıcı olurdu (bkz. getMonthlyPeriods'taki isCurrent ayrımı).
 export function rollupMonthlyIfNeeded() {
   const now = Date.now()
   const row = getMetaStmt.get(META_KEY)
@@ -89,8 +82,6 @@ function currentMonthAverages(iso2Filter = null) {
   return { year, month, byCountry }
 }
 
-// Geçmiş (kalıcı, budanmayan) aylar + mevcut ayın ham veriden anlık ortalaması
-// (isCurrent: true — henüz tamamlanmamış, "sabit" bir rakam değil) birleştirilerek dönülür.
 export function getMonthlyPeriods(iso2) {
   const rolled = selectMonthlyForCountryStmt.all(iso2).map((r) => ({
     period: periodKey(r.year, r.month),
@@ -113,9 +104,6 @@ export function getMonthlyPeriods(iso2) {
   return rolled
 }
 
-// Aylık satırları yıla göre gruplar. monthsCovered < 12 olan yıllar isPartial: true döner —
-// veri Temmuz 2026'da başladığı için ilk yıl (ve muhtemelen birkaç yıl) kısmi kalacak; bunu
-// gizlemek yerine dürüstçe etiketliyoruz (bkz. impact.js'teki hasEnoughHistoryForTrends deseni).
 export function getYearlyPeriods(iso2) {
   const monthly = getMonthlyPeriods(iso2)
   const byYear = new Map()
@@ -136,10 +124,6 @@ export function getYearlyPeriods(iso2) {
     }))
 }
 
-// Dashboard'daki küresel "zaman içinde görünürlük" grafiği için: her ülkenin o aya ait
-// ortalama skorunun toplamı (ülke sayısı arttıkça toplam büyür — bu kasıtlı, gerçek TMDB
-// popülerlik toplamını yansıtır; proxy/tahmini ülkeler visibility_history'ye hiç yazılmadığı
-// için burada da hiç yer almaz, bkz. server/data-pipeline.js).
 export function getGlobalMonthlyPeriods() {
   const byPeriod = new Map()
   for (const r of selectAllMonthlyStmt.all()) {

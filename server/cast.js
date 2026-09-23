@@ -4,10 +4,6 @@ function round1(n) {
   return Math.round(n * 10) / 10
 }
 
-// Bir oyuncunun (TMDB person id) zaten takip ettiğimiz 200 dizi içinde oynadığı diğer
-// Türk dizilerini ve bu dizilerin ülke bazlı görünürlük dağılımını bulur. Ayrı bir TMDB
-// isteği (ör. /person/{id}/tv_credits) gerekmez — kadro verisi zaten data-pipeline.js'in
-// 24 saatlik cache'inde (server/tmdb.js getCredits) hazır, burada sadece taranır.
 export async function buildPersonImpact(personId) {
   const id = Number(personId)
   const raw = await getRawSeriesDataCached()
@@ -40,10 +36,6 @@ export async function buildPersonImpact(personId) {
     })
     .sort((a, b) => b.totalScore - a.totalScore)
 
-  // TMDB kadro girdilerinden bazılarında profilePath eksik olabiliyor — sadece ilk
-  // görünüme (appearances[0]) bakmak, o dizideki kaydı boşsa oyuncunun BAŞKA bir
-  // dizide gerçekten var olan fotoğrafını da göz ardı edip görseli hiç göstermiyordu.
-  // Fotoğrafı olan İLK kaydı kullanmak bu veri kaybını önlüyor.
   const personSource = appearances.find((a) => a.castEntry.profilePath) || appearances[0]
   return {
     status: 'ready',

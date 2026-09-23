@@ -2,17 +2,12 @@ import crypto from 'node:crypto'
 import { generateSeriesTrendInsight } from '../llm.js'
 import { getCached, setCached } from '../cache.js'
 
-// server/services/themeInsight.js ile AYNI desen: sayısal özet HER ZAMAN hesaplanır (ucuz), LLM
-// yorumu içerik değişmediği sürece (aynı hash) önbellekten döner (pahalı, 24 saat) — LLM başarısız
-// olursa (kota/timeout) sayısal özet YİNE DE döner, insightText null + dürüst bir durumla.
 const INSIGHT_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
 function round1(n) {
   return Math.round(n * 10) / 10
 }
 
-// SeriesTrendChart.jsx'teki ISO 8601 hafta numarası algoritmasının sunucu tarafı eşleniği
-// (MDN'nin standart algoritması) — "Zirve: Hafta N" ifadesinin AI yorumundaki sayıyla tutarlı olması için.
 function getWeekNumber(tsSeconds) {
   const date = new Date(tsSeconds * 1000)
   date.setHours(0, 0, 0, 0)
@@ -27,8 +22,6 @@ function summarizeTimeline(timeline) {
   const average = round1(values.reduce((sum, v) => sum + v, 0) / values.length)
   const startValue = values[0]
   const endValue = values[values.length - 1]
-  // %15'lik eşik keyfi ama makul: haftalık dalgalanmayı "yön" gibi göstermemek için (bkz.
-  // impact.js'teki TONE_MARGIN ile aynı prensip — küçük farkı kesin bir eğilim gibi sunma).
   const direction = endValue > startValue * 1.15 ? 'yükseliş' : endValue < startValue * 0.85 ? 'düşüş' : 'yatay seyir'
   return {
     peakWeek: getWeekNumber(timeline[peakIdx].timestamp),
@@ -45,13 +38,13 @@ function timelineHash(timeline) {
   return crypto.createHash('sha1').update(summary).digest('hex').slice(0, 16)
 }
 
-export async function getSeriesTrendInsight(seriesName, timeline) {
+export async function getSeriesTrendInsight(seriesName, timeline, scopeLabel = null) {
   if (!timeline || timeline.length < 2) {
     return { stats: null, insightText: null, generatedAt: null, fromCache: false }
   }
 
   const stats = summarizeTimeline(timeline)
-  const cacheKey = `series-trend-insight:${timelineHash(timeline)}`
+  const cacheKey = `series-trend-insight:${scopeLabel ? `${scopeLabel}:` : ''}${timelineHash(timeline)}`
   const cached = getCached(cacheKey)
   if (cached) {
     return { stats, insightText: cached.insightText, generatedAt: cached.generatedAt, fromCache: true }
@@ -60,7 +53,7 @@ export async function getSeriesTrendInsight(seriesName, timeline) {
   let insightText = null
   const generatedAt = new Date().toISOString()
   try {
-    insightText = await generateSeriesTrendInsight(seriesName, stats)
+    insightText = await generateSeriesTrendInsight(seriesName, stats, scopeLabel)
     setCached(cacheKey, { insightText, generatedAt }, INSIGHT_CACHE_TTL_MS)
   } catch (err) {
     console.error(`[seriesTrendInsight] "${seriesName}" için LLM yorumu üretilemedi:`, err.message)

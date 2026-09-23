@@ -117,17 +117,6 @@ function TourismCorrelation({ pendingAnalysis }) {
   return <DidTable countries={pendingAnalysis.countries} />
 }
 
-
-// C.3 — "yetim sinyal" düzeltmesi: tourism_leading_signal haftalık olarak toplanıp
-// /api/impact/tourism ile ZATEN dönülüyordu ama src/ içinde hiçbir bileşen okumuyordu; yani her
-// hafta ücretli Trends çağrısı yapılıp veri kimseye gösterilmiyordu. Artık burada.
-//
-// DÜRÜSTLÜK ÇERÇEVESİ (bu bölümün asıl tasarım kararı): korelasyon YÖNLÜ bir ölçüdür ve küçük
-// örneklemde tesadüfen büyüyebilir. Gerçek veride 35 sinyalin yalnızca 3'ü anlamlılık eşiğini
-// (|r| >= ~0,33, n=36) geçiyor ve bunların İKİSİ NEGATİF. Bu yüzden:
-//   - |r|'ye göre sıralayıp "en güçlü sinyal" demek yeterli değil; yön ayrı gösteriliyor,
-//   - eşiğin altındakiler "zayıf" olarak işaretlenip soluklaştırılıyor, gizlenmiyor,
-//   - hiç anlamlı sinyal yoksa öne çıkarılan bir başlık DEĞERİ GÖSTERİLMİYOR.
 function LeadingSignalSection({ leadingSignal }) {
   if (!leadingSignal || leadingSignal.status !== 'gerçek-veri-mevcut') {
     return (

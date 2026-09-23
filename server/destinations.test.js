@@ -16,7 +16,6 @@ describe('detectDestinations', () => {
   })
 
   it('birden fazla eşleşmeyi anahtar kelime sayısına göre sıralar', () => {
-    // Mardin 2 anahtar kelime (mardin, midyat) içeriyor, Adana ise 1 — Mardin önde olmalı
     const result = detectDestinations('Mardin ve Midyat\'ta geçen hikaye, bir de Adana\'ya uğrarlar.', '')
     expect(result[0]).toBe('mardin')
     expect(result).toContain('adana')

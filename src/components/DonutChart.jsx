@@ -7,7 +7,7 @@ const R_INNER = 68
 const R_GUIDE_OUT = R_OUTER + 7
 const R_GUIDE_IN = R_INNER - 7
 const HOVER_LIFT = 7
-const GAP_DEG = 1.1 // dilimler arası açısal boşluk (kenarlık yerine gerçek boşluk)
+const GAP_DEG = 1.1
 const OTHER_COLOR = '#4b5563'
 
 function polarToCartesian(cx, cy, r, angleDeg) {
@@ -30,9 +30,6 @@ function ringSegmentPath(cx, cy, rOuter, rInner, startAngle, endAngle) {
   ].join(' ')
 }
 
-// items: [{ id, label, value, valueLabel, pct, color, isOther? }]
-// Hover durumu üst bileşende (ImpactReport) tutulur, böylece grafik ve yandaki
-// sıralı liste aynı hoveredId'yi paylaşıp birbirine bağlı çalışır.
 export default function DonutChart({
   items,
   hoveredId,

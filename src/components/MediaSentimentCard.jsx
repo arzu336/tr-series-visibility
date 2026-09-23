@@ -15,12 +15,6 @@ function timeAgo(iso) {
   return `${days} gün önce tarandı`
 }
 
-// Proje raporu §4.6 "Basın/Haber Duygu Analizi" — GET /api/media-sentiment/:seriesId/:iso2.
-// Bu uç nokta cache-first çalışır (bkz. server/services/newsSentiment.js): eğer o dizi/ülke
-// için önceden taranmış geçerli bir kayıt varsa SerpAPI/LLM'e HİÇ gitmeden anında döner, yoksa
-// gerçek bir tarama başlatır. Panel satırını genişletmek zaten bilinçli bir kullanıcı eylemi
-// olduğu için (RegionalInterest/CastBar'la aynı "on-demand" desen) otomatik yüklenir; hata/veri
-// yok durumunda "Şimdi Tara" bir YENİDEN DENEME olarak sunulur, kart asla çökmez.
 export default function MediaSentimentCard({ seriesId, iso2, seriesName }) {
   const [state, setState] = useState({ status: 'loading', data: null, error: null })
 
@@ -29,9 +23,6 @@ export default function MediaSentimentCard({ seriesId, iso2, seriesName }) {
     setState({ status: 'loading', data: null, error: null })
     fetchMediaSentiment(seriesId, iso2)
       .then((data) => {
-        // Denetim Y-2: "bu ülke desteklenmiyor" ile "haber bulunamadı" AYRI durumlar. İlkinde
-        // tekrar taramak hiçbir şeyi değiştirmez (kapsama sınırı), o yüzden "Şimdi Tara" da
-        // gösterilmez — kullanıcıyı sonuçsuz bir eyleme yönlendirmemek için.
         if (data.unsupported) {
           setState({ status: 'unsupported', data, error: null })
           return
@@ -130,11 +121,6 @@ export default function MediaSentimentCard({ seriesId, iso2, seriesName }) {
   )
 }
 
-// TMDB'nin tek küresel popülerlik sayısını (bkz. server/series-period-history.js'teki aynı
-// prensip) bu ülkedeki Google Trends arama ilgisiyle ağırlıklandıran ÇARPAN — gerçek bir
-// "izleyici sayısı" değil, dürüstçe etiketlenen bir türev skor (bkz.
-// server/services/serpApiCache.js calculateRegionalScore). Yerel ilgi hiç yoksa/veri
-// eksikse gizlemek yerine bunu açıkça söyler.
 export function HybridScoreTag({ seriesName, iso2 }) {
   const [state, setState] = useState({ status: 'loading', hybrid: null })
 

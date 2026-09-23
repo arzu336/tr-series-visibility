@@ -44,7 +44,6 @@ describe('differenceInDifferences', () => {
     })
     expect(result.treatmentChangePct).toBe(20)
     expect(result.controlChangePct).toBe(10)
-    // Dizi trendine atfedilebilecek gerçek fark: (120-100) - (110-100) = 10
     expect(result.didEstimate).toBe(10)
   })
 

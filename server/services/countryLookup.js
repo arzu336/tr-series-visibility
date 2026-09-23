@@ -11,18 +11,7 @@ const ISO2_BY_NAME = new Map(
   Object.entries(countryNames).map(([iso2, entry]) => [entry.name.toLocaleLowerCase('tr'), iso2])
 )
 
-// yigm.ktb.gov.tr'nin aylık sınır bülteni (server/services/tourismData.js), country-centroids.json'daki
-// kısa resmi adın YANINDA parantezli/uzun bir varyant kullanıyor (ör. "İngiltere (Birleşik
-// Krallık)", "Rusya Fed."). Bunlar GERÇEKTEN aynı ülke — country-centroids.json'da zaten karşılığı
-// var, sadece yazım farklı. Yeni bir ülke EKLEMİYOR, sadece bilinen bir eşleşmeyi tarif ediyor.
-// country-centroids.json'da hiç karşılığı olmayan isimler (ör. bültendeki "Sudan", "İran", "Çin
-// Halk Cumhuriyeti", "Kosova" — bu dosyada iso2'leri hiç yok) burada da bilinçli olarak
-// eklenmiyor: haritanın/uygulamanın geri kalanı zaten o ülkeleri tanımıyor, sadece turizm
-// verisinde "çözüldü" gibi göstermek yanıltıcı olurdu.
 const NAME_ALIASES = {
-  // Denetim bulgusu B-13: Google Trends (hl=tr) bu ülkeyi tireli yazıyor, country-centroids.json'da
-  // ise tiresiz ("Bosna Hersek") — aynı ülke, sadece yazım farkı. Önbellekteki 39 trends kaydında
-  // 9 kez sessizce düşmüştü.
   'bosna-hersek': 'BA',
   'beyaz rusya (belarus)': 'BY',
   'güney kıbrıs rum kesimi': 'CY',
@@ -33,12 +22,6 @@ const NAME_ALIASES = {
   'güney afrika cumhuriyeti': 'ZA',
 }
 
-// src/lib/continents.js'teki resolveIso2FromLabel ile birebir aynı eşleme mantığı: SerpAPI/
-// Google Trends bölge etiketleri bazen ISO2 kod, bazen (hl=tr'ye göre) yerelleştirilmiş ülke
-// adı olarak dönüyor. server/ ve src/ ayrı çalışma zamanları olduğu için (client bundle'a
-// server-only kod sızmasın) burada tekrarlanıyor — server/services/proxyScore.js'in ürettiği
-// fallback ülkeleri gerçek TMDB ülkeleriyle birleştirmek (bkz. aggregate.js mergeProxyFallback)
-// için kullanılıyor. Eşleşme yoksa null döner, uydurma bir eşleşme yapılmaz.
 export function resolveIso2FromLabel(label) {
   if (!label) return null
   const trimmed = String(label).trim()
@@ -47,4 +30,16 @@ export function resolveIso2FromLabel(label) {
   }
   const lower = trimmed.toLocaleLowerCase('tr')
   return ISO2_BY_NAME.get(lower) || NAME_ALIASES[lower] || null
+}
+
+/**
+ * ISO2 → Türkçe ülke adı. Ülke bazlı zaman serisi uçlarının (bkz. server/index.js
+ * /api/trends/timeseries) LLM yorumuna ve hata mesajlarına okunabilir bir kapsam etiketi
+ * verebilmesi için. country-centroids.json'da karşılığı yoksa kodun KENDİSİ döner — uydurma
+ * bir ad üretilmez (resolveIso2FromLabel'ın null dönme ilkesiyle aynı çizgi).
+ */
+export function countryNameFromIso2(iso2) {
+  if (!iso2) return null
+  const code = String(iso2).trim().toUpperCase()
+  return countryNames[code]?.name || code
 }

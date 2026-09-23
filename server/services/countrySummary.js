@@ -11,18 +11,6 @@ import {
 } from './tourismCorrelation.js'
 import { suggestControlCountry } from '../control-matching.js'
 
-// --- ÜLKE ODAKLI ÇOKLU VERİ BİRLEŞTİRME KATMANI ------------------------------------------------
-// Üç sekmenin (Kültürel / Turizm / İhracat) verisini TEK bir ülke için aynı potada toplar.
-//
-// TASARIMIN İKİ SERT KURALI
-// -------------------------
-// 1) BU KATMAN AKSİYON ÖNERMEZ. Ne yapılması gerektiğine dair hiçbir direktif, reçete ya da
-//    tavsiye üretilmez — karar verici uzmanın kendisidir. Katman yalnızca "veri ne diyor"
-//    sorusunu cevaplar. LLM özeti de aynı kurala tabidir (bkz. llm.js generateCountryDataSummary).
-// 2) UYDURMA YOK. Hesaplanamayan her şey `hesaplanamaz` durumuyla ve GEREKÇESİYLE döner;
-//    sıfır, boş dizi ya da "veri yok" gibi belirsiz bir değerle değil. Arayüz "Gerçek Veri
-//    Bekleniyor" rozetini bu duruma bakarak gösterir.
-
 /**
  * Kaynak güven sınıfları. Resmî kaynaklarla korsan/telemetri sinyallerini AYNI tabloda
  * göstermek, ikisini eşit ağırlıkta sunmak demektir — bu ayrım her veri parçasıyla birlikte
@@ -31,9 +19,6 @@ import { suggestControlCountry } from '../control-matching.js'
 export const TRUST_OFFICIAL = 'official'
 export const TRUST_UNOFFICIAL_TELEMETRY = 'unofficial_telemetry'
 
-// Kaynak adı -> güven sınıfı. Burada OLMAYAN bir kaynak bilinçli olarak gayriresmi sayılır:
-// varsayılanın "resmî" olması, yeni bir korsan kaynak eklendiğinde onu sessizce resmî
-// gösterirdi. Güvenli varsayılan, şüpheli olanı işaretlemektir.
 const KAYNAK_GUVEN = {
   tmdb: TRUST_OFFICIAL,
   justwatch: TRUST_OFFICIAL,
@@ -62,10 +47,6 @@ export function yetersiz(reason) {
 
 const OK = (value, extra = {}) => ({ status: 'hesaplandi', value, ...extra })
 
-// --- Kanonik kimlik köprüsü --------------------------------------------------------------------
-// Modül 2'nin omurgası pipeline.db'de (Python tarafı yazar, Node yalnızca OKUR). Bir dizi burada
-// kanonik kimliğe bağlanamıyorsa kimlik UYDURULMAZ — `canonicalId: null` döner ve kademe
-// `null` kalır, böylece raporu okuyan kişi o satırın diller arası birleştirilemeyeceğini bilir.
 function canonicalIdsByTmdbId() {
   const conn = getPipelineDb()
   if (!conn) return new Map()
@@ -79,7 +60,6 @@ function canonicalIdsByTmdbId() {
   }
 }
 
-// --- Boyut 1: Kültürel & Dizi Sinyali ----------------------------------------------------------
 const mediaByCountryStmt = db.prepare(`
   SELECT series_id, total_news_count, positive_score, negative_score, dominant_sentiment,
          override_sentiment, created_at
@@ -116,7 +96,6 @@ function buildCulturalDimension(iso2, countryRow, kanonik) {
       canonicalTier: k.tier ?? null,
       newsCount: t.total_news_count,
       positivePct: Math.round(t.positive_score * 1000) / 10,
-      // İnsan düzeltmesi varsa o geçerlidir — AI etiketi değil.
       sentiment: t.override_sentiment || t.dominant_sentiment,
     }
   })
@@ -134,7 +113,6 @@ function buildCulturalDimension(iso2, countryRow, kanonik) {
   }
 }
 
-// --- Boyut 2: Turizm & Destinasyon Etkisi ------------------------------------------------------
 /**
  * YİGM turist girişi serisi üzerinden ülkenin kendi DiD/korelasyon durumu. Ekonometrik
  * çekirdek tourismCorrelation.js'ten geliyor — burada YENİDEN yazılmıyor.
@@ -157,9 +135,6 @@ async function buildTourismDimension(iso2, countryRow) {
   const ciftler = pickBeforeAfterPair(seri)
   const gorunurluk = countryRow?.score ?? null
 
-  // Pearson: aylık turist sayısı ile o ayki görünürlük arasında — görünürlük zaman serisi
-  // yalnızca 2 aylık olduğu için (visibility_history 2026-07'den beri) bu şu an ÇOĞU ülkede
-  // hesaplanamaz. Sahte bir r üretmek yerine durum açıkça dışarı veriliyor.
   const aylikDegerler = seri.map((s) => s.visitor_count)
   const correlation =
     aylikDegerler.length < 3
@@ -232,34 +207,40 @@ function leadingSignalFor(iso2) {
   })
 }
 
-// --- Boyut 3: İhracat & Ticari Veri Dengesi ----------------------------------------------------
+/**
+ * Resmî platform (Netflix Top 10) kayıt sayısı. pipeline.db yoksa, tablo yoksa ya da bu ülke
+ * için satır yoksa `hesaplanamaz` döner — ÜÇÜ DE farklı gerekçeyle, çünkü "veri hiç toplanmadı"
+ * ile "toplandı ama bu ülkede kayıt yok" farklı bilgilerdir ve rozet uydurulmaz.
+ */
+export function officialPlatformRecordsFor(iso2) {
+  const conn = getPipelineDb()
+  if (!conn) return yetersiz('pipeline.db açılamadı — resmî platform verisi okunamıyor')
+  try {
+    const row = conn
+      .prepare('SELECT COUNT(*) n FROM netflix_country_rankings WHERE country_iso2 = ?')
+      .get(iso2)
+    if (row?.n > 0) {
+      return OK(row.n, { unit: 'top10-kaydi', source: 'netflix', trust: trustOf('netflix') })
+    }
+    return yetersiz(`${iso2} için resmî platform Top 10 kaydı yok`)
+  } catch {
+    return yetersiz('netflix_country_rankings tablosu henüz oluşmadı (netflix_pipeline.py çalıştırılmalı)')
+  }
+}
+
 function buildExportDimension(iso2, countryRow, countries) {
   const sirali = [...countries].sort((a, b) => b.score - a.score)
   const sira = sirali.findIndex((c) => c.iso2 === iso2)
 
-  const conn = getPipelineDb()
-  let platformKaydi = yetersiz('resmî platform (Netflix Top 10) verisi henüz toplanmadı')
-  if (conn) {
-    try {
-      const row = conn
-        .prepare('SELECT COUNT(*) n FROM netflix_country_rankings WHERE country_iso2 = ?')
-        .get(iso2)
-      platformKaydi =
-        row?.n > 0
-          ? OK(row.n, { unit: 'top10-kaydi', source: 'netflix', trust: trustOf('netflix') })
-          : yetersiz(`${iso2} için resmî platform Top 10 kaydı yok`)
-    } catch {
-      /* tablo yoksa yetersiz kalır — rozet uydurulmaz */
-    }
-  }
+  const platformKaydi = officialPlatformRecordsFor(iso2)
 
   return {
+    hasOfficialPlatformData: platformKaydi.status === 'hesaplandi',
     visibilityScore: countryRow?.score != null ? OK(Math.round(countryRow.score * 10) / 10) : yetersiz('görünürlük skoru yok'),
     globalRank: sira >= 0 ? OK(sira + 1, { outOf: sirali.length }) : yetersiz('ülke sıralamada yok'),
     seriesCount: countryRow?.seriesCount != null ? OK(countryRow.seriesCount) : yetersiz('dizi sayısı bilinmiyor'),
     dataSource: countryRow?.dataSource ?? null,
     officialPlatformRecords: platformKaydi,
-    // YAPISAL SINIR — çözülebilir bir eksik değil. Uydurma bir tahmin ASLA üretilmiyor.
     licensingRevenue: yetersiz('ülke bazlı dizi lisans bedelleri kamuya açık değildir'),
     sources: [
       { source: 'tmdb', trust: trustOf('tmdb'), note: 'görünürlük skoru' },
@@ -268,7 +249,6 @@ function buildExportDimension(iso2, countryRow, countries) {
   }
 }
 
-// --- Birleştirme -------------------------------------------------------------------------------
 function collectTrustClasses(dimensions) {
   const resmi = new Set()
   const gayriresmi = new Set()
@@ -326,8 +306,6 @@ export async function buildCountryConvergence(iso2, countries, { skipCache = fal
     dimensions,
     trustClasses: collectTrustClasses(dimensions),
     dataGaps: collectDataGaps(dimensions),
-    // Bu katman AKSİYON ÖNERMEZ — sözleşme yanıtın içinde de taşınıyor ki tüketen her istemci
-    // (ve ileride bu yanıtı okuyacak her model) bunu bilsin.
     contract: 'objektif-veri-ozeti',
   }
   setCached(key, result, CACHE_TTL_MS)

@@ -17,11 +17,6 @@ function formatPeriodLabel(period, range) {
   return `${MONTH_SHORT[idx] || month} ${year.slice(2)}`
 }
 
-// Ay/Yıl periyodu grafiği — server/period-history.js'in ürettiği kronolojik seriyi çizer.
-// dataviz skill'in "trend over time → line" kuralına göre: tek seri, tek hue, kronolojik sıra
-// (değere göre sıralanmış bir bar listesi DEĞİL — bkz. app'teki diğer sıralı .benchmark-card
-// listeleri, onlar rank gösteriyor, bu zaman gösteriyor). Hover'da crosshair + tooltip;
-// isCurrent/isPartial periyotlar dürüstçe "devam ediyor" / "kısmi" etiketiyle işaretlenir.
 export default function PeriodChart({ periods, valueKey, range, onRangeChange, unitLabel = '' }) {
   const [hoverIdx, setHoverIdx] = useState(null)
 

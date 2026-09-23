@@ -1,16 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// GDELT geçişi (D.6) basın taramasını ~10 saate çıkardı ve zincirde ARKASINDA duran öncü turizm
-// sinyali toplayıcısını açlığa itti — canlı veritabanında kanıtı: lastAutoNewsScanAt hiç
-// yazılmamıştı, lastTourismTrendsCollectAt ise 7 günlük kapısına rağmen 26 gün boyunca
-// 2026-08-26'da donmuştu. Çözüm turu dilimlemek (MAX_RUN_MS). Bu dosya dilimlemenin iki kritik
-// sözleşmesini sabitler:
-//   1) Süre sınırı bir çifti YARIDA KESMEZ — kontrol çağrıdan ÖNCE yapılır, yoksa GDELT çağrısı
-//      harcanmış ama sonucu yazılmamış olurdu.
-//   2) deadline verilmeyen yol (anlık tetikleyici, enrichSeriesNewsNow) hiç etkilenmez.
-// Gerçek ağ/LLM'e çıkılmaması için fetchAndAnalyzeSentiment taklit ediliyor; bu test HİÇBİR
-// meta anahtarı yazmaz (canlı app.db'deki haftalık kapıyı bozmamak için runAutoNewsScanIfNeeded
-// bilerek çağrılmıyor).
 vi.mock('./newsSentiment.js', () => ({
   fetchAndAnalyzeSentiment: vi.fn(),
 }))
@@ -35,8 +24,6 @@ describe('süre sınırı (dilimleme)', () => {
   })
 
   it('sınır çiftin ORTASINDA dolarsa o çift yine de tamamlanır, sonraki başlamaz', async () => {
-    // İlk çağrı sırasında süre dolar. Kontrol çağrıdan ÖNCE yapıldığı için 1. çift tam olarak
-    // biter (scanned=1), 2. çift hiç başlamaz — yarım kalmış bir GDELT çağrısı oluşmaz.
     const deadline = Date.now() + 50
     vi.mocked(fetchAndAnalyzeSentiment).mockImplementation(async () => {
       await new Promise((r) => setTimeout(r, 80))

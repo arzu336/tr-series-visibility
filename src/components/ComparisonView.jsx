@@ -4,9 +4,6 @@ import MultiSeriesTrendChart from './MultiSeriesTrendChart.jsx'
 
 const MAX_COMPARE = 3
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w185'
-// Kullanıcı talebi: "Mavi, Kırmızı, Yeşil" — bu SIRAYLA, seçim sırasına göre atanır (1. seçilen
-// mavi, 2. kırmızı, 3. yeşil). Kırmızı zaten platformun marka rengi (#EE3135); mavi/yeşil o rengin
-// yanında canlı ama çatışmayan tonlar.
 const CHIP_COLORS = ['#3b82f6', '#EE3135', '#22c55e']
 
 function CompareEmptyState() {
@@ -23,9 +20,6 @@ function CompareEmptyState() {
   )
 }
 
-// Blok — Head-to-Head kartları. Her metrik (Puan/Pazar Payı/Ülke Sayısı) kendi içinde en yüksek
-// değere sahip kart(lar)ı "▲ Lider" ile işaretler — eşitlik olursa hepsi işaretlenir, tek bir
-// kazanan uydurulmaz.
 function Head2HeadCard({ card, isRatingLeader, isShareLeader, isCountryLeader }) {
   return (
     <div className="h2h-card" style={{ '--h2h-color': card.color }}>
@@ -71,12 +65,6 @@ function Head2HeadCard({ card, isRatingLeader, isShareLeader, isCountryLeader })
   )
 }
 
-// TEK SerpAPI çağrısından (getRegionalBreakdown) gelen `compared_breakdown_by_region` verisi.
-// DÜRÜSTLÜK NOTU: bu değerler mutlak ilgi DEĞİL, her ülke İÇİNDE karşılaştırılan diziler
-// arasındaki yüzde payıdır (bir ülkenin satırındaki değerler toplamı 100). Bu yüzden:
-// (1) çubuk genişliği doğrudan yüzdedir, satır içi bir maksimuma göre değil;
-// (2) değerler "%" ile yazılır; (3) ülkeler arası mutlak hacim karşılaştırması yapılmaz —
-// sıralama, ilk seçilen dizinin payına göredir (bkz. trendsShareOfSearch.js).
 function RegionalDominanceTable({ topRows, cards }) {
   if (topRows.length === 0) {
     return <p className="dashboard__empty">Seçilen diziler için ülke bazlı karşılaştırma verisi bulunamadı.</p>
@@ -118,9 +106,9 @@ function RegionalDominanceTable({ topRows, cards }) {
 }
 
 export default function ComparisonView({ seriesList }) {
-  const [picked, setPicked] = useState([]) // [{id, name}]
+  const [picked, setPicked] = useState([])
   const [query, setQuery] = useState('')
-  const [status, setStatus] = useState('idle') // idle | loading | ready | error
+  const [status, setStatus] = useState('idle')
   const [error, setError] = useState(null)
   const [cards, setCards] = useState([])
   const [regionalRows, setRegionalRows] = useState([])

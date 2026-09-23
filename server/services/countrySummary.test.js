@@ -1,16 +1,17 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, beforeAll, afterAll } from 'vitest'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
+import { DatabaseSync } from 'node:sqlite'
+import { resetPipelineDb } from './pipelineDb.js'
 import {
   trustOf,
   yetersiz,
+  officialPlatformRecordsFor,
   TRUST_OFFICIAL,
   TRUST_UNOFFICIAL_TELEMETRY,
 } from './countrySummary.js'
 import { direktifIceriyorMu } from '../llm.js'
-
-// Ülke Odaklı Birleştirme katmanının iki sözleşmesi var ve ikisi de sessizce bozulabilir:
-//   1) Resmî kaynakla korsan/telemetri sinyali AYNI güven sınıfında gösterilemez.
-//   2) Sistem AKSİYON ÖNERMEZ — karar verici uzmandır. Model bir direktif üretirse bu bir
-//      hatadır, "yardımsever bir cümle" değil.
 
 describe('güven sınıfları', () => {
   it('resmî kaynaklar official olarak sınıflanır', () => {
@@ -25,8 +26,6 @@ describe('güven sınıfları', () => {
   })
 
   it('BİLİNMEYEN kaynak güvenli tarafa düşer (gayriresmî sayılır)', () => {
-    // Varsayılan "official" olsaydı, yarın eklenecek yeni bir korsan kaynak sessizce
-    // resmî görünürdü. Güvenli varsayılan şüpheliyi işaretlemektir.
     expect(trustOf('yeni-bilinmeyen-kaynak')).toBe(TRUST_UNOFFICIAL_TELEMETRY)
     expect(trustOf(undefined)).toBe(TRUST_UNOFFICIAL_TELEMETRY)
   })
@@ -40,8 +39,6 @@ describe('hesaplanamaz sentineli', () => {
   })
 
   it('sıfırdan ayırt edilebilir', () => {
-    // "0" ile "ölçemedik" farklı şeylerdir; arayüz ikisini aynı gösteremesin diye
-    // sentinel bir nesne, sayı değil.
     expect(typeof yetersiz('x')).toBe('object')
     expect(yetersiz('x')).not.toBe(0)
   })
@@ -72,7 +69,63 @@ describe('aksiyon önerisi yasağı (kullanıcı kararı)', () => {
   })
 
   it('betimleyici bir "gerekli" kullanımı yanlışlıkla direktif sayılmaz', () => {
-    // "en az 3 gerekli" bir eşik açıklamasıdır, uzmana verilen bir emir değil.
     expect(direktifIceriyorMu('Korelasyon için en az 3 gözlem gerekli, elde 2 var.')).toBeNull()
+  })
+})
+
+describe('resmî platform rozeti', () => {
+  const tmpDir = path.join(os.tmpdir(), 'gorunurluk-pipeline-test')
+  const tmpDb = path.join(tmpDir, `pipeline-${Date.now()}.db`)
+  const oncekiYol = process.env.PIPELINE_DB_PATH
+
+  beforeAll(() => {
+    fs.mkdirSync(tmpDir, { recursive: true })
+    const db = new DatabaseSync(tmpDb)
+    db.exec(`CREATE TABLE netflix_country_rankings (
+      country_iso2 TEXT, tmdb_id INTEGER, show_title TEXT, matched_title TEXT,
+      weeks_in_top10 INTEGER, peak_rank INTEGER, rank_score REAL,
+      last_week_date TEXT, updated_at TEXT
+    )`)
+    db.exec("INSERT INTO netflix_country_rankings (country_iso2, tmdb_id, show_title, weeks_in_top10, peak_rank) VALUES ('BR', 95603, 'Kurulus Osman', 4, 3)")
+    db.exec("INSERT INTO netflix_country_rankings (country_iso2, tmdb_id, show_title, weeks_in_top10, peak_rank) VALUES ('BR', 74823, 'Cukur', 2, 7)")
+    db.close()
+    process.env.PIPELINE_DB_PATH = tmpDb
+    resetPipelineDb()
+  })
+
+  afterAll(() => {
+    resetPipelineDb()
+    if (oncekiYol === undefined) delete process.env.PIPELINE_DB_PATH
+    else process.env.PIPELINE_DB_PATH = oncekiYol
+    resetPipelineDb()
+    fs.rmSync(tmpDb, { force: true })
+  })
+
+  it('gerçek kayıt varsa rozet TETİKLENİR ve sayı doğrudur', () => {
+    const sonuc = officialPlatformRecordsFor('BR')
+    expect(sonuc.status).toBe('hesaplandi')
+    expect(sonuc.value).toBe(2)
+    expect(sonuc.trust).toBe(TRUST_OFFICIAL)
+  })
+
+  it('kaydı olmayan ülkede rozet TETİKLENMEZ — sıfır uydurulmaz', () => {
+    const sonuc = officialPlatformRecordsFor('SO')
+    expect(sonuc.status).toBe('hesaplanamaz')
+    expect(sonuc.reason).toContain('kaydı yok')
+  })
+
+  it('tablo hiç yoksa gerekçe "pipeline çalıştırılmalı" der', () => {
+    const bosDb = path.join(tmpDir, `bos-${Date.now()}.db`)
+    new DatabaseSync(bosDb).close()
+    process.env.PIPELINE_DB_PATH = bosDb
+    resetPipelineDb()
+
+    const sonuc = officialPlatformRecordsFor('BR')
+    expect(sonuc.status).toBe('hesaplanamaz')
+    expect(sonuc.reason).toContain('netflix_pipeline.py')
+
+    process.env.PIPELINE_DB_PATH = tmpDb
+    resetPipelineDb()
+    fs.rmSync(bosDb, { force: true })
   })
 })

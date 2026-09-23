@@ -51,9 +51,6 @@ export function buildVisibility(rawData, themeStore, destinationStore = {}) {
         cast: show.cast || [],
       })
       if (!bucket.topSeries || show.popularity > bucket.topSeries.popularity) {
-        // id + posterPath + cast: harita içi pop-up kartının (bkz. src/App.jsx popup state'i)
-        // hangi TMDB dizisi için IMDb verisi çekeceğini, afişini ve öne çıkan karakterini
-        // (cast[0]) göstereceğini bilmesi için.
         bucket.topSeries = {
           id: show.id,
           name: show.name,
@@ -96,8 +93,6 @@ export function buildVisibility(rawData, themeStore, destinationStore = {}) {
       themeConfidence,
       isThemeUncertain: themeConfidence < UNCERTAIN_THRESHOLD,
       destinationSummary,
-      // TMDB/JustWatch'tan gerçek yayın sağlayıcı verisiyle kurulmuş ülke — mergeProxyFallback'ın
-      // eklediği tahmini ülkelerden (dataSource: 'proxy') arayüzde ayırt edilebilmesi için.
       dataSource: 'tmdb',
     }
   })
@@ -109,11 +104,6 @@ export function buildVisibility(rawData, themeStore, destinationStore = {}) {
   }
 }
 
-// Tema Bazlı AI Yorumu modülü (bkz. server/services/themeInsight.js) için: her dizinin
-// effectiveTheme'ini (themes.js, insan düzeltmesi varsa onu kullanır) küresel olarak toplar.
-// Ülke bazlı değil — "hangi türde diziler öne çıkıyor" sorusuna TÜM canlı dizi kadrosu (raw.series)
-// üzerinden cevap verir. countriesReached, o dizinin providersById'de STREAMABLE olarak göründüğü
-// benzersiz ülke sayısıdır — TMDB popülerlik puanından bağımsız, gerçek yayın erişimini yansıtır.
 export function getGlobalThemeDistribution(rawData, themeStore) {
   const { series, providersById } = rawData
   const byTheme = new Map()
@@ -140,13 +130,6 @@ export function getGlobalThemeDistribution(rawData, themeStore) {
     .sort((a, b) => b.totalPopularity - a.totalPopularity)
 }
 
-// Eksik ülke fallback katmanı: TMDB/JustWatch'ta hiçbir yayın sağlayıcısı bulunmayan (yukarıdaki
-// `countries`'te hiç görünmeyen) ülkeler için server/services/proxyScore.js'in ürettiği Google
-// Trends "Turkish series" arama ilgisi PROXY skorunu ekler. score/seriesCount/destinationScores
-// KASITLI olarak 0/boş bırakılır — bu ülkeler kıta ortalaması, benchmark veya destinasyon
-// sıralaması gibi GERÇEK TMDB verisine dayalı hiçbir metriği etkilemez; sadece haritada tamamen
-// boş kalmak yerine dürüstçe etiketlenmiş bir tahmin göstermeyi sağlar (bkz. CountryPanel'deki
-// "⚡ Arama Hacmi Tahmini" rozeti ve Globe3D/Map2D'deki ayrı PROXY_DATA_COLOR).
 export function mergeProxyFallback(countries, fallback) {
   if (!fallback?.byCountry?.length) return countries
 
@@ -177,9 +160,6 @@ export function mergeProxyFallback(countries, fallback) {
   return [...countries, ...proxyCountries]
 }
 
-// Ülke agregasyonlarından bağımsız, global destinasyon sıralaması: hangi
-// destinasyon toplamda kaç ülkede görünüyor, toplam skoru ne (countries'ten) ve
-// kaç farklı dizide etiketli (series+destinationStore'dan — yayın erişiminden bağımsız gerçek sayı).
 export function buildDestinationRanking(countries, series, destinationStore) {
   const byDestination = new Map()
   const ensure = (id) => {
@@ -214,4 +194,42 @@ export function buildDestinationRanking(countries, series, destinationStore) {
   return Array.from(byDestination.values())
     .filter((d) => d.seriesCount > 0)
     .sort((a, b) => b.totalScore - a.totalScore)
+}
+
+const PER_CAPITA_UNIT = 1_000_000
+
+export const MIN_PER_CAPITA_DENOMINATOR = 1_000_000
+
+export const PER_CAPITA_BASIS = {
+  INTERNET: 'internet-kullanicisi',
+  POPULATION: 'nufus',
+}
+
+/**
+ * Her ülkeye `scorePerCapita` (milyon kişi başına), `perCapitaBasis` ve `perCapitaYear` ekler.
+ * Demografi verisi olmayan ülkede alan NULL kalır — tahmini bir nüfusla doldurulmaz.
+ * `demographics` hiç verilmezse (dış servis düştüyse) tüm ülkeler null ile döner ve harita
+ * ham skora geri düşer; sessizce yanlış bir sayı üretmekten iyidir.
+ */
+export function attachPerCapitaScores(countries, demographics) {
+  return countries.map((c) => {
+    const demo = demographics?.[c.iso2]
+    if (!demo) {
+      return { ...c, scorePerCapita: null, perCapitaBasis: null, perCapitaYear: null, perCapitaReliable: false }
+    }
+
+    const useInternet = demo.internetUsers != null && demo.internetUsers > 0
+    const denominator = useInternet ? demo.internetUsers : demo.population
+    if (!(denominator > 0)) {
+      return { ...c, scorePerCapita: null, perCapitaBasis: null, perCapitaYear: null, perCapitaReliable: false }
+    }
+
+    return {
+      ...c,
+      scorePerCapita: Math.round((c.score / (denominator / PER_CAPITA_UNIT)) * 100) / 100,
+      perCapitaBasis: useInternet ? PER_CAPITA_BASIS.INTERNET : PER_CAPITA_BASIS.POPULATION,
+      perCapitaYear: useInternet ? demo.internetYear : demo.populationYear,
+      perCapitaReliable: denominator >= MIN_PER_CAPITA_DENOMINATOR,
+    }
+  })
 }

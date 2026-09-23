@@ -8,12 +8,6 @@ import {
   SOCIAL_TTL_MS,
 } from './serpApiCache.js'
 
-// Aynı 20 dizi × 15 ülke havuzu (bkz. autoNewsScheduler.js, enrichmentTargets.js) için hedef
-// ülkeye YERELLEŞTİRİLMİŞ Bilgi Grafiği (yayın platformu, puanlar, varsa izleyici beğeni yüzdesi)
-// + o dildeki en çok izlenen resmi fragman. server/social-listening.js'teki mevcut
-// querySocialListening HER ZAMAN Türkiye'ye sabit (gl:'tr', "fragman" kelimesi) — burası
-// fetchLocalizedSocialListeningRaw ile ÜLKEYE göre ayrışır, cache_entries'te ayrı bir anahtar
-// altında (serp:social-local:...) tutulur, var olan serp:social:... kayıtlarıyla çakışmaz.
 const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000
 const META_KEY = 'lastSocialEnrichAt'
 const DELAY_AFTER_LIVE_CALL_MS = 1500
@@ -28,9 +22,6 @@ function sleep(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
 }
 
-// Tek bir dizi × verilen ülke listesi için sosyal/YouTube zenginleştirmesi — hem haftalık toplu
-// döngü (runSocialEnrichmentIfNeeded, her dizi için bunu çağırır) hem de TrendsExplorer.jsx'in
-// anlık tetikleyicisi (enrichSeriesSocialNow) AYNI mantığı paylaşır.
 async function enrichSeriesAcrossCountries(seriesName, countryIso2s, { throttle } = {}) {
   let scanned = 0
   let liveCalls = 0
@@ -38,8 +29,6 @@ async function enrichSeriesAcrossCountries(seriesName, countryIso2s, { throttle 
   let budgetExhausted = false
   for (const iso2 of countryIso2s) {
     const usage = getSerpApiUsageThisMonth()
-    // Her tur 2 gerçek çağrı harcayabilir (Bilgi Grafiği + YouTube) — tek çağrılık pay kalmışsa
-    // bile devam etmek yarım/tutarsız bir kayıt üretebileceği için burada durulur.
     if (usage.used >= usage.budget - 1) {
       budgetExhausted = true
       break
@@ -93,14 +82,10 @@ export async function runSocialEnrichmentIfNeeded() {
   }
 }
 
-// TrendsExplorer.jsx — "Gelişmiş Medya & Sosyal Taramayı Çalıştır" butonu.
 export async function enrichSeriesSocialNow(seriesName, countryIso2s) {
   return enrichSeriesAcrossCountries(seriesName, countryIso2s, { throttle: false })
 }
 
-// Kültürel Etki sekmesi için özet — cache_entries'te "serp:social-local:%" anahtarlı, süresi
-// dolmamış kayıtlar taranır. Kaç dizi/ülke çiftinin en az bir yayın platformu bulduğu ve kaçının
-// puan içerdiği dürüstçe sayılır — hiç tarama yoksa boş özet döner, uydurma bir sayı üretilmez.
 const scanLocalizedSocialStmt = db.prepare(
   "SELECT value FROM cache_entries WHERE key LIKE 'serp:social-local:%' AND expires_at > ?"
 )

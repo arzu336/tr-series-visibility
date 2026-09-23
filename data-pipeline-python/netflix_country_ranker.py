@@ -14,22 +14,33 @@ DOĞRULANMIŞ İKİ ÖNEMLİ SINIR (2026-08-20, gerçek dosyayla test edildi):
    türetilmiş puandır (bkz. compute_rank_score) — bunu uydurma bir saat rakamıyla
    karıştırmıyoruz.
 
-2. **Dosya (~30 MB) 18 ayrı denemede (iki farklı zaman aşımı stratejisiyle) BİR KEZ BİLE
-   tam inmedi.** Her denemede content-length doğru raporlanıyor (31.727.293 bayt, sabit)
-   ama akış rastgele bir noktada (227 KB ile 22 MB arası, tutarsız) `IncompleteRead` ile
-   kopuyor. HEAD isteği ayrıca 403 dönüyor, sunucu Range/Accept-Ranges desteklemiyor (200
-   dönüyor, Range header'ını yok sayıyor). Bu "aşılması gereken bir bot koruması" değil —
-   GET her zaman gerçek veri döndürüyor, robots.txt izin veriyor (`Allow: /tudum`) — ama bu
-   ortamdan bu dosyaya kalıcı bir CDN/ağ kararsızlığı var. Çözüm: `download_dataset` her
-   denemede ulaşılan EN UZUN kısmi indirmeyi saklar (`.tsv.partial`); dosya alfabetik ülke
-   sıralı olduğu için (doğrulandı), istenen ülkenin satır bloğu o kısmi dosyada TAMAMEN
-   varsa (bloktan hemen sonra başka bir ülke görülüyorsa) kullanılır — YARIM KALMIŞ bir
-   ülke bloğu ASLA kullanılmaz, `get_netflix_country_rankings` böyle bir durumda hangi
-   ülkenin verisi eksik olduğunu açıkça belirten bir hata fırlatır.
+2. **Dosya (~32 MB) uzun süre BİR KEZ BİLE tam inmedi.** Her denemede content-length doğru
+   raporlanıyor ama akış rastgele bir noktada `IncompleteRead` ile kopuyor. 2026-09-23'te
+   curl ile yeniden ölçüldü ve sunucu davranışı netleşti:
+     - HEAD → 403. GET her zaman 200 + gerçek veri (bot engeli değil, robots.txt `Allow: /tudum`).
+     - `Range: bytes=N-` YOK SAYILIYOR: 200 + tam gövde dönüyor, `Accept-Ranges` başlığı yok.
+     - `Accept-Encoding: gzip` YOK SAYILIYOR: content-length hâlâ 32 MB, `Content-Encoding` yok.
+     - top10.netflix.com eski adresi 301 ile aynı URL'ye yönlendiriyor (alternatif CDN yok).
+     - Hız ~240-280 KB/s (tam dosya için ~2 dk gerekiyor); bağlantı ~60 sn civarında
+       "connection reset / failure when receiving data from the peer" ile kopuyor (bir kez
+       62 sn'de 17 MB'da). Yani kesinti süreye bağlı görünüyor, hıza değil.
+   Bu koşullarda "resume" imkânsız değil, sadece sunucu izin verirse mümkün: `download_dataset`
+   her yeniden denemede `Range` + `If-Range` gönderir; 206 gelirse mevcut `.tsv.part`'a EKLER,
+   200 gelirse (bugünkü durum) sunucunun yok saydığını anlar ve baştan yazar. Böylece CDN bir
+   gün Range açarsa kod değişikliği gerekmez; açmazsa dürüstçe aynı "en uzun kısmi indirme"
+   stratejisine düşer. Tamlık yalnızca content-length ile değil, dosyanın `\\n` ile bitmesi ve
+   son satırın 8 alanlı olmasıyla da doğrulanır (kesik son satır 'tam' sayılmaz).
+   Dosya alfabetik ülke sıralı olduğu için (doğrulandı), istenen ülkenin satır bloğu kısmi
+   dosyada TAMAMEN varsa (bloktan hemen sonra başka bir ülke görülüyorsa) kullanılır — YARIM
+   KALMIŞ bir ülke bloğu ASLA kullanılmaz; `scan_all_countries` kesilen son ülkeyi açıkça
+   `truncated` olarak raporlar, `get_netflix_country_rankings` ise hata fırlatır.
 """
 from __future__ import annotations
 
 import csv
+import functools
+import json
+import os
 import re
 import shutil
 import time
@@ -44,54 +55,242 @@ DATA_URL = "https://www.netflix.com/tudum/top10/data/all-weeks-countries.tsv"
 # Kaynak URL'nin son parçasıyla BİREBİR aynı ad — tarayıcıdan elle indirilirse (bkz. modül
 # docstring'i) varsayılan kaydedilen dosya adı zaten bu, kullanıcı yeniden adlandırmasın diye.
 FILENAME = "all-weeks-countries.tsv"
-MAX_ATTEMPTS = 8
-# Bant genişliği gözlemsel olarak değişken (aynı dosya bir denemede ~20 MB/60 sn, başka bir
-# denemede ~3 MB/25 sn) — sabit bir süre sınırı ilerlemekte olan bir indirmeyi erken kesip
-# gereksiz başarısızlık yaratıyordu (doğrulandı). Bunun yerine sadece bağlantının GERÇEKTEN
-# koptuğu an (ChunkedEncodingError/ConnectionError/ReadTimeout) yeni bir denemeye geçilir.
-READ_TIMEOUT_S = 120.0
+# Kesinti süreye bağlı ve rastgele (bkz. docstring madde 2): 8 deneme ~%0 başarı verdi, ama
+# gözlenen kopma noktaları 227 KB ile 22 MB arasında dağılıyor — daha çok deneme, tam inme
+# şansını gerçekten artırır. Toplam süre TOTAL_DEADLINE_S ile sınırlı, sonsuza kadar denemez.
+MAX_ATTEMPTS = 12
+CONNECT_TIMEOUT_S = 15.0
+# Chunk'lar arası hareketsizlik sınırı (toplam süre DEĞİL) — ilerleyen bir indirme kesilmez,
+# sadece gerçekten donmuş bağlantı bırakılır. Ölçülen kopmalar zaten 60 sn civarında geliyor.
+READ_TIMEOUT_S = 60.0
+# Zamanlanmış bir koşunun (batch_run/scheduler) bu adımda takılıp kalmaması için üst sınır.
+# 12 deneme x ~60 sn + backoff ≈ 15 dk; ortam değişkeniyle ayarlanabilir.
+TOTAL_DEADLINE_S = float(os.environ.get("NETFLIX_DOWNLOAD_DEADLINE_S", "900"))
+# Tam inmiş dosya bu yaştan eskiyse yeniden indirme DENENİR (Netflix haftalık, salı günleri
+# günceller). Deneme başarısız olursa eski tam dosya yine kullanılır — tam ama bir hafta eski
+# bir dosya, güncel ama yarım bir dosyadan daha değerlidir (tüm ülkeleri kapsar).
+MAX_AGE_S = float(os.environ.get("NETFLIX_DATASET_MAX_AGE_S", str(7 * 24 * 3600)))
+# Tarayıcı benzeri başlıklar: CDN'in HEAD'e 403 vermesi UA bazlı bir politika olduğunu düşündürüyor;
+# GET zaten çalışıyor ama aynı politikanın bağlantı süresini etkileme ihtimaline karşı zararsız.
+BROWSER_HEADERS = {
+    "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/128.0 Safari/537.36",
+    "Accept": "text/tab-separated-values,text/plain;q=0.9,*/*;q=0.8",
+    "Accept-Language": "en-US,en;q=0.9",
+    "Referer": "https://www.netflix.com/tudum/top10",
+}
+# Dosyanın gerçek sütun sayısı (bkz. docstring madde 1) — son satır bütünlük kontrolü için.
+EXPECTED_FIELD_COUNT = 8
 
 # Bu proje sadece Türk DİZİLERİYLE ilgileniyor (server/tmdb.js de sadece /discover/tv
 # çekiyor, film değil) — Netflix'in "Films" kategorisi baştan eleniyor.
 RELEVANT_CATEGORY = "TV"
 
 
+# SÜREÇ İÇİ KARAR HAFIZASI — ölçülen gerçek sorun: `download_dataset` her ÜLKE için yeniden
+# çağrılıyor ve dosya tam inmediği için her çağrıda 8 denemeyi baştan yapıyordu. 12 ülkelik bir
+# koşu 12 x 8 x ~45 sn ≈ 70 dakika sürüyordu; pratikte bu, pipeline'ın hiç çalıştırılamaması
+# demekti (netflix_country_rankings tablosunun boş kalmasının asıl sebebi).
+# Karar bir kez verilir: tam indirme başarısızsa aynı süreçte tekrar denenmez, elde olan en
+# uzun kısmi dosya kullanılır. Yeni bir süreç yine baştan dener — kalıcı bir vazgeçiş değil.
+_COZULMUS_DATASET: Optional[tuple[Path, bool]] = None
+
+
+def _looks_complete(path: Path, expected: int) -> bool:
+    """Dosya gerçekten tam mı? content-length eşleşmesi tek başına yetmez: content-length
+    başlığı yoksa (-1) ya da sunucu yanlış raporlarsa kesik bir dosya 'tam' sayılabilir.
+    TSV'nin yapısal bir garantisi var — her satır `\\n` ile biter ve 8 alanlıdır — o da kontrol
+    edilir. Kesik son satır = yarım ülke bloğu riski, bkz. modül docstring'i."""
+    if not path.exists():
+        return False
+    size = path.stat().st_size
+    if size == 0:
+        return False
+    if expected != -1 and size != expected:
+        return False
+    with open(path, "rb") as f:
+        f.seek(max(0, size - 4096))
+        tail = f.read()
+    if not tail.endswith(b"\n"):
+        return False
+    last_line = tail.rstrip(b"\r\n").split(b"\n")[-1]
+    return last_line.count(b"\t") == EXPECTED_FIELD_COUNT - 1
+
+
+def _parse_content_range_total(header: Optional[str]) -> int:
+    """'bytes 1000-31727292/31727293' -> 31727293. Bilinmiyorsa ('*') -1."""
+    if not header or "/" not in header:
+        return -1
+    total = header.rsplit("/", 1)[1].strip()
+    return int(total) if total.isdigit() else -1
+
+
+def _write_partial_meta(meta_path: Path, *, size: int, expected: int, last_modified: Optional[str]) -> None:
+    """Kısmi dosyanın hangi sunucu sürümüne ait olduğunu yanına yazar — bir sonraki haftanın
+    denemesi daha kısa kalırsa eski (daha uzun) kısmi dosya kazanır ve kullanıcı bunun eski
+    haftaya ait olduğunu bilmeli (bkz. download_dataset uyarısı)."""
+    meta_path.write_text(
+        json.dumps(
+            {"bytes": size, "content_length": expected, "last_modified": last_modified, "saved_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())},
+            ensure_ascii=False,
+        ),
+        encoding="utf-8",
+    )
+
+
+def _read_partial_meta(meta_path: Path) -> dict:
+    try:
+        return json.loads(meta_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+
+
+def cleanup_temp_files(cache_dir: Path) -> int:
+    """İndirme sırasında kullanılan `.tsv.part` geçici dosyasını siler; silinen dosya sayısını
+    döner. `.tsv.partial` (en uzun kısmi indirme) ve meta dosyası BİLEREK korunur — onlar geçici
+    değil, bir sonraki koşunun kullanacağı veri. `.part` ise yalnızca tek bir indirme denemesinin
+    ara çıktısı: başarıda `dest`'e taşınır, başarısızlıkta uzunsa `.partial`'a kopyalanır; her iki
+    durumda da işi bitmiştir. Süreç yarıda öldürülürse (zaman aşımı, SIGTERM) geride kalır — bu
+    yüzden hem koşu sonunda hem yeni koşu başında çağrılır."""
+    dest = cache_dir / FILENAME
+    silinen = 0
+    for tmp in (dest.with_suffix(".tsv.part"),):
+        if tmp.exists():
+            try:
+                tmp.unlink()
+                silinen += 1
+            except OSError as exc:
+                print(f"[netflix] geçici dosya silinemedi ({tmp.name}): {exc}")
+    return silinen
+
+
+def resolve_local_dataset(cache_dir: Path) -> tuple[Path, bool]:
+    """Ağa hiç çıkmadan diskteki veriyi döner: tam dosya varsa (yaşına bakılmaz) o, yoksa en
+    uzun kısmi dosya. Hiçbiri yoksa RuntimeError. Kullanım: indirme az önce denenmiş ve başarısız
+    olmuşken eşleştirme mantığını/aday listesini değiştirip yeniden koşmak — 10-15 dakikalık
+    yeni bir indirme turu beklemeden."""
+    cleanup_temp_files(cache_dir)  # önceki süreçten kalan .part burada da işe yaramaz
+    dest = cache_dir / FILENAME
+    if dest.exists():
+        return dest, True
+    best_partial = dest.with_suffix(".tsv.partial")
+    if best_partial.exists():
+        print(f"[netflix] çevrimdışı: kısmi dosya kullanılıyor ({best_partial.stat().st_size} bayt).")
+        return best_partial, False
+    raise RuntimeError(f"Çevrimdışı mod: {cache_dir} içinde ne {FILENAME} ne de kısmi dosya var.")
+
+
 def download_dataset(cache_dir: Path, force: bool = False) -> tuple[Path, bool]:
-    """(dosya_yolu, tam_mi) döner. Tam indirme başarılı olursa tam_mi=True. Sekiz deneme de
-    eksik kalırsa, ulaşılan EN UZUN kısmi indirme `.tsv.partial` olarak saklanır ve
-    tam_mi=False ile döner — hangi ülkelerin bu kısmi veride olduğu/olmadığı çağıran
-    tarafın (get_netflix_country_rankings) sorumluluğundadır."""
+    """(dosya_yolu, tam_mi) döner. Tam indirme başarılı olursa tam_mi=True. Tüm denemeler eksik
+    kalırsa, ulaşılan EN UZUN kısmi indirme `.tsv.partial` olarak saklanır ve tam_mi=False ile
+    döner — hangi ülkelerin bu kısmi veride olduğu/olmadığı çağıran tarafın
+    (get_netflix_country_rankings / scan_all_countries) sorumluluğundadır.
+
+    Yeniden deneme stratejisi (bkz. modül docstring'i madde 2):
+      - Her yeniden denemede `Range: bytes=<mevcut>-` + `If-Range: <Last-Modified>` gönderilir.
+        206 → mevcut `.tsv.part`'a eklenir (gerçek resume). 200 → sunucu Range'i yok saydı ya da
+        dosya değişti; baştan yazılır. Bugün itibarıyla Netflix CDN'i 200 döndürüyor.
+      - Tam inmiş ama MAX_AGE_S'den eski bir dosya varsa yenilenmeye çalışılır; başarısız olursa
+        eski TAM dosya kısmi dosyaya tercih edilir (bütün ülkeleri kapsar).
+      - Toplam süre TOTAL_DEADLINE_S ile sınırlıdır.
+    """
+    global _COZULMUS_DATASET
+    if _COZULMUS_DATASET is not None and not force:
+        return _COZULMUS_DATASET
+
     cache_dir.mkdir(parents=True, exist_ok=True)
     dest = cache_dir / FILENAME
+    stale_full: Optional[Path] = None
     if dest.exists() and not force:
-        return dest, True
+        age = time.time() - dest.stat().st_mtime
+        if age <= MAX_AGE_S:
+            _COZULMUS_DATASET = (dest, True)
+            return _COZULMUS_DATASET
+        stale_full = dest
+        print(f"[netflix] mevcut tam dosya {age / 86400:.1f} gün eski — yenileme deneniyor (başarısızsa eskisi kullanılır).")
 
     tmp = dest.with_suffix(".tsv.part")
     best_partial = dest.with_suffix(".tsv.partial")
+    meta_path = dest.with_suffix(".tsv.partial.json")
     best_bytes = best_partial.stat().st_size if best_partial.exists() else 0
+    # Önceki süreçten kalan .part'a güvenilmez (hangi sürüme ait olduğu bilinmiyor) — temiz başla.
+    cleanup_temp_files(cache_dir)
+
+    try:
+        return _download_with_retries(dest, tmp, best_partial, meta_path, best_bytes, stale_full)
+    finally:
+        # Başarı (dest'e taşındı), başarısızlık (.partial'a kopyalandı) ya da istisna — .part'ın
+        # işi her durumda bitti; diskte 15 MB'lık yarım dosyalar birikmesin.
+        cleanup_temp_files(cache_dir)
+
+
+def _download_with_retries(
+    dest: Path,
+    tmp: Path,
+    best_partial: Path,
+    meta_path: Path,
+    best_bytes: int,
+    stale_full: Optional[Path],
+) -> tuple[Path, bool]:
+    global _COZULMUS_DATASET
     last_error: Optional[Exception] = None
+    expected = -1
+    last_modified: Optional[str] = None
+    range_supported: Optional[bool] = None  # None = henüz denenmedi
+    deadline = time.monotonic() + TOTAL_DEADLINE_S
+    session = requests.Session()
 
     for attempt in range(1, MAX_ATTEMPTS + 1):
+        if time.monotonic() >= deadline:
+            print(f"[netflix] toplam süre sınırı ({TOTAL_DEADLINE_S:.0f} sn) aşıldı, {attempt - 1} denemede durduruldu.")
+            break
+
+        offset = tmp.stat().st_size if (tmp.exists() and range_supported is not False) else 0
+        headers = dict(BROWSER_HEADERS)
+        if offset > 0:
+            headers["Range"] = f"bytes={offset}-"
+            if last_modified:
+                # Dosya bu arada değiştiyse sunucu 206 yerine 200 + yeni tam gövde döner —
+                # farklı sürümlerin baytlarını birleştirme riski böylece kalkar.
+                headers["If-Range"] = last_modified
+
         start = time.monotonic()
         try:
-            with requests.get(DATA_URL, stream=True, timeout=(10, READ_TIMEOUT_S)) as res:
+            with session.get(DATA_URL, stream=True, timeout=(CONNECT_TIMEOUT_S, READ_TIMEOUT_S), headers=headers) as res:
                 res.raise_for_status()
-                expected = int(res.headers.get("content-length", -1))
-                total = 0
-                with open(tmp, "wb") as f:
+                if offset > 0 and res.status_code == 206:
+                    if range_supported is None:
+                        print(f"[netflix] sunucu Range destekliyor — {offset} bayttan devam ediliyor.")
+                    range_supported = True
+                    mode = "ab"
+                    total = offset
+                    expected = _parse_content_range_total(res.headers.get("content-range"))
+                else:
+                    if offset > 0:
+                        print("[netflix] sunucu Range başlığını yok saydı (200) — baştan indiriliyor.")
+                        range_supported = False
+                    mode = "wb"
+                    total = 0
+                    expected = int(res.headers.get("content-length", -1))
+                    last_modified = res.headers.get("last-modified")
+
+                with open(tmp, mode) as f:
                     for chunk in res.iter_content(chunk_size=1 << 16):
                         if not chunk:
                             continue
                         f.write(chunk)
                         total += len(chunk)
-                if expected != -1 and total != expected:
-                    raise IOError(f"Eksik indirme: {total}/{expected} bayt")
+
+            if not _looks_complete(tmp, expected):
+                raise IOError(f"Eksik indirme: {total}/{expected} bayt (ya da kesik son satır)")
+
             tmp.replace(dest)
             elapsed = time.monotonic() - start
-            print(f"[netflix] indirme tamamlandı: {total} bayt, {elapsed:.1f}s")
-            if best_partial.exists():
-                best_partial.unlink()
-            return dest, True
+            print(f"[netflix] indirme tamamlandı: {total} bayt, {elapsed:.1f}s (deneme {attempt})")
+            for artefact in (best_partial, meta_path):
+                if artefact.exists():
+                    artefact.unlink()
+            _COZULMUS_DATASET = (dest, True)
+            return _COZULMUS_DATASET
         except Exception as exc:  # noqa: BLE001 — her tür ağ hatasında aynı retry mantığı
             last_error = exc
             elapsed = time.monotonic() - start
@@ -100,24 +299,90 @@ def download_dataset(cache_dir: Path, force: bool = False) -> tuple[Path, bool]:
             if partial_size > best_bytes:
                 best_bytes = partial_size
                 shutil.copy(tmp, best_partial)
-            time.sleep(min(2**attempt, 20))
+                _write_partial_meta(meta_path, size=partial_size, expected=expected, last_modified=last_modified)
+            time.sleep(min(2**attempt, 30))
+
+    if stale_full is not None:
+        print(f"[netflix] UYARI: yenileme başarısız (son hata: {last_error}); eski TAM dosya kullanılıyor: {stale_full}")
+        _COZULMUS_DATASET = (stale_full, True)
+        return _COZULMUS_DATASET
 
     if best_partial.exists():
+        meta = _read_partial_meta(meta_path)
+        surum_notu = ""
+        if meta.get("last_modified") and last_modified and meta["last_modified"] != last_modified:
+            surum_notu = (
+                f" DİKKAT: bu kısmi dosya eski bir sunucu sürümüne ait ({meta['last_modified']}), "
+                f"sunucudaki güncel sürüm {last_modified} — kapsadığı ülkelerin son haftaları eksik olabilir."
+            )
         print(
-            f"[netflix] UYARI: {MAX_ATTEMPTS} denemede de tam indirilemedi (son hata: {last_error}). "
-            f"En uzun kısmi indirme ({best_bytes} bayt) kullanılacak — sadece bu kısımda TAM olarak "
-            f"bulunan ülkeler işlenebilir."
+            f"[netflix] UYARI: tam indirilemedi (son hata: {last_error}). En uzun kısmi indirme "
+            f"({best_bytes} bayt) kullanılacak — sadece bu kısımda TAM olarak bulunan ülkeler işlenebilir.{surum_notu}"
         )
-        return best_partial, False
+        _COZULMUS_DATASET = (best_partial, False)
+        return _COZULMUS_DATASET
 
     raise RuntimeError(
         f"{FILENAME}, {MAX_ATTEMPTS} denemede de hiç veri indirilemedi. Son hata: {last_error}"
     )
 
 
+# Netflix başlığındaki sezon/bölüm ekleri — dizi adının ARDINDAN gelebilecek meşru kuyruklar.
+_SEZON_EKI = re.compile(
+    r"^(?:[:\-–—]?\s*)?(?:season|sezon|series|part|b[oö]l[uü]m|limited\s+series|"
+    r"the\s+final\s+season|final\s+season)?\s*\d*\s*$",
+    re.IGNORECASE,
+)
+
+
+def _normalize_for_match(text: str) -> str:
+    """Eşleştirme için sadeleştirme: noktalama atılır, boşluk tekilleşir, küçük harfe iner.
+    Türkçe'ye özgü büyük/küçük harf tuzağı (I/ı) burada devreye girmiyor çünkü karşılaştırma
+    iki tarafta da aynı şekilde sadeleştirilmiş metinler arasında yapılıyor."""
+    sade = re.sub(r"[^\w\s]", " ", (text or ""), flags=re.UNICODE)
+    return re.sub(r"\s+", " ", sade).strip().casefold()
+
+
+@functools.lru_cache(maxsize=8)
+def _normalized_candidates(candidates: tuple[str, ...]) -> tuple[str, ...]:
+    """Aday dizi adlarının normalize hâli — ÖLÇÜLEN darboğaz: scan_all_countries 22 MB'lık kısmi
+    dosyada ~150 bin TV satırı okuyor ve _matches her satırda 400 adayı yeniden normalize
+    ediyordu (~60 milyon regex çağrısı, dakikalar). Aday listesi bir koşu boyunca sabit; bir kez
+    normalize edilip tekrar kullanılır. tuple(candidates) satır başına 400 string hash'i — regex'e
+    kıyasla ihmal edilebilir."""
+    hedefler = [_normalize_for_match(t) for t in candidates if t and t.strip()]
+    return tuple(h for h in hedefler if h)
+
+
 def _matches(show_title: str, season_title: str, candidates: list[str]) -> bool:
-    haystack = f"{show_title} {season_title}".casefold()
-    return any(c.strip().casefold() in haystack for c in candidates if c and c.strip())
+    """Netflix başlığı bir aday dizinin KENDİSİ mi?
+
+    CANLI YAKALANAN HATA — bu fonksiyon önce `c in haystack` (alt-dize) kontrolü yapıyordu ve
+    kataloğumuzdaki "Anne" adlı gerçek Türk dizisi, Netflix'in "Anne Rice's Mayfair Witches"
+    başlığıyla eşleşti. 7 ülkede (AR, BR, CL, CO, IT, MX, NL) tamamen yanlış satır yazıldı:
+    bir AMC dizisi, Türk dizisi ihracat verisi olarak kaydedildi.
+
+    Alt-dize araması bu iş için yanlış: dizi adının başlığın İÇİNDE geçmesi yetmez, başlığın
+    KENDİSİ olması gerekir. Meşru istisna sezon ekleri ("Kuruluş Osman: Season 4") — onlar da
+    adın ARDINDAN gelmeli, ortasında ya da öncesinde değil.
+    """
+    hedefler = _normalized_candidates(tuple(candidates))
+    if not hedefler:
+        return False
+
+    for ham in (show_title, f"{show_title} {season_title}"):
+        baslik = _normalize_for_match(ham)
+        if not baslik:
+            continue
+        for hedef in hedefler:
+            if baslik == hedef:
+                return True
+            # Ad + sezon eki: "kurulus osman season 4" -> kalan "season 4" meşru kuyruk mu?
+            if baslik.startswith(hedef + " "):
+                kalan = baslik[len(hedef) :].strip()
+                if _SEZON_EKI.match(kalan):
+                    return True
+    return False
 
 
 def _is_country_block_complete(path: Path, field: str, target: str) -> bool:
@@ -177,38 +442,96 @@ def get_netflix_country_rankings(
     with open(path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
         for row in reader:
-            if row.get("category") != RELEVANT_CATEGORY:
-                continue
             row_value = row.get(field, "")
             if field == "country_name":
                 row_value = row_value.casefold()
             if row_value != target:
                 continue
-            show_title = row.get("show_title", "")
-            season_title = row.get("season_title", "") or ""
-            if not _matches(show_title, season_title, turkish_titles):
-                continue
-
-            key = show_title
-            rank = int(row["weekly_rank"])
-            week = row.get("week", "")
-            if key not in accumulator:
-                accumulator[key] = {
-                    "show_title": show_title,
-                    "category": row.get("category"),
-                    "weeks_in_top10": 0,
-                    "peak_position": rank,
-                    "latest_week": week,
-                    "latest_rank": rank,
-                }
-            entry = accumulator[key]
-            entry["weeks_in_top10"] += 1
-            entry["peak_position"] = min(entry["peak_position"], rank)
-            if week >= entry["latest_week"]:
-                entry["latest_week"] = week
-                entry["latest_rank"] = rank
+            _accumulate_row(accumulator, row, turkish_titles)
 
     return [NetflixCountrySignal(**v) for v in accumulator.values()]
+
+
+def _accumulate_row(accumulator: dict[str, dict], row: dict, turkish_titles: list[str]) -> None:
+    """Tek bir TSV satırını (zaten ülkeye göre süzülmüş) dizi bazlı toplayıcıya işler: Films
+    elenir, başlık kataloğumuzla eşleşmiyorsa atlanır, eşleşiyorsa hafta sayısı / en iyi sıra /
+    son hafta güncellenir. get_netflix_country_rankings ve scan_all_countries ortak kullanır."""
+    if row.get("category") != RELEVANT_CATEGORY:
+        return
+    show_title = row.get("show_title", "")
+    season_title = row.get("season_title", "") or ""
+    if not _matches(show_title, season_title, turkish_titles):
+        return
+
+    rank = int(row["weekly_rank"])
+    week = row.get("week", "")
+    entry = accumulator.get(show_title)
+    if entry is None:
+        entry = accumulator[show_title] = {
+            "show_title": show_title,
+            "category": row.get("category"),
+            "weeks_in_top10": 0,
+            "peak_position": rank,
+            "latest_week": week,
+            "latest_rank": rank,
+        }
+    entry["weeks_in_top10"] += 1
+    entry["peak_position"] = min(entry["peak_position"], rank)
+    if week >= entry["latest_week"]:
+        entry["latest_week"] = week
+        entry["latest_rank"] = rank
+
+
+def scan_all_countries(
+    path: Path, is_complete: bool, turkish_titles: list[str]
+) -> tuple[dict[str, list[NetflixCountrySignal]], set[str], Optional[str]]:
+    """TSV'yi TEK geçişte okuyup her ülke için sinyalleri toplar.
+
+    Neden tek geçiş: get_netflix_country_rankings ülke başına dosyanın tamamını (32 MB) yeniden
+    okur; ~90 ülke için bu ~3 GB okuma demek. Tüm ülkeleri doldurmak isteyen çağıran
+    (netflix_pipeline.sync_all) için bu fonksiyon var.
+
+    Döner: (iso2 -> sinyal listesi, TAM olduğu doğrulanan ülke kümesi, kesilen ülke ya da None).
+    Kısmi dosyada dosyanın SON ülkesi 'yarım' sayılır ve sonuçtan çıkarılır — dosya tamsa hiçbir
+    ülke çıkarılmaz. Türk dizisi eşleşmesi olmayan ama bloğu tam olan ülkeler `complete`
+    kümesinde yer alır, sözlükte yer almaz (çağıran 'no-turkish-shows' diye ayırt edebilir).
+    """
+    accumulators: dict[str, dict[str, dict]] = {}
+    seen_order: list[str] = []
+    with open(path, "r", encoding="utf-8", newline="") as f:
+        reader = csv.DictReader(f, delimiter="\t")
+        for row in reader:
+            iso2 = (row.get("country_iso2") or "").strip().upper()
+            if len(iso2) != 2:
+                continue  # kesik/bozuk satır (kısmi dosyanın son satırı olabilir)
+            if not seen_order or seen_order[-1] != iso2:
+                seen_order.append(iso2)
+            _accumulate_row(accumulators.setdefault(iso2, {}), row, turkish_titles)
+
+    truncated = None if (is_complete or not seen_order) else seen_order[-1]
+    complete = set(seen_order)
+    if truncated is not None:
+        complete.discard(truncated)
+
+    by_iso2 = {
+        iso2: [NetflixCountrySignal(**v) for v in acc.values()]
+        for iso2, acc in accumulators.items()
+        if iso2 in complete and acc
+    }
+    return by_iso2, complete, truncated
+
+
+def get_all_country_rankings(
+    turkish_titles: list[str], cache_dir: Path, force_download: bool = False, offline: bool = False
+) -> tuple[dict[str, list[NetflixCountrySignal]], set[str], Optional[str], bool]:
+    """download_dataset (ya da offline=True ile resolve_local_dataset) + scan_all_countries.
+    Son eleman: dosya tam mıydı."""
+    if offline:
+        path, is_complete = resolve_local_dataset(cache_dir)
+    else:
+        path, is_complete = download_dataset(cache_dir, force=force_download)
+    by_iso2, complete, truncated = scan_all_countries(path, is_complete, turkish_titles)
+    return by_iso2, complete, truncated, is_complete
 
 
 def _country_slug(country_name: str) -> str:

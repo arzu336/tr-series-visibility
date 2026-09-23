@@ -5,9 +5,6 @@ import { mapWithConcurrency } from './utils/concurrency.js'
 
 const CLASSIFY_CONCURRENCY = 5
 
-// Turizm açısından öne çıkan destinasyon/bölge listesi. Anahtar kelimeler,
-// TMDB dizi özetinde (sinopsis) geçen yer adlarını yakalamak için — bu bir
-// çekim lokasyonu tespiti DEĞİL, sinopsiste bahsedilen yer adı taraması.
 export const DESTINATIONS = [
   { id: 'istanbul', name: 'İstanbul', keywords: ['istanbul', 'boğaziçi', 'galata', 'üsküdar', 'beyoğlu'] },
   { id: 'kapadokya', name: 'Kapadokya', keywords: ['kapadokya', 'nevşehir', 'göreme', 'ürgüp', 'peri bacaları'] },
@@ -95,19 +92,6 @@ function rowToEntry(row) {
   }
 }
 
-// Birincil yöntem LLM (classifyDestinationsWithLLM) — eski anahtar kelime taraması
-// (detectDestinations) artık sadece LLM başarısız olursa (kota, timeout, sunucu hatası)
-// devreye giren bir yedek. 'llm' ile başarıyla sınıflandırılmış kayıtlar bir daha denenmez;
-// 'keyword' (yedek) ile kaydedilenler her çağrıda (retry backoff'a uyarak) yeniden LLM'e
-// denenir — themes.js'teki classification_failures deseniyle birebir aynı mantık.
-// Denetim bulgusu O-4: index.js her `/api` isteğini `runWithUserContext(userId, …)` içinde
-// çalıştırıyor. TMDB'nin 24 saatlik önbelleği dolduğunda, o an gelen İLK kullanıcı isteği bu
-// katalog geneli sınıflandırmayı tetikliyor ve BEKLEYEN TÜM dizilerin LLM çağrıları o kullanıcının
-// 150'lik günlük kotasına yazılıyordu. Soğuk bir veritabanında bu yüzlerce çağrı demek: kullanıcı
-// hiçbir şey yapmadan kotasını tüketiyor, kota dolunca da themes.js kalan dizileri üstel geri
-// çekilmeli "hata" olarak kaydediyor — yani BİR kullanıcının kotası KURUM kataloğunun verisini
-// bozuyordu. Bu iş kimin tetiklediğinden bağımsız, kurumsal bir arka plan işidir: kullanıcı
-// bağlamı dışında (userId=null) çalıştırılır, böylece kotaya hiç yazılmaz.
 export function ensureDetected(series) {
   return runWithUserContext(null, () => ensureDetectedInner(series))
 }
@@ -169,10 +153,6 @@ export function setHumanTags(seriesId, destinationIds, reviewer) {
   return rowToEntry(selectOneStmt.get(id))
 }
 
-// setHumanTags(id, [], reviewer) ile karıştırılmamalı: boş dizi kaydetmek "insan sıfır
-// destinasyon onayladı" demektir (human_tags_destinations "[]" olur, hâlâ dolu/truthy).
-// Bu fonksiyon kolonları gerçekten NULL'a çekip kaydı otomatik tespite geri döndürür —
-// Analist Paneli'ndeki "AI önerisine geri dön" butonu için.
 export function clearHumanTags(seriesId) {
   const id = Number(seriesId)
   const row = selectOneStmt.get(id)

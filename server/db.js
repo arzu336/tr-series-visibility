@@ -5,32 +5,16 @@ import { DatabaseSync } from 'node:sqlite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DATA_DIR = path.join(__dirname, 'data')
-const DB_PATH = path.join(DATA_DIR, 'app.db')
 
-// server/data .gitignore'da olduğu için TEMİZ BİR KLONDA bu klasör yoktur ve DatabaseSync
-// import anında SQLITE_CANTOPEN ile çöker (sunucu da testler de açılmaz). Denetim bulgusu
-// B-03: klasörü açılışta kendimiz oluşturuyoruz.
+const DB_PATH = process.env.APP_DB_PATH || path.join(DATA_DIR, 'app.db')
+
 fs.mkdirSync(DATA_DIR, { recursive: true })
 
 const db = new DatabaseSync(DB_PATH)
 db.exec('PRAGMA journal_mode = WAL')
 db.exec('PRAGMA foreign_keys = ON')
-// data-pipeline-python/backfill_reytingtv.py aynı dosyaya YAZIYOR (bkz. denetim B-08/G-14):
-// zaman aşımı olmadan eşzamanlı bir yazma, istek içinde anında SQLITE_BUSY olarak patlıyordu.
-// 5 sn boyunca kilidin açılmasını bekler, sonra hata verir.
 db.exec('PRAGMA busy_timeout = 5000')
 
-// Denetim bulgusu B-20: server/ altında hiç transaction yoktu. Yüzlerce satırlık toplu yazımlar
-// (ülke/dizi anlık görüntüleri, aylık rollup, turizm bülteni) her INSERT için ayrı bir örtük
-// transaction açıyordu — yani her satır için ayrı bir disk senkronizasyonu. Bunun iki bedeli var:
-// yavaşlık ve ATOMİKLİK KAYBI (döngünün ortasında bir hata olursa yarı yazılmış bir durum kalır).
-//
-// node:sqlite'ın DatabaseSync'inde better-sqlite3'teki gibi bir db.transaction() sarmalayıcısı
-// YOK (doğrulandı) — BEGIN/COMMIT elle veriliyor.
-//
-// DİKKAT: fn SENKRON olmalıdır. İçinde `await` bulunan bir işi buraya sarmak, transaction'ı ağ
-// çağrısı boyunca açık tutar ve diğer yazarları (Python pipeline'ı dahil) kilitler. Çağrı
-// yerlerinin hepsi bu yüzden yalnızca saf DB döngülerini kapsıyor.
 export function inTransaction(fn) {
   db.exec('BEGIN')
   try {
@@ -41,7 +25,6 @@ export function inTransaction(fn) {
     try {
       db.exec('ROLLBACK')
     } catch {
-      // Transaction zaten düşmüş olabilir; asıl hatayı gizleme.
     }
     throw err
   }
@@ -315,12 +298,8 @@ db.exec(`
   );
 `)
 
-// Rastgele Denetim özelliği kaldırıldı — sadece test verisi biriktirmişti,
-// gerçek kullanım yoktu.
 db.exec('DROP TABLE IF EXISTS spot_checks')
 
-// Trakt.tv entegrasyonu kaldırıldı, yerine OMDb API tabanlı imdb_cache geldi
-// (bkz. server/imdb.js) — eski kurulumlarda kalan tabloyu temizliyoruz.
 db.exec('DROP TABLE IF EXISTS trakt_cache')
 
 const cacheColumns = db.prepare("PRAGMA table_info(cache_entries)").all()
@@ -328,42 +307,23 @@ if (!cacheColumns.some((c) => c.name === 'updated_at')) {
   db.exec('ALTER TABLE cache_entries ADD COLUMN updated_at INTEGER')
 }
 
-// Erişim düzeyi (viewer/analyst/admin) eklendi. Var olan onaylı hesaplar önceki
-// davranışla eşleşsin diye (rol kısıtı hiç yoktu, herkes düzenleyebiliyordu):
-// is_admin=1 olanlar 'admin', geri kalanlar 'analyst' olarak taşınır. Yeni
-// kayıtlar artık en az yetkiyle ('viewer') başlar (bkz. users.js registerUser).
 const usersColumns = db.prepare("PRAGMA table_info(users)").all()
 if (!usersColumns.some((c) => c.name === 'access_level')) {
   db.exec("ALTER TABLE users ADD COLUMN access_level TEXT")
   db.exec("UPDATE users SET access_level = CASE WHEN is_admin = 1 THEN 'admin' ELSE 'analyst' END WHERE access_level IS NULL")
 }
 
-// Sentiment analizi kaldırıldı (Analist Paneli'nde gösterilmiyordu, hiçbir
-// hesaplamada kullanılmıyordu) — eski kurulumlarda kalan sütunu temizliyoruz.
 const themeColumns = db.prepare("PRAGMA table_info(theme_classifications)").all()
 if (themeColumns.some((c) => c.name === 'sentiment')) {
   db.exec('ALTER TABLE theme_classifications DROP COLUMN sentiment')
 }
 
-// Destinasyon tespiti artık birincil olarak LLM kullanıyor (bkz. server/destinations.js,
-// server/llm.js classifyDestinationsWithLLM), eski anahtar kelime taraması sadece LLM
-// başarısız olursa devreye giriyor — hangi yöntemin kullanıldığını (Analist Paneli'nde
-// şeffaflık için) ayırt edebilmek üzere kolon ekleniyor. Var olan kayıtlar (bu değişiklikten
-// önce hep anahtar kelimeyle üretilmişti) 'keyword' olarak işaretlenir ki LLM'e yeniden
-// denenmeleri için "pending" sayılsınlar (bkz. ensureDetected'teki pending filtresi).
 const destColumns = db.prepare("PRAGMA table_info(destination_classifications)").all()
 if (!destColumns.some((c) => c.name === 'detection_method')) {
   db.exec("ALTER TABLE destination_classifications ADD COLUMN detection_method TEXT")
   db.exec("UPDATE destination_classifications SET detection_method = 'keyword' WHERE detection_method IS NULL")
 }
 
-// Analist Paneli'nin "Basın & Medya Algısı" denetim sekmesi — bir analist LLM'in belirlediği
-// dominant_sentiment'i yanlış bulursa (ör. ironik bir eleştiriyi nötr işaretlemiş) düzeltebilsin
-// diye. theme_classifications'taki override_theme / destination_classifications'taki
-// human_tags_* İLE AYNI DESEN: ham LLM sonucu (dominant_sentiment) asla silinmez/ezilmez,
-// insan düzeltmesi AYRI sütunlarda tutulur ki 14 günlük TTL sonunda otomatik yeniden tarama
-// (bkz. server/services/newsSentiment.js upsertStmt) insan kararını sessizce ezmesin —
-// "effective" değer her zaman override varsa onu, yoksa AI'nınkini kullanır.
 const mediaSentimentColumns = db.prepare("PRAGMA table_info(media_sentiment)").all()
 if (!mediaSentimentColumns.some((c) => c.name === 'override_sentiment')) {
   db.exec('ALTER TABLE media_sentiment ADD COLUMN override_sentiment TEXT')
@@ -371,48 +331,23 @@ if (!mediaSentimentColumns.some((c) => c.name === 'override_sentiment')) {
   db.exec('ALTER TABLE media_sentiment ADD COLUMN override_at TEXT')
 }
 
-// Denetim raporu D.6: haber kaynağı SerpAPI google_news'ten GDELT DOC 2.0'a taşındı. Satırın
-// HANGİ sağlayıcıdan geldiği kaydedilmezse iki dönemin verisi aynı tabloda ayırt edilemeden
-// karışırdı (kullanıcı isteği: ad alanlarını ayır — önbellek tarafında bu `gdelt:news:*`
-// öneki, kalıcı tabloda ise bu sütun). Var olan tüm satırlar tanım gereği SerpAPI dönemine ait,
-// 'serpapi' olarak işaretleniyor; newsSentiment.js farklı sağlayıcılı bir satırı süresi dolmamış
-// olsa bile "tazelenmesi gereken" sayar, böylece geçiş sessizce değil AÇIKÇA gerçekleşir.
 if (!mediaSentimentColumns.some((c) => c.name === 'source')) {
   db.exec("ALTER TABLE media_sentiment ADD COLUMN source TEXT")
   db.exec("UPDATE media_sentiment SET source = 'serpapi' WHERE source IS NULL")
 }
 
-// Aylık/Yıllık dönem satırları iki farklı kaynaktan gelebilir: canlı TMDB popülerlik
-// anlık görüntülerinin ortalaması (rutin, ileriye dönük) veya data-pipeline-python'daki
-// ReytingTV geriye dönük dizi sıralaması taramasının doldurduğu gerçek geçmiş veri
-// (bkz. data-pipeline-python/reytingtv_ranker.py). İkisinin sayı ölçeği farklı (TMDB
-// popülerliği sınırsız/büyük, ReytingTV sıra skoru 10-100 arası) — karıştırmamak için
-// hangi kaynaktan geldiği ayrı tutulur, önyüz bunu dürüstçe etiketleyebilir.
 const seriesMonthlyColumns = db.prepare("PRAGMA table_info(series_popularity_monthly)").all()
 if (!seriesMonthlyColumns.some((c) => c.name === 'source')) {
   db.exec("ALTER TABLE series_popularity_monthly ADD COLUMN source TEXT")
 }
-// Yukarıdaki ALTER yalnızca O ANDA var olan satırları etiketliyordu; Node'un rollup yazıcısı
-// `source` sütununu hiç doldurmadığı için sonradan eklenen her satır NULL kalmıştı (canlı veride
-// 487 satır). Yazıcı artık değeri açıkça yazıyor (series-period-history.js), burada da kalanlar
-// normalize ediliyor — `source` birincil anahtara gireceği için NULL kabul edilemez.
 db.exec("UPDATE series_popularity_monthly SET source = 'tmdb_snapshot' WHERE source IS NULL")
 
-// Denetim bulgusu B-08 — anahtar genişletme. Eski birincil anahtar (tmdb_id, year, month) iki
-// kaynağın aynı ayda bir arada var olmasını engelliyor, bu yüzden Python'un ReytingTV upsert'i
-// TMDB satırını EZİYORDU (veri kaybı). SQLite'ta birincil anahtar yerinde değiştirilemez —
-// tablo yeniden kurulup veri taşınıyor. Tek seferlik: PK'da `source` varsa blok atlanır.
 const seriesMonthlyPk = db
   .prepare("PRAGMA table_info(series_popularity_monthly)")
   .all()
   .filter((c) => c.pk > 0)
   .map((c) => c.name)
 if (!seriesMonthlyPk.includes('source')) {
-  // Denetim bulgusu O-1: bu dört DDL/DML ifadesi ayrı otomatik commit'lerle çalışıyordu.
-  // CREATE'den sonraki bir çökmede bir sonraki açılış "table already exists" ile düşer (sunucu
-  // hiç açılmaz); DROP'tan sonraki bir çökmede ise yukarıdaki CREATE TABLE IF NOT EXISTS boş bir
-  // tablo yaratır, PK kontrolü geçer ve VERİ `_yeni` tablosunda mahsur kalır — sessiz kayıp.
-  // SQLite'ta DDL de transactional olduğu için tek blokta atomik: ya tamamı ya hiçbiri.
   inTransaction(() => {
     db.exec(`
     CREATE TABLE series_popularity_monthly_yeni (

@@ -1,8 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchThemeInsight } from '../lib/api.js'
 
-// Tek seri, kategori bazlı büyüklük karşılaştırması — TurkishLearningIndex/RegionalInterest'teki
-// aynı .benchmark-card__bars deseni (dataviz skill: "compare magnitude → bar, sequential hue").
 export default function ThemeInsight() {
   const [data, setData] = useState(null)
   const [status, setStatus] = useState('loading')

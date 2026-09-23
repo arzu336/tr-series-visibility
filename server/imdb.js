@@ -2,16 +2,11 @@ import db from './db.js'
 import { getExternalIds } from './tmdb.js'
 import { getCached, setCached } from './cache.js'
 
-// Denetim B-12: çıplak fetch'in undici varsayılan zaman aşımı ~300 sn — takılan bir dış servis
-// hem istek işleyicilerini hem SIRALI scheduler zincirini saatlerce bloke edebiliyordu.
 const EXTERNAL_TIMEOUT_MS = 15000
 
-const EXTERNAL_IDS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 gün — imdb_id neredeyse hiç değişmez
-const IMDB_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000 // 30 gün — puan/oy/oyuncu listesi yavaş değişir
+const EXTERNAL_IDS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const IMDB_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
 
-// IMDb kendi sayfalarını AWS WAF JavaScript challenge ile koruyor (doğrulandı: HTTP 202,
-// x-amzn-waf-action: challenge, boş gövde) — basit fetch+parse ile kazınamıyor. Bunun yerine
-// gerçek IMDb verisini (puan, oy sayısı, oyuncular) resmi/ücretsiz OMDb API üzerinden alıyoruz.
 const OMDB_BASE = 'https://www.omdbapi.com/'
 
 const getImdbCacheStmt = db.prepare('SELECT * FROM imdb_cache WHERE imdb_id = ?')
@@ -49,8 +44,6 @@ async function resolveImdbId(tmdbId) {
   return imdbId
 }
 
-// "Actors": "A, B, C, D" biçimindeki OMDb alanını gerçek bir isim dizisine çevirir —
-// OMDb ücretsiz katmanda bundan fazla oyuncu vermiyor, uydurma bir tamamlama yapılmaz.
 function parseTopCast(actors) {
   if (!actors || actors === 'N/A') return []
   return actors.split(',').map((name) => name.trim()).filter(Boolean)
@@ -92,8 +85,6 @@ async function fetchFromOmdb(imdbId) {
   }
 }
 
-// server/trakt.js'in yerini alan modül — aynı felsefe: talep üzerine çek, gerçek veri
-// gelmiyorsa/yoksa uydurma bir sayı üretme, dürüstçe 'unavailable' dön.
 export async function getImdbDataForTmdbSeries(tmdbId) {
   const imdbId = await resolveImdbId(tmdbId)
   if (!imdbId) {

@@ -1,12 +1,6 @@
 import { describe, it, expect, afterEach } from 'vitest'
 import { sessionCookieHeader, isSecureRequest } from './auth.js'
 
-// Denetim bulgusu O-3 bir DAĞITIM ENGELİYDİ: `Secure` bayrağı `NODE_ENV === 'production'`
-// şartına bağlıydı ve `.env.example` da `NODE_ENV=production` ile geliyordu. Düz HTTP üzerinden
-// yayınlanan kurum içi bir kurulumda sunucu 200 dönüyor, tarayıcı `Secure` çerezi HTTP'de
-// sessizce atıyor ve HİÇ KİMSE giriş yapamıyordu (tekrar denemeler de giriş hız sınırına
-// takılıyordu). Bu dosya, bayrağın bir daha ortam değişkenine bağlanmamasını garanti eder.
-
 const oncekiNodeEnv = process.env.NODE_ENV
 
 afterEach(() => {
@@ -43,7 +37,6 @@ describe('isSecureRequest', () => {
 
 describe('sessionCookieHeader — Secure bayrağı (O-3)', () => {
   it('NODE_ENV=production OLSA BİLE düz HTTP isteğine Secure eklemez', () => {
-    // Regresyonun tam senaryosu: bu satır kırmızıya dönerse intranet girişi yine kilitlenir.
     process.env.NODE_ENV = 'production'
     expect(sessionCookieHeader('t', 60, istek())).not.toContain('Secure')
   })

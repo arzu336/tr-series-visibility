@@ -1,8 +1,8 @@
 import db, { inTransaction } from './db.js'
 
-const SNAPSHOT_INTERVAL_MS = 12 * 60 * 60 * 1000 // en az 12 saatte bir yeni anlık görüntü al
-const TARGET_WINDOW_MS = 7 * 24 * 60 * 60 * 1000 // 7 gün öncesiyle kıyaslamayı hedefle
-const MIN_WINDOW_MS = 24 * 60 * 60 * 1000 // en az 1 günlük geçmiş yoksa "yetersiz veri"
+const SNAPSHOT_INTERVAL_MS = 12 * 60 * 60 * 1000
+const TARGET_WINDOW_MS = 7 * 24 * 60 * 60 * 1000
+const MIN_WINDOW_MS = 24 * 60 * 60 * 1000
 const MAX_SNAPSHOTS_PER_COUNTRY = 60
 const RISING_THRESHOLD_PCT = 5
 const FALLING_THRESHOLD_PCT = -5
@@ -35,15 +35,11 @@ export function loadHistoryStore() {
 function pickReferenceSnapshot(snapshots, now) {
   if (!snapshots || snapshots.length === 0) return null
   const targetTime = now - TARGET_WINDOW_MS
-  // 7 gün önceye eşit ya da ondan daha eski kayıtların en yenisi
   const candidates = snapshots.filter((s) => s.capturedAt <= targetTime)
   if (candidates.length > 0) return candidates[candidates.length - 1]
-  // 7 günlük geçmiş henüz birikmediyse elimizdeki en eski kaydı kullan (kısmi pencere)
   return snapshots[0]
 }
 
-// Bir ülkenin skorunu geçmiş anlık görüntülerle kıyaslayıp gerçek bir trend yönü üretir.
-// Takip yeni başladığında ("yetersiz-veri") dürüstçe belirtilir — uydurma bir yön göstermez.
 export function getTrend(history, iso2, currentScore) {
   const now = Date.now()
   const snapshots = history[iso2] || []
@@ -62,14 +58,11 @@ export function getTrend(history, iso2, currentScore) {
   return { direction, changePct, windowDays }
 }
 
-// En az SNAPSHOT_INTERVAL_MS aradan sonra çağrıldığında yeni bir anlık görüntü kaydeder.
 export function maybeRecordSnapshot(history, countries) {
   const now = Date.now()
   const marker = history.__lastSnapshotAt || 0
   if (now - marker < SNAPSHOT_INTERVAL_MS) return
 
-  // Denetim B-20: ~200 ülke × 2 ifade + meta = ayrı ayrı örtük transaction'lardı. Tek blokta
-  // atomik: ya tüm anlık görüntü yazılır ya hiçbiri (yarım bir tarih damgası kalmaz).
   inTransaction(() => {
     countries.forEach((c) => {
       insertSnapshotStmt.run(c.iso2, c.score, now)
@@ -78,8 +71,6 @@ export function maybeRecordSnapshot(history, countries) {
     setMetaStmt.run(String(now))
   })
 
-  // Bellekteki geçmiş nesnesi DB yazımından sonra güncellenir — yazım başarısız olursa
-  // (transaction geri alınır) bellek de kirlenmemiş olur.
   countries.forEach((c) => {
     if (!history[c.iso2]) history[c.iso2] = []
     history[c.iso2].push({ score: c.score, capturedAt: now })

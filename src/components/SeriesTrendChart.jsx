@@ -9,21 +9,14 @@ const PAD_BOTTOM = 28
 const LINE_COLOR = '#EE3135'
 const AREA_COLOR = 'rgba(238, 49, 53, 0.12)'
 const PEAK_COLOR = '#D2A94D'
-const MAX_AXIS_LABELS = 10 // "18 Eki" tarihleri yeterince kısa — sıkışmadan gösterilebilecek en fazla etiket sayısı
+const MAX_AXIS_LABELS = 10
 
-// Küresel Zaman Serisi Grafiği — seçili dizinin son 12 aydaki HAFTALIK arama hacmini (0-100,
-// Google Trends'in kendi bağıl ölçeği, geo verilmediği için dünya geneli) çizer. PeriodChart.jsx
-// ile aynı kalıp (tekil seri, hover crosshair + tooltip) — burada zaman ekseni takvim haftası,
-// PeriodChart'taki gibi ay/yıl periyodu değil. Zirve noktası otomatik etiketlenir (kullanıcı
-// talebi) — serideki GERÇEKTEN en yüksek değere sahip nokta (Math.max ile, sabit bir eşik değil;
-// Google Trends'in kendi tanımı gereği bu değer genelde 100 çıkar ama kod bunu VARSAYMAZ, her
-// noktayı kıyaslayıp bulur), takvim tarihiyle etiketlenir (yıl yok — grafik zaten "son 12 ay"
-// penceresini gösteriyor, aria-label'da belirtiliyor).
-export default function SeriesTrendChart({ timeline }) {
+export default function SeriesTrendChart({ timeline, scopeLabel = null }) {
   const [hoverIdx, setHoverIdx] = useState(null)
+  const kapsam = scopeLabel || 'küresel'
 
   if (!timeline || timeline.length < 2) {
-    return <p className="dashboard__empty">Bu dizi için küresel zaman serisi verisi bulunamadı.</p>
+    return <p className="dashboard__empty">Bu dizi için {kapsam} zaman serisi verisi bulunamadı.</p>
   }
 
   const innerWidth = WIDTH - PAD_X * 2
@@ -70,7 +63,7 @@ export default function SeriesTrendChart({ timeline }) {
         className="period-chart"
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
-        aria-label="Küresel 12 aylık haftalık arama hacmi"
+        aria-label={`${scopeLabel ? `${scopeLabel} ` : 'Küresel '}12 aylık haftalık arama hacmi`}
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIdx(null)}
       >

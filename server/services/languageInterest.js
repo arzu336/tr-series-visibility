@@ -1,15 +1,7 @@
 import db from '../db.js'
 
-// series_language_interest üzerindeki okuma katmanı (bkz. wikipediaPageviews.js).
-//
-// --- HER FONKSİYONDA GEÇERLİ İKİ DÜRÜSTLÜK KURALI ---------------------------------------------
-// 1) BİRİM DİLDİR, ÜLKE DEĞİL. Wikimedia makale bazında ülke kırılımı vermiyor. "Arapça okunma"
-//    hangi Arap ülkesi sorusunu cevaplamaz. Buradan dönen hiçbir alan ülke gibi adlandırılmaz.
-// 2) KÜÇÜK TABANDA YÜZDE HESAPLANMAZ. 3 okunmadan 9 okunmaya çıkmak "%200 artış" değil, gürültü.
-//    Büyüme iddiası için hem asgari hacim hem asgari ay sayısı şartı var; sağlanmazsa fonksiyon
-//    yüzde döndürmez ve nedenini `yetersiz` alanında söyler.
-const ASGARI_OKUNMA = 500 // karşılaştırılan iki pencerenin TOPLAMI bunun altındaysa yüzde verilmez
-const ASGARI_AY = 3 // her pencerede en az bu kadar ay verisi olmalı
+const ASGARI_OKUNMA = 500
+const ASGARI_AY = 3
 
 /**
  * Bir dizinin dil bazında aylık okunma serisi — grafik ve bülten için ham girdi.
@@ -42,7 +34,6 @@ function pencereKarsilastir(satirlar, pencereAy) {
     return { sonToplam, oncekiToplam, degisimYuzde: null, yetersiz: 'hacim' }
   }
   if (oncekiToplam === 0) {
-    // Sıfırdan bir şeye çıkmak gerçek bir olay ama YÜZDE olarak ifade edilemez (tanımsız).
     return { sonToplam, oncekiToplam, degisimYuzde: null, yetersiz: 'sifir-taban' }
   }
   return {

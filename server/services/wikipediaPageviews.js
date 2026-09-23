@@ -1,38 +1,13 @@
 import db from '../db.js'
 
-// --- NEDEN BU KATMAN VAR ----------------------------------------------------------------------
-// Platformun uluslararası zaman derinliği ölçüldüğünde 63 GÜNDÜ (visibility_history:
-// 2026-07-20 -> 2026-09-21; aylık özet tabloda yalnızca 2 tam ay). Gelen geri bildirimlerin
-// neredeyse tamamı ise DEĞİŞİM iddiası istiyordu: "şu ülkede artış olmuş", "tarihe ilgi artmış
-// mı", "bülten çıkarayım". İki veri noktasıyla bunların hiçbiri dürüstçe kurulamaz.
-//
-// Zaman derinliği normalde sadece takvimle birikir — ama Wikimedia'nın Pageviews API'si bu
-// kuralın istisnası: ücretsiz, anahtarsız, 2015'e kadar geriye gidiyor. Yani geçmiş BEKLENMEDEN
-// geri doldurulabiliyor. Canlı ölçüm (Kuruluş Osman, 2021-01 -> 2026-09):
-//     ar 69 ay / 2.294.093 okunma      ru 69 ay / 1.120.426
-//     tr 69 ay / 1.475.286             fa 35 ay /   324.148
-//     es 69 ay /   218.541             ur 69 ay /    21.168
-// Ayrıca TMDB'nin hiç göremediği diller sinyal veriyor: tg (Tacikçe), tk (Türkmence),
-// crh (Kırım Tatarcası), ckb (Sorani) — tam da haritada boş kalan bölgeler.
-//
-// --- DÜRÜSTLÜK SINIRI (tasarımın merkezinde) ---------------------------------------------------
-// Buradaki birim DİL'dir, ÜLKE DEĞİLDİR. Wikimedia makale bazında ülke kırılımı yayınlamıyor
-// (gizlilik gerekçesiyle) ve biz uydurmuyoruz. "Arapça okunma" hangi Arap ülkesi sorusunu
-// cevaplamaz. Ham katman dil bazında saklanır; ülke ataması istenirse ayrı bir türetme adımıdır
-// ve arayüzde ayrıca "dil bazlı tahmin" olarak etiketlenir.
 const PAGEVIEWS_BASE = 'https://wikimedia.org/api/rest_v1/metrics/pageviews/per-article'
 const WIKIDATA_API = 'https://www.wikidata.org/w/api.php'
 
-// Wikimedia kullanım şartları açık bir User-Agent istiyor; anonim istekler kısıtlanabiliyor.
 const UA = 'gorunurluk-platformu/1.0 (kurumsal kultur analizi araci)'
 
-// `agent=user` KRİTİK: bot ve tarayıcı-örümcek trafiğini dışarıda bırakır. `all-agents`
-// kullanılsaydı sayılar şişerdi ve "ilgi" ölçüsü olmaktan çıkardı.
 const ACCESS = 'all-access'
 const AGENT = 'user'
 
-// Wikidata sitelinks anahtarları dil sürümlerinde `<dil>wiki` biçiminde — ama aynı kalıba uyan
-// dil-DIŞI projeler de var. Bunlar dil sinyali değildir, elenmeleri gerekir.
 const DIL_OLMAYAN_WIKILER = new Set([
   'commonswiki',
   'metawiki',
@@ -45,16 +20,10 @@ const DIL_OLMAYAN_WIKILER = new Set([
   'foundationwiki',
 ])
 
-// Wikidata wbgetentities tek istekte en fazla 50 varlık kabul ediyor.
 const WIKIDATA_BATCH = 50
 
-// CANLI ÖLÇÜLDÜ: 4 eşzamanlı istekle 47 çiftin 38'i HTTP 429 ile düştü (tek tek atıldığında
-// aynı istekler 200 dönüyordu) — yani sorun adreslerde değil, hızdaydı. Wikimedia anonim
-// istemcilere belgelenenden çok daha dar bir pencere tanıyor. 2'ye indirildi ve altına geri
-// çekilmeli yeniden deneme kondu; ikisi birlikte olmadan geri doldurma sessizce yarım kalıyor.
 const ESZAMANLI = 2
 
-// 429/503 için geri çekilme. Yanıt `Retry-After` verirse ona uyulur, vermezse artan bekleme.
 const YENIDEN_DENEME = 4
 const GERI_CEKILME_MS = [1000, 3000, 8000, 20000]
 
@@ -86,11 +55,11 @@ async function jsonGet(url) {
   let sonDurum = 0
   for (let deneme = 0; deneme <= YENIDEN_DENEME; deneme++) {
     const res = await fetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(30000) })
-    if (res.status === 404) return null // makale yok ya da hiç görüntülenmemiş — hata değil
+    if (res.status === 404) return null
     if (res.ok) return res.json()
 
     sonDurum = res.status
-    if (res.status !== 429 && res.status !== 503) break // kalıcı hata — yeniden denemek anlamsız
+    if (res.status !== 429 && res.status !== 503) break
     if (deneme === YENIDEN_DENEME) break
 
     const retryAfter = Number(res.headers.get('retry-after'))
@@ -104,7 +73,7 @@ async function jsonGet(url) {
  * 399 dizi için ~8 istek eder, dizi başına ayrı istek atmak yerine.
  */
 export async function fetchSitelinks(qids) {
-  const sonuc = new Map() // qid -> [{ lang, title }]
+  const sonuc = new Map()
   for (let i = 0; i < qids.length; i += WIKIDATA_BATCH) {
     const grup = qids.slice(i, i + WIKIDATA_BATCH)
     const url = `${WIKIDATA_API}?action=wbgetentities&ids=${grup.join('|')}&props=sitelinks&format=json`
@@ -158,7 +127,6 @@ async function havuzdaCalistir(isler, isci) {
   return sonuclar
 }
 
-// --- Depolama ---------------------------------------------------------------------------------
 const upsertArticleStmt = db.prepare(`
   INSERT INTO series_wiki_articles (tmdb_id, lang, wikidata_id, title, resolved_at)
   VALUES (?, ?, ?, ?, ?)

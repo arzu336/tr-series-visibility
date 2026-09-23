@@ -1,12 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { siteKeyToLang, encodeArticleTitle } from './wikipediaPageviews.js'
 
-// Wikipedia okunma katmanının iki sessiz kırılma noktası var; ikisi de canlı veriyle görüldü:
-//   1) Wikidata sitelinks içinde dil sürümü OLMAYAN projeler de `...wiki` ile bitiyor
-//      (commonswiki gibi) — elenmezlerse "dil sinyali" diye sahte satır üretirler.
-//   2) Makale başlıkları alfabe dışı ve noktalama içeriyor ("Kuruluş: Osman", Arapça parantezli
-//      adlar). Yanlış kodlanırsa API 404 döner ve sonuç sessizce "veri yok" sanılır.
-
 describe('siteKeyToLang', () => {
   it('gerçek dil sürümlerini tanır (canlı Wikidata yanıtından)', () => {
     expect(siteKeyToLang('arwiki')).toBe('ar')
@@ -15,12 +9,11 @@ describe('siteKeyToLang', () => {
   })
 
   it('TMDB kapsamı dışındaki kritik dilleri de tanır', () => {
-    // Bu diller tam da haritada boş kalan bölgeleri temsil ediyor — elenmeleri kayıp olur.
-    expect(siteKeyToLang('tgwiki')).toBe('tg') // Tacikçe
-    expect(siteKeyToLang('tkwiki')).toBe('tk') // Türkmence
-    expect(siteKeyToLang('crhwiki')).toBe('crh') // Kırım Tatarcası
-    expect(siteKeyToLang('ckbwiki')).toBe('ckb') // Sorani
-    expect(siteKeyToLang('arzwiki')).toBe('arz') // Mısır Arapçası
+    expect(siteKeyToLang('tgwiki')).toBe('tg')
+    expect(siteKeyToLang('tkwiki')).toBe('tk')
+    expect(siteKeyToLang('crhwiki')).toBe('crh')
+    expect(siteKeyToLang('ckbwiki')).toBe('ckb')
+    expect(siteKeyToLang('arzwiki')).toBe('arz')
   })
 
   it('dil OLMAYAN projeleri eler (Kuruluş Osman yanıtında commonswiki gerçekten vardı)', () => {
@@ -49,7 +42,6 @@ describe('encodeArticleTitle', () => {
   })
 
   it('iki nokta üst üsteyi kodlar (kodlanmazsa API 404 döner)', () => {
-    // "Kuruluş: Osman" İspanyolca/Fransızca sürümlerin gerçek başlığı.
     expect(encodeArticleTitle('Kuruluş: Osman')).toBe('Kurulu%C5%9F%3A_Osman')
   })
 

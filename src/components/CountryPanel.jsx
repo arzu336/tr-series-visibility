@@ -7,6 +7,8 @@ import countryNames from '../data/country-centroids.json'
 import PeriodChart from './PeriodChart.jsx'
 import MediaSentimentCard, { HybridScoreTag } from './MediaSentimentCard.jsx'
 import CountryLeaderboard from './CountryLeaderboard.jsx'
+import { describePerCapita, formatTotalScore } from '../lib/perCapitaLabel.js'
+import { PER_CAPITA_SCORE_NOTE, TOTAL_SCORE_NOTE } from '../lib/methodologyNotes.js'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w92'
@@ -17,10 +19,6 @@ function yearOf(dateStr) {
   return dateStr ? dateStr.slice(0, 4) : null
 }
 
-// Best-effort bölgesel ilgi kırılımı (server/regional-interest.js) — şehir koordinatı/
-// geocoding veritabanımız olmadığı için haritada pin olarak değil, burada sıralı bir liste
-// olarak gösterilir. Google Trends bazı ülke/dizi kombinasyonlarında hiç veri döndürmeyebilir
-// — bu durumda dürüstçe boş durum gösterilir, uydurma bir şehir listesi üretilmez.
 function RegionalInterest({ seriesName, iso2 }) {
   const [state, setState] = useState({ status: 'loading', byRegion: [] })
 
@@ -47,8 +45,6 @@ function RegionalInterest({ seriesName, iso2 }) {
     return <p className="dashboard__empty">Bu ülke/dizi için bölgesel arama ilgisi verisi bulunamadı.</p>
   }
 
-  // value:0 olan bölgeler gerçekte "ölçülebilir ilgi yok" demek — listede göstermek sadece
-  // gürültü (kullanıcı talebi: "yalnızca değer > 0 olanlar listelensin").
   const top = state.byRegion.filter((r) => r.value > 0).slice(0, 8)
   const maxValue = Math.max(...top.map((r) => r.value), 1)
 
@@ -73,12 +69,6 @@ function RegionalInterest({ seriesName, iso2 }) {
   )
 }
 
-// Harita üzerinde her zaman erişilebilir canlı dizi/oyuncu/ülke arama barı — yeni bir uç
-// noktaya ihtiyaç yok, zaten App.jsx'te yüklü olan `allCountries` (her ülkenin tam
-// seriesList + her dizinin cast'i) üzerinden client-side bir indeks kurup gerçek,
-// halihazırda çekilmiş veride arama yapar. Panelin daralıp genişlemesinden bağımsız
-// olması için CountryPanel'in `.panel-wrap`'inin DIŞINDA, kendi konumunda render edilir
-// (bkz. CountryPanel'in return'ü) — panel kapalıyken bile aramaya erişilebilsin diye.
 function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSelectCountry }) {
   const [query, setQuery] = useState('')
 
@@ -101,14 +91,6 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
     return { actorIndex: actors, seriesIndex: series, countryIndex: countryList }
   }, [allCountries])
 
-  // Denetim bulgusu B-21: burası projedeki TEK `toLowerCase()` kullanan aramaydı ve Türkçe'de
-  // sessizce yanlış sonuç veriyordu — JS'in dilden bağımsız küçültmesi "İ"yi "i̇" (i + birleşen
-  // nokta) yapar, "I"yı da "ı" yerine "i" yapar. Canlı doğrulandı:
-  //   "İstanbullu Gelin".toLowerCase().includes("istanbul")  →  false
-  //   "IRMAK".toLowerCase()  →  "irmak"  ≠  "ırmak"
-  // Yani kullanıcı "istanbul" yazdığında "İstanbullu Gelin" hiç çıkmıyordu. Diğer tüm aramalar
-  // zaten `toLocaleLowerCase('tr')` kullanıyor (ör. services/requestGuards.js) — bu da onlarla
-  // hizalandı.
   const trimmed = query.trim().toLocaleLowerCase('tr')
   const showResults = trimmed.length >= MIN_QUERY_LENGTH
   const countryResults = showResults
@@ -204,12 +186,49 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
   )
 }
 
-// Haritada artık bir tıklama pop-up'ı YOK (kullanıcı talebi — özellikle mobilde harita
-// görünümünü bozuyordu) — bir ülkeye/diziye dair TÜM detaylar (skor, tema, IMDb puanı,
-// trend, görünürlük geçmişi, bölgesel arama ilgisi, dizilerin tam listesi) yalnızca bu
-// panelde gösterilir. Bir dizi satırına tıklamak o diziyi IMDb kartında da aktif hale
-// getirir (bkz. App.jsx activeSeriesId/onSelectSeries) — ayrıca bir oyuncuya tıklamak bu
-// panelin aynı slotunu geçici olarak oyuncu görünümüne çevirir (bkz. activeActorId/ActorPanel).
+function CountryScoreCard({ country }) {
+  const perCapita = describePerCapita(country)
+  return (
+    <div className="panel__score-card" role="group" aria-label="Görünürlük skorları">
+      <div className="panel__score-item" title={TOTAL_SCORE_NOTE}>
+        <span className="panel__score-label">Toplam görünürlük skoru ⓘ</span>
+        <strong className="panel__score-value">{formatTotalScore(country.score)}</strong>
+        <span className="panel__score-meta">{country.seriesCount} dizinin küresel popülerlik toplamı</span>
+      </div>
+      <div
+        className={
+          perCapita.status === 'unreliable'
+            ? 'panel__score-item panel__score-item--unreliable'
+            : 'panel__score-item'
+        }
+        title={PER_CAPITA_SCORE_NOTE}
+      >
+        <span className="panel__score-label">Kişi başına erişilebilirlik skoru ⓘ</span>
+        {perCapita.status === 'unavailable' ? (
+          <>
+            <strong className="panel__score-value panel__score-value--empty">—</strong>
+            <span className="panel__score-meta">{perCapita.note}</span>
+          </>
+        ) : (
+          <>
+            <strong className="panel__score-value">
+              {perCapita.valueText}
+              {perCapita.status === 'unreliable' && (
+                <span className="panel__score-flag" title={perCapita.note}>
+                  {' '}
+                  ⚠
+                </span>
+              )}
+            </strong>
+            <span className="panel__score-meta">{perCapita.denominatorText}</span>
+            {perCapita.status === 'unreliable' && <span className="panel__score-warning">{perCapita.note}</span>}
+          </>
+        )}
+      </div>
+    </div>
+  )
+}
+
 export default function CountryPanel({
   country,
   allCountries,
@@ -235,9 +254,6 @@ export default function CountryPanel({
   const [seriesRange, setSeriesRange] = useState('current')
   const [seriesPopularity, setSeriesPopularity] = useState(null)
 
-  // Tüm dizilerin (ülkeden bağımsız — TMDB popülerliği zaten global tek bir değer, bkz.
-  // server/series-period-history.js) dönem bazlı ortalaması — 'current' seçiliyse hiç
-  // istek atılmaz, dizinin O ANKİ canlı popülerliği (mevcut/eski davranış) kullanılır.
   useEffect(() => {
     if (seriesRange === 'current') {
       setSeriesPopularity(null)
@@ -256,22 +272,9 @@ export default function CountryPanel({
     }
   }, [seriesRange])
 
-  // 'current' seçiliyse mevcut davranış (canlı popülerliğe göre, aggregate.js'in zaten
-  // sıraladığı sıra) korunur. Aksi halde seçili dönemdeki ortalama popülerliğe göre yeniden
-  // sıralanır — o dönem için geçmişi olmayan (yeni) diziler dürüstçe canlı değerine düşer,
-  // listeden atılmaz/0 sayılmaz.
-  // Denetim bulgusu B-09: burası eskiden HAM değerlere göre sıralıyordu, ama o değerler iki ayrı
-  // ölçekten geliyor — TMDB aylık ortalaması (canlı ölçüm: 5,1-80, ort. 11) ve ReytingTV sıra
-  // skoru (0-100, ort. 41). Sonuç: ReytingTV verisi olan 48 dizi, 525'lik havuzda ilk 20'nin
-  // 16'sını kaplıyordu (tesadüfen beklenen ~2 yerine). Artık sunucu her kayda KENDİ kaynağı
-  // içindeki yüzdeliğini de veriyor (bkz. series-period-history.js yuzdelikAta) ve sıralama onu
-  // kullanıyor; aynı ölçümle 16 → 1'e indi. Ham değer gösterimde AYNEN kalır.
   const sortedSeriesList = useMemo(() => {
     const list = country?.seriesList || []
     if (seriesRange === 'current' || !seriesPopularity) return list
-    // Dönem geçmişi olmayan diziler (map'te yok) canlı popülerliğe düşer — o da üçüncü bir ölçek
-    // olduğu için görünür listenin kendi dağılımı içindeki yüzdeliğine çevrilir, böylece hepsi
-    // aynı 0-100 ekseninde karşılaştırılır.
     const canliDegerler = list.map((s) => s.popularity).sort((a, b) => a - b)
     const canliYuzdelik = (deger) => {
       if (canliDegerler.length === 0) return 50
@@ -287,8 +290,6 @@ export default function CountryPanel({
     setExpandedId(null)
   }, [country?.iso2])
 
-  // Proxy ülkelerin (dataSource: 'proxy') visibility_history'de hiç kaydı yok (bkz.
-  // server/data-pipeline.js) — onlar için istek atmadan direkt boş döneriz.
   useEffect(() => {
     if (!country?.iso2 || country.dataSource === 'proxy') {
       setCountryPeriods(null)
@@ -382,15 +383,17 @@ export default function CountryPanel({
                 <p className="panel__subtitle">{country.seriesCount} dizi yayında</p>
               )}
 
+              {/* Harita varsayılan olarak kişi başına metriği boyuyor (bkz. lib/scale.js) ama
+                  panel şimdiye kadar yalnızca ham toplamı ima ediyordu — kullanıcı haritada gördüğü
+                  rengi burada bir sayıyla eşleyemiyordu. İki skor yan yana, paydası açıkça yazılı:
+                  ham toplam katalog büyüklüğünü, kişi başına değer pazar yoğunluğunu okutur. Proxy
+                  ülkelerde görünürlük skoru hiç yok (Trends tahmini var), kart gösterilmez. */}
+              {country.dataSource !== 'proxy' && <CountryScoreCard country={country} />}
+
               <h3>Trend ve Görünürlük Geçmişi</h3>
               {country.dataSource === 'proxy' ? (
                 <p className="dashboard__empty">Görünürlük geçmişi tutulmuyor.</p>
               ) : (
-                // Eskiden burada hem Sparkline (son 7 gün) hem PeriodChart (Aylık/Yıllık)
-                // yan yana gösteriliyordu — aynı veriyi iki farklı grafikle tekrarlamak kafa
-                // karıştırıyordu (kullanıcı talebi: "mükerrer grafiği teke indir"). Sparkline
-                // kaldırıldı; PeriodChart zaten Aylık/Yıllık geçişiyle daha kapsamlı ve tek
-                // başına yeterli tek bir bileşik zaman serisi.
                 <PeriodChart
                   periods={countryPeriods?.periods || []}
                   valueKey="avgScore"
@@ -448,10 +451,6 @@ export default function CountryPanel({
                   const key = s.id ?? s.name
                   const isExpanded = expandedId === key
                   const isActiveOnMap = activeSeriesId != null && s.id === activeSeriesId
-                  // Ham TMDB popülerlik puanı kullanıcılar tarafından yüzde sanılıp kafa
-                  // karıştırıyordu (kullanıcı geri bildirimi) — satırda artık sadece net bir
-                  // 1..N sırası var, ham sayı + teknik etiketler (kısmi veri *, TR reyting
-                  // rozeti) sadece tıklanınca açılan ayrıntıda gösteriliyor.
                   const rawScore =
                     seriesRange !== 'current' && seriesPopularity?.[s.id]?.value != null
                       ? seriesPopularity[s.id].value

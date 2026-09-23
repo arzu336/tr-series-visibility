@@ -1,6 +1,3 @@
-// Sunucudaki getTrend() çıktısını (server/history.js) tutarlı ikon/metin/renk
-// sınıfına çevirir — ülke paneli, etki raporu merkez metrikleri ve donut
-// sıralı listesi aynı sözlüğü paylaşır.
 export function trendLabel(trend) {
   if (!trend || trend.direction === 'yetersiz-veri') {
     return { icon: '•', text: 'Takip yeni başladı', className: 'trend--neutral' }

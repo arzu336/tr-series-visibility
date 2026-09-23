@@ -2,13 +2,9 @@ import { getRawSeriesDataForOrigin, STREAMABLE_KEYS } from './tmdb.js'
 import { getCached, setCached } from './cache.js'
 import { loadBenchmarkHistoryStore, getBenchmarkTrend, maybeRecordBenchmarkSnapshot } from './benchmark-history.js'
 
-const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 saat — data-pipeline.js'teki RAW_CACHE_TTL_MS ile aynı
-const SERIES_PER_COUNTRY = 50 // 4 ülke × 200 yerine 50 — TMDB isteğini makul tutmak için
+const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const SERIES_PER_COUNTRY = 50
 
-// Küresel Kıyaslama Modülü: Türkiye'nin TMDB tabanlı görünürlüğünü büyük dizi ihracatçısı
-// üç ülkeyle kıyaslar. Resmi ihracat/pazar payı verisi kamuya açık değil — bu yüzden burada
-// üretilen her rakam TMDB popülerlik/yayın-erişimi verisine dayalı bir proxy'dir ve öyle
-// etiketlenir (bkz. server/impact.js'teki aynı dürüstlük ilkesi).
 export const BENCHMARK_COUNTRIES = [
   { code: 'TR', name: 'Türkiye', originalLanguage: 'tr' },
   { code: 'US', name: 'ABD (Hollywood)', originalLanguage: 'en' },

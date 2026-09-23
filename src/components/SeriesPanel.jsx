@@ -16,11 +16,6 @@ function formatVotes(n) {
   return String(n)
 }
 
-// Sağ panel arama barından bir DİZİ sonucuna tıklandığında açılır (bkz. CountryPanel.jsx
-// activeSeriesGlobalId) — ActorPanel ile aynı mantık: arattığın şeyin (burada bir ülke
-// değil, bir dizi) kendi bilgisi aynı panelde gösterilir, ilgisiz bir ülkenin tüm
-// panosuna zıplamak yerine. Ülke bazlı dağılım zaten yüklü `allCountries`'ten (App.jsx)
-// client-side çıkarılır — yeni bir backend isteği gerekmez.
 export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onShowOnMap }) {
   const [imdb, setImdb] = useState(null)
   const [imdbStatus, setImdbStatus] = useState('loading')
@@ -60,9 +55,6 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
     }
   }, [seriesId])
 
-  // data-pipeline-python/batch_run.py'nin ürettiği Dizilah topluluk puanı + IMDb ülke
-  // bazlı yerelleştirilmiş isim verisi (bkz. server/services/pipelineData.js) —
-  // pipeline'da hiç işlenmemiş bir dizi için sessizce null kalır, panel çökmez.
   useEffect(() => {
     if (seriesId == null) return
     let cancelled = false
@@ -81,9 +73,6 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
     return <p className="dashboard__empty">Bu dizi için veri bulunamadı.</p>
   }
 
-  // series.countries zaten allCountries'ten çıkarılmış GERÇEK yayın listesi (aşağıdaki
-  // "Yayınlandığı Ülkeler" ile birebir aynı veri) — ayrı bir Google Trends isteğine gerek
-  // yok, harita da doğrudan bu gerçek listeye göre işaretlenir.
   const handleShowOnMap = () => {
     onShowOnMap?.(series.name, series.countries)
   }

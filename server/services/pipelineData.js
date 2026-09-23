@@ -4,18 +4,11 @@ import { fileURLToPath } from 'node:url'
 import { DatabaseSync } from 'node:sqlite'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-// data-pipeline-python/'ın kendi, ana uygulamanın server/data/app.db'sinden AYRI
-// SQLite dosyası — bkz. data-pipeline-python/db.py'deki aynı ayrım notu. Salt okunur
-// açılır: bu süreç asla pipeline'ın verisini değiştirmemeli, sadece okumalı.
 const PIPELINE_DB_PATH = path.join(__dirname, '..', '..', 'data-pipeline-python', 'data', 'pipeline.db')
 
 let db = null
 let triedOpen = false
 
-// Python pipeline'ı hiç çalıştırılmamışsa (dosya yok) sunucunun tamamı çökmemeli —
-// bu durumda tüm getX fonksiyonları dürüstçe null/boş döner (bkz. index.js
-// /api/series-enrichment: pipeline verisi olmayan bir dizi için sessizce "zenginleştirme
-// yok" der, hata fırlatmaz).
 function getDb() {
   if (db || triedOpen) return db
   triedOpen = true
@@ -32,9 +25,6 @@ function getDb() {
   return db
 }
 
-// data-pipeline-python/batch_run.py'nin ürettiği Dizilah (topluluk puanı, kanal,
-// yayın durumu) + IMDb (ülke bazlı yerelleştirilmiş isimler) verisini TMDB kimliğine
-// göre birleştirip döner. Hiçbiri yoksa null — uydurma bir sonuç üretilmez.
 export function getSeriesEnrichment(tmdbId) {
   const conn = getDb()
   if (!conn) return null

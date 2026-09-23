@@ -1,16 +1,12 @@
 import crypto from 'node:crypto'
 import db from './db.js'
 
-const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000 // 7 gün
+const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000
 export const COOKIE_NAME = 'gp_session'
 
 const insertStmt = db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)')
 const selectStmt = db.prepare('SELECT user_id, expires_at FROM sessions WHERE token = ?')
 const deleteStmt = db.prepare('DELETE FROM sessions WHERE token = ?')
-// Denetim G-05/G-15: kod tabanında oturumları KULLANICI bazında silen hiçbir sorgu yoktu —
-// şifre değişimi, yönetici sıfırlaması, red veya silme sonrasında eski çerez 7 güne kadar
-// geçerli kalıyordu. Ayrıca süresi dolan satırlar yalnızca "sunulduklarında" siliniyor,
-// tablo sınırsız büyüyordu; periyodik temizlik de aşağıda.
 const deleteByUserStmt = db.prepare('DELETE FROM sessions WHERE user_id = ?')
 const deleteExpiredStmt = db.prepare('DELETE FROM sessions WHERE expires_at < ?')
 
@@ -83,7 +79,6 @@ export function isSecureRequest(req) {
   if (!req) return false
   if (req.secure) return true
   const proto = req.headers?.['x-forwarded-proto']
-  // Proxy zinciri virgülle birden çok değer gönderebilir; ilki istemciye en yakın olandır.
   return String(proto || '').split(',')[0].trim().toLowerCase() === 'https'
 }
 

@@ -400,6 +400,72 @@ body {
   color: #8792a8;
 }
 
+/* --- Ülke paneli skor kartı: ham toplam + kişi başına (bkz. CountryPanel.jsx CountryScoreCard) --- */
+.panel__score-card {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.5rem;
+  margin: 0 0 0.5rem;
+}
+
+.panel__score-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  padding: 0.55rem 0.65rem;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  min-width: 0;
+}
+
+.panel__score-item--unreliable {
+  border-color: rgba(245, 166, 35, 0.45);
+}
+
+.panel__score-label {
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8792a8;
+  cursor: help;
+}
+
+.panel__score-value {
+  font-size: 1.15rem;
+  line-height: 1.2;
+  color: #f1f3f8;
+  font-variant-numeric: tabular-nums;
+}
+
+.panel__score-value--empty {
+  color: #8792a8;
+}
+
+.panel__score-flag {
+  color: #f5a623;
+  font-size: 0.9rem;
+}
+
+.panel__score-meta {
+  font-size: 0.7rem;
+  color: #8792a8;
+  line-height: 1.35;
+}
+
+.panel__score-warning {
+  font-size: 0.68rem;
+  color: #f5a623;
+  line-height: 1.35;
+  margin-top: 0.15rem;
+}
+
+@media (max-width: 480px) {
+  .panel__score-card {
+    grid-template-columns: 1fr;
+  }
+}
+
 .panel h3 {
   margin: 1.25rem 0 0.5rem;
   font-size: 0.8rem;
@@ -3971,4 +4037,103 @@ button.sidebar__big-card:hover {
     width: auto;
     white-space: normal;
   }
+}
+
+/* Zaman serisi kapsam seçici (TrendsExplorer) — "Küresel" + dizinin arama ilgisi ölçülen ilk 12
+   ülkesi. .chip'ten ayrı bir sınıf ailesi: .chip pasif bir etiket (kaldır düğmeli), bunlar ise
+   basılabilir/seçili durumu olan düğmeler. */
+.ts-scope {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.5rem 0.7rem;
+  margin-bottom: 0.9rem;
+}
+
+.ts-scope__label {
+  font-size: 0.78rem;
+  color: #8792a8;
+  font-weight: 600;
+  flex-shrink: 0;
+}
+
+.ts-scope__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.ts-scope__chip {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #c8cfdd;
+  border-radius: 999px;
+  padding: 0.28rem 0.75rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.ts-scope__chip:hover:not(:disabled) {
+  border-color: #EE3135;
+  color: #f1f3f8;
+}
+
+.ts-scope__chip--active {
+  background: rgba(238, 49, 53, 0.16);
+  border-color: #EE3135;
+  color: #f1f3f8;
+}
+
+.ts-scope__chip:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+
+.ts-scope__note {
+  margin: 0.6rem 0 0;
+  font-size: 0.76rem;
+  line-height: 1.5;
+  color: #8792a8;
+}
+
+/* Harita üstü kontrol satırı — görünüm (2D/3D) ve metrik (Kişi Başına/Toplam) seçicileri
+   yan yana. Dar ekranda alt alta iner. */
+.app__map-controls {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+/* MapMetricToggle — .map-view-toggle ile aynı görsel dil, ayrı sınıf: ikisi farklı şeyler
+   seçiyor (biri projeksiyon, diğeri metrik) ve ileride biri değişirse diğeri etkilenmesin. */
+.map-metric-toggle {
+  display: inline-flex;
+  gap: 2px;
+  background: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  padding: 2px;
+}
+
+.map-metric-toggle__btn {
+  background: none;
+  border: none;
+  color: #8792a8;
+  border-radius: 6px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.map-metric-toggle__btn:hover {
+  color: #f1f3f8;
+}
+
+.map-metric-toggle__btn--active {
+  background: rgba(238, 49, 53, 0.9);
+  color: #fff;
 }
