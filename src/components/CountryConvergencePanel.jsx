@@ -46,9 +46,7 @@ function DegerHucresi({ deger }) {
     )
   }
 
-  const ekler = Object.entries(deger).filter(
-    ([k]) => !['status', 'value', 'source', 'trust'].includes(k)
-  )
+  const ekler = Object.entries(deger).filter(([k]) => !['status', 'value', 'source', 'trust'].includes(k))
   return (
     <span className="convergence__value">
       <strong>{String(deger.value)}</strong>
@@ -57,11 +55,7 @@ function DegerHucresi({ deger }) {
           Telemetri
         </span>
       )}
-      {ekler.length > 0 && (
-        <span className="convergence__meta">
-          {ekler.map(([k, v]) => `${k}: ${v}`).join(' · ')}
-        </span>
-      )}
+      {ekler.length > 0 && <span className="convergence__meta">{ekler.map(([k, v]) => `${k}: ${v}`).join(' · ')}</span>}
     </span>
   )
 }
@@ -152,8 +146,8 @@ export default function CountryConvergencePanel() {
       <div className="convergence__header">
         <h3 className="dashboard__section-title">Ülke Bazlı Veri Filtreleme ve Anomali Özeti</h3>
         <p className="dashboard__hint">
-          Üç sekmedeki ölçülmüş veriler tek bir ülke için birleştirilir. Bu bölüm aksiyon önerisi
-          üretmez — karar verici uzmandır, burada yalnızca verinin ne gösterdiği yer alır.
+          Üç sekmedeki ölçülmüş veriler tek bir ülke için birleştirilir. Bu bölüm aksiyon önerisi üretmez — karar verici
+          uzmandır, burada yalnızca verinin ne gösterdiği yer alır.
         </p>
       </div>
 
@@ -199,9 +193,7 @@ export default function CountryConvergencePanel() {
             <h4 className="convergence__country">
               {ulkeAdi(veri.iso2)} <span className="convergence__iso">{veri.iso2}</span>
             </h4>
-            {!veri.isTracked && (
-              <span className="badge badge--uncertain">Bu ülke görünürlük verisinde izlenmiyor</span>
-            )}
+            {!veri.isTracked && <span className="badge badge--uncertain">Bu ülke görünürlük verisinde izlenmiyor</span>}
             {/* Rozet SADECE netflix_country_rankings'te gerçek satır varsa görünür — sunucu
                 tarafı bunu `hasOfficialPlatformData` ile tek yerden karara bağlıyor. */}
             {veri.dimensions.export.hasOfficialPlatformData && (
@@ -209,9 +201,7 @@ export default function CountryConvergencePanel() {
                 Resmî Platform Verisi Var
               </span>
             )}
-            <span className="convergence__gapcount">
-              {veri.dataGaps.length} alanda ölçüm yok
-            </span>
+            <span className="convergence__gapcount">{veri.dataGaps.length} alanda ölçüm yok</span>
           </div>
 
           <GuvenSiniflari trustClasses={veri.trustClasses} />

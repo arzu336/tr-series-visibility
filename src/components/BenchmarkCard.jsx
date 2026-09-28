@@ -48,7 +48,10 @@ export default function BenchmarkCard() {
             <div className="benchmark-card__row-bar-track">
               <div
                 className="benchmark-card__row-bar"
-                style={{ width: `${(c.marketSharePct / maxShare) * 100}%`, background: COUNTRY_COLORS[c.code] || '#5a6478' }}
+                style={{
+                  width: `${(c.marketSharePct / maxShare) * 100}%`,
+                  background: COUNTRY_COLORS[c.code] || '#5a6478',
+                }}
               />
             </div>
             <div className="benchmark-card__row-value">%{c.marketSharePct}</div>

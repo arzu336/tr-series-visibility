@@ -4,12 +4,7 @@ export const TOP_SERIES_COUNT = 35
 export const TOP_COUNTRY_COUNT = 25
 export const TOP_ACTOR_COUNT = 30
 
-const CURATED_DIVERSITY_ISO2 = [
-  'AR', 'PE', 'BO',
-  'SA', 'EG', 'MA',
-  'UA', 'RS', 'BA',
-  'KZ', 'UZ', 'TM',
-]
+const CURATED_DIVERSITY_ISO2 = ['AR', 'PE', 'BO', 'SA', 'EG', 'MA', 'UA', 'RS', 'BA', 'KZ', 'UZ', 'TM']
 
 function buildCountryPool(countries, targetCount) {
   const byScore = [...countries].filter((c) => c.dataSource !== 'proxy').sort((a, b) => b.score - a.score)
@@ -44,7 +39,13 @@ export async function getTopActors(n = TOP_ACTOR_COUNT) {
         existing.popularitySum += s.popularity
         existing.seriesCount += 1
       } else {
-        byActor.set(actor.id, { id: actor.id, name: actor.name, profilePath: actor.profilePath, popularitySum: s.popularity, seriesCount: 1 })
+        byActor.set(actor.id, {
+          id: actor.id,
+          name: actor.name,
+          profilePath: actor.profilePath,
+          popularitySum: s.popularity,
+          seriesCount: 1,
+        })
       }
     }
   }

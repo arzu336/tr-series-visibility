@@ -1,7 +1,12 @@
 import express from 'express'
 import { THEMES } from '../themes.js'
 import { getEnrichedVisibility } from '../data-pipeline.js'
-import { getMonthlyPeriods, getYearlyPeriods, getGlobalMonthlyPeriods, getGlobalYearlyPeriods } from '../period-history.js'
+import {
+  getMonthlyPeriods,
+  getYearlyPeriods,
+  getGlobalMonthlyPeriods,
+  getGlobalYearlyPeriods,
+} from '../period-history.js'
 import { getThemeInsight } from '../services/themeInsight.js'
 import { getAllLatestArrivals } from '../services/tourismData.js'
 import { getSeriesPopularityMap } from '../series-period-history.js'

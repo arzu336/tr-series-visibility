@@ -1,10 +1,4 @@
-import {
-  legendStops,
-  proxyLegendStops,
-  SOURCE_COUNTRY_COLOR,
-  SMALL_SAMPLE_COLOR,
-  MAP_METRICS,
-} from '../lib/scale.js'
+import { legendStops, proxyLegendStops, SOURCE_COUNTRY_COLOR, SMALL_SAMPLE_COLOR, MAP_METRICS } from '../lib/scale.js'
 import {
   VISIBILITY_SCORE_NOTE,
   PER_CAPITA_SCORE_NOTE,
@@ -17,9 +11,7 @@ const NO_DATA_COLOR = '#131c31'
 export default function Legend({ caption, metric = MAP_METRICS.PER_CAPITA }) {
   const showLayers = !caption
   const kisiBasina = metric === MAP_METRICS.PER_CAPITA
-  const metrikBasligi = kisiBasina
-    ? 'Kültürel Görünürlük — Kişi Başına'
-    : 'Kültürel Görünürlük — Toplam'
+  const metrikBasligi = kisiBasina ? 'Kültürel Görünürlük — Kişi Başına' : 'Kültürel Görünürlük — Toplam'
   const metrikNotu = `${kisiBasina ? PER_CAPITA_SCORE_NOTE : TOTAL_SCORE_NOTE}
 
 ${MAP_SCALE_NOTE}

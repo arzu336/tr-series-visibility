@@ -42,7 +42,9 @@ export async function calculateShareOfSearch(iso2, titles, timeframe = 'today 12
     throw new Error('Share of Search için en az 2 dizi adı gerekir')
   }
   if (titles.length > MAX_TERMS) {
-    throw new Error(`Share of Search tek sorguda en fazla ${MAX_TERMS} dizi karşılaştırabilir (${titles.length} verildi)`)
+    throw new Error(
+      `Share of Search tek sorguda en fazla ${MAX_TERMS} dizi karşılaştırabilir (${titles.length} verildi)`
+    )
   }
   const key = shareOfSearchCacheKey(iso2, titles)
   return cacheFirstSerpApi(key, TRENDS_TTL_MS, () => fetchShareOfSearchRaw(titles, iso2, timeframe))
@@ -54,7 +56,13 @@ function regionalBreakdownCacheKey(titles) {
 }
 
 async function fetchRegionalBreakdownRaw(titles, timeframe) {
-  const data = await serpapiGet({ engine: 'google_trends', q: titles.join(','), data_type: 'GEO_MAP', date: timeframe, hl: 'tr' })
+  const data = await serpapiGet({
+    engine: 'google_trends',
+    q: titles.join(','),
+    data_type: 'GEO_MAP',
+    date: timeframe,
+    hl: 'tr',
+  })
   const rows = (data.compared_breakdown_by_region || [])
     .map((entry) => ({
       iso2: entry.geo,
@@ -90,7 +98,9 @@ export async function getRegionalBreakdown(titles, n = 10, timeframe = 'today 12
     throw new Error('Bölgesel Üstünlük için en az 2 dizi adı gerekir')
   }
   if (titles.length > MAX_TERMS) {
-    throw new Error(`Bölgesel Üstünlük tek sorguda en fazla ${MAX_TERMS} dizi karşılaştırabilir (${titles.length} verildi)`)
+    throw new Error(
+      `Bölgesel Üstünlük tek sorguda en fazla ${MAX_TERMS} dizi karşılaştırabilir (${titles.length} verildi)`
+    )
   }
   const key = regionalBreakdownCacheKey(titles)
   const result = await cacheFirstSerpApi(key, TRENDS_TTL_MS, () => fetchRegionalBreakdownRaw(titles, timeframe))

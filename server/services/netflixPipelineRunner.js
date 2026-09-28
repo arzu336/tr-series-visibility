@@ -24,13 +24,46 @@ export const PYTHON_BIN = process.env.PYTHON_BIN || (process.platform === 'win32
 // yorumlayıcının kendini bulması (PATH, SYSTEMROOT, APPDATA...), geçici dizin, yerel ayar,
 // proxy/CA ayarları ve Netflix hattının kendi ayarları.
 const SUBPROCESS_ENV_ALLOWLIST = [
-  'PATH', 'Path', 'PATHEXT', 'SYSTEMROOT', 'SystemRoot', 'SYSTEMDRIVE', 'SystemDrive', 'WINDIR', 'COMSPEC', 'ComSpec',
-  'TEMP', 'TMP', 'TMPDIR', 'HOME', 'USERPROFILE', 'HOMEDRIVE', 'HOMEPATH', 'APPDATA', 'LOCALAPPDATA', 'PROGRAMDATA',
-  'LANG', 'LC_ALL', 'LC_CTYPE', 'TZ',
-  'HTTP_PROXY', 'HTTPS_PROXY', 'NO_PROXY', 'http_proxy', 'https_proxy', 'no_proxy',
-  'SSL_CERT_FILE', 'SSL_CERT_DIR', 'REQUESTS_CA_BUNDLE', 'CURL_CA_BUNDLE',
-  'PYTHONPATH', 'PYTHONHOME', 'VIRTUAL_ENV', 'PYTHONDONTWRITEBYTECODE',
-  'NETFLIX_DOWNLOAD_DEADLINE_S', 'NETFLIX_DATASET_MAX_AGE_S',
+  'PATH',
+  'Path',
+  'PATHEXT',
+  'SYSTEMROOT',
+  'SystemRoot',
+  'SYSTEMDRIVE',
+  'SystemDrive',
+  'WINDIR',
+  'COMSPEC',
+  'ComSpec',
+  'TEMP',
+  'TMP',
+  'TMPDIR',
+  'HOME',
+  'USERPROFILE',
+  'HOMEDRIVE',
+  'HOMEPATH',
+  'APPDATA',
+  'LOCALAPPDATA',
+  'PROGRAMDATA',
+  'LANG',
+  'LC_ALL',
+  'LC_CTYPE',
+  'TZ',
+  'HTTP_PROXY',
+  'HTTPS_PROXY',
+  'NO_PROXY',
+  'http_proxy',
+  'https_proxy',
+  'no_proxy',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+  'REQUESTS_CA_BUNDLE',
+  'CURL_CA_BUNDLE',
+  'PYTHONPATH',
+  'PYTHONHOME',
+  'VIRTUAL_ENV',
+  'PYTHONDONTWRITEBYTECODE',
+  'NETFLIX_DOWNLOAD_DEADLINE_S',
+  'NETFLIX_DATASET_MAX_AGE_S',
 ]
 
 export function buildSubprocessEnv(source = process.env) {
@@ -110,7 +143,9 @@ export function runNetflixPipeline({ exec = execFile, pythonBin = PYTHON_BIN, ti
     try {
       exec(pythonBin, [PIPELINE_SCRIPT, '--all'], opts, (err, stdout, stderr) => {
         const summary = sonOzetSatiri(stdout)
-        const stderrText = String(stderr || '').trim().slice(-2000)
+        const stderrText = String(stderr || '')
+          .trim()
+          .slice(-2000)
         if (err) {
           const reason = err.killed
             ? `zaman aşımı (${Math.round(timeoutMs / 60000)} dk) — süreç öldürüldü`

@@ -36,7 +36,11 @@ describe('oturum token özeti', () => {
 
   it('eski düz metin satırlar geçişte özetlenir ve çalışmaya devam eder', () => {
     const eskiToken = 'a'.repeat(48)
-    db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(eskiToken, 'u-legacy', Date.now() + 60_000)
+    db.prepare('INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)').run(
+      eskiToken,
+      'u-legacy',
+      Date.now() + 60_000
+    )
     expect(getSessionUserId(eskiToken)).toBeNull() // özet aranıyor, düz metin bulunmaz
     expect(migrateLegacyPlaintextSessions()).toBe(1)
     expect(getSessionUserId(eskiToken)).toBe('u-legacy')

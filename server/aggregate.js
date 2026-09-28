@@ -20,9 +20,7 @@ export function buildVisibility(rawData, themeStore, destinationStore = {}) {
 
     const countries = providersById[show.id] || {}
     for (const [iso2, entry] of Object.entries(countries)) {
-      const isStreamable = STREAMABLE_KEYS.some(
-        (key) => Array.isArray(entry[key]) && entry[key].length > 0
-      )
+      const isStreamable = STREAMABLE_KEYS.some((key) => Array.isArray(entry[key]) && entry[key].length > 0)
       if (!isStreamable) continue
 
       if (!byCountry.has(iso2)) {

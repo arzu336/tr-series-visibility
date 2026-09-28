@@ -86,8 +86,12 @@ describe('resmî platform rozeti', () => {
       weeks_in_top10 INTEGER, peak_rank INTEGER, rank_score REAL,
       last_week_date TEXT, updated_at TEXT
     )`)
-    db.exec("INSERT INTO netflix_country_rankings (country_iso2, tmdb_id, show_title, weeks_in_top10, peak_rank) VALUES ('BR', 95603, 'Kurulus Osman', 4, 3)")
-    db.exec("INSERT INTO netflix_country_rankings (country_iso2, tmdb_id, show_title, weeks_in_top10, peak_rank) VALUES ('BR', 74823, 'Cukur', 2, 7)")
+    db.exec(
+      "INSERT INTO netflix_country_rankings (country_iso2, tmdb_id, show_title, weeks_in_top10, peak_rank) VALUES ('BR', 95603, 'Kurulus Osman', 4, 3)"
+    )
+    db.exec(
+      "INSERT INTO netflix_country_rankings (country_iso2, tmdb_id, show_title, weeks_in_top10, peak_rank) VALUES ('BR', 74823, 'Cukur', 2, 7)"
+    )
     db.close()
     process.env.PIPELINE_DB_PATH = tmpDb
     resetPipelineDb()

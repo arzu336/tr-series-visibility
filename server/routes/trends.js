@@ -10,13 +10,23 @@ import { getRegionalInterest } from '../regional-interest.js'
 import { fetchAndAnalyzeSentiment, getMediaSentimentForSeries } from '../services/newsSentiment.js'
 import { calculateCountryCompositeScore } from '../services/countryScoringEngine.js'
 import { calculateShareOfSearch, getRegionalBreakdown } from '../services/trendsShareOfSearch.js'
-import { cacheFirstSerpApi, fetchTrendsTimeSeriesRaw, timeSeriesCacheKey, TIMESERIES_TTL_MS } from '../services/serpApiCache.js'
+import {
+  cacheFirstSerpApi,
+  fetchTrendsTimeSeriesRaw,
+  timeSeriesCacheKey,
+  TIMESERIES_TTL_MS,
+} from '../services/serpApiCache.js'
 import { getEnrichmentTargets } from '../services/enrichmentTargets.js'
 import { getSeriesTrendInsight } from '../services/seriesTrendInsight.js'
 import { enrichSeriesNewsNow } from '../services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from '../services/socialEnricher.js'
 import { getCached } from '../cache.js'
-import { isValidIso2, normalizeIso2, resolveKnownSeriesName, resolveKnownSeriesNames } from '../services/requestGuards.js'
+import {
+  isValidIso2,
+  normalizeIso2,
+  resolveKnownSeriesName,
+  resolveKnownSeriesNames,
+} from '../services/requestGuards.js'
 import { countryNameFromIso2 } from '../services/countryLookup.js'
 import { startJob, getJob } from '../services/jobs.js'
 import { requireAdmin } from './auth.js'
@@ -159,7 +169,10 @@ trendsRouter.post(
 
 trendsRouter.get('/api/jobs/:id', (req, res) => {
   const job = getJob(req.params.id)
-  if (!job) return res.status(404).json({ error: 'İş bulunamadı — sunucu yeniden başlamış olabilir; taramayı yeniden başlatın.' })
+  if (!job)
+    return res
+      .status(404)
+      .json({ error: 'İş bulunamadı — sunucu yeniden başlamış olabilir; taramayı yeniden başlatın.' })
   res.json(job)
 })
 

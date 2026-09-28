@@ -32,7 +32,9 @@ function MediaSentimentByCountryTable({ rows }) {
             <td>{r.seriesCount}</td>
             <td>%{r.avgPositivePct}</td>
             <td>
-              <span className={`badge badge--${r.dominantTone === 'positive' ? 'ok' : r.dominantTone === 'negative' ? 'uncertain' : 'info'}`}>
+              <span
+                className={`badge badge--${r.dominantTone === 'positive' ? 'ok' : r.dominantTone === 'negative' ? 'uncertain' : 'info'}`}
+              >
                 {TONE_LABELS[r.dominantTone]}
               </span>
             </td>
@@ -47,8 +49,8 @@ function MediaSentimentSummary({ summary, byCountry }) {
   if (!summary || summary.status === 'pending' || summary.sampleSize === 0) {
     return (
       <p className="dashboard__empty">
-        Henüz hiçbir dizi/ülke için basın taraması yapılmadı — haritada bir dizi genişletip "Şimdi Tara"ya
-        bastıkça bu özet gerçek verilerle dolacak.
+        Henüz hiçbir dizi/ülke için basın taraması yapılmadı — haritada bir dizi genişletip "Şimdi Tara"ya bastıkça bu
+        özet gerçek verilerle dolacak.
       </p>
     )
   }
@@ -71,7 +73,9 @@ function MediaSentimentSummary({ summary, byCountry }) {
         </div>
       </div>
 
-      <h4 className="impact__rank-title" style={{ marginTop: '1.1rem' }}>Ülke Bazlı Medya Algısı</h4>
+      <h4 className="impact__rank-title" style={{ marginTop: '1.1rem' }}>
+        Ülke Bazlı Medya Algısı
+      </h4>
       <MediaSentimentByCountryTable rows={byCountry} />
     </>
   )

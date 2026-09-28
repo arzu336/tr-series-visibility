@@ -26,7 +26,10 @@ describe('cacheFirstSerpApi — uçuş içi tekilleştirme', () => {
 
   it('farklı anahtarlar birbirine bağlanmaz', async () => {
     const fetchFn = vi.fn((k) => gecikmeli({ k }))
-    await Promise.all([cacheFirstSerpApi('test:a', 60_000, () => fetchFn('a')), cacheFirstSerpApi('test:b', 60_000, () => fetchFn('b'))])
+    await Promise.all([
+      cacheFirstSerpApi('test:a', 60_000, () => fetchFn('a')),
+      cacheFirstSerpApi('test:b', 60_000, () => fetchFn('b')),
+    ])
     expect(fetchFn).toHaveBeenCalledTimes(2)
   })
 
@@ -40,7 +43,10 @@ describe('cacheFirstSerpApi — uçuş içi tekilleştirme', () => {
 
   it('paylaşılan istek başarısız olursa bekleyenler de aynı hatayı alır ve kayıt temizlenir', async () => {
     const fetchFn = vi.fn(() => Promise.reject(new Error('kota')))
-    const sonuclar = await Promise.allSettled([cacheFirstSerpApi('test:hata', 60_000, fetchFn), cacheFirstSerpApi('test:hata', 60_000, fetchFn)])
+    const sonuclar = await Promise.allSettled([
+      cacheFirstSerpApi('test:hata', 60_000, fetchFn),
+      cacheFirstSerpApi('test:hata', 60_000, fetchFn),
+    ])
     expect(fetchFn).toHaveBeenCalledTimes(1)
     expect(sonuclar.every((s) => s.status === 'rejected')).toBe(true)
     expect(inFlightCount()).toBe(0)
@@ -48,7 +54,10 @@ describe('cacheFirstSerpApi — uçuş içi tekilleştirme', () => {
 
   it('süresi dolmuş kayıt varken canlı istek düşerse stale:true ile döner', async () => {
     db.prepare('INSERT INTO cache_entries (key, value, expires_at, updated_at) VALUES (?, ?, ?, ?)').run(
-      'test:bayat', JSON.stringify({ veri: 'eski' }), Date.now() - 1000, Date.now() - 100_000
+      'test:bayat',
+      JSON.stringify({ veri: 'eski' }),
+      Date.now() - 1000,
+      Date.now() - 100_000
     )
     vi.spyOn(console, 'error').mockImplementation(() => {})
     const s = await cacheFirstSerpApi('test:bayat', 60_000, () => Promise.reject(new Error('ağ')))
@@ -74,7 +83,10 @@ describe('serpapiGet — aylık bütçe sayacı', () => {
   const okYanit = (body) => ({ ok: true, status: 200, json: async () => body })
 
   it('başarılı çağrı sayacı 1 artırır', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => okYanit({ sonuc: 1 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okYanit({ sonuc: 1 }))
+    )
     await serpapiGet({ engine: 'google_trends', q: 'x' })
     expect(getSerpApiUsageThisMonth()).toEqual({ used: 1, budget: 2 })
   })
@@ -89,13 +101,19 @@ describe('serpapiGet — aylık bütçe sayacı', () => {
   })
 
   it('başarısız çağrı (5xx) rezervasyonu geri alır — kotadan düşmez', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 502 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 502 }))
+    )
     await expect(serpapiGet({ q: 'x' })).rejects.toThrow(/502/)
     expect(getSerpApiUsageThisMonth().used).toBe(0)
   })
 
   it('SerpAPI 429 döndürürse rezervasyon geri alınır ve hata 429 taşır', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => ({ ok: false, status: 429 })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => ({ ok: false, status: 429 }))
+    )
     await expect(serpapiGet({ q: 'x' })).rejects.toMatchObject({ status: 429 })
     expect(getSerpApiUsageThisMonth().used).toBe(0)
   })
@@ -111,7 +129,10 @@ describe('serpapiGet — aylık bütçe sayacı', () => {
   })
 
   it('SerpAPI gövdesinde error alanı varsa hata sayılır ve geri alınır', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => okYanit({ error: 'Google hasn\'t returned any results' })))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => okYanit({ error: "Google hasn't returned any results" }))
+    )
     await expect(serpapiGet({ q: 'x' })).rejects.toThrow(/İstek hatası/)
     expect(getSerpApiUsageThisMonth().used).toBe(0)
   })

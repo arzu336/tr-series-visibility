@@ -46,7 +46,10 @@ async function resolveImdbId(tmdbId) {
 
 function parseTopCast(actors) {
   if (!actors || actors === 'N/A') return []
-  return actors.split(',').map((name) => name.trim()).filter(Boolean)
+  return actors
+    .split(',')
+    .map((name) => name.trim())
+    .filter(Boolean)
 }
 
 function parseVotes(votes) {

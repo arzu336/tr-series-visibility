@@ -1,4 +1,3 @@
-
 export function isClaimLike(x) {
   return Boolean(x) && typeof x === 'object' && typeof x.claim_id === 'string'
 }

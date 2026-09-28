@@ -16,7 +16,7 @@ function timeAgo(iso) {
   return `${days} gün önce tarandı`
 }
 
-export default function MediaSentimentCard({ seriesId, iso2, seriesName }) {
+export default function MediaSentimentCard({ seriesId, iso2 }) {
   const [state, setState] = useState({ status: 'loading', data: null, error: null })
 
   const load = () => {
@@ -52,8 +52,8 @@ export default function MediaSentimentCard({ seriesId, iso2, seriesName }) {
     return (
       <div className="media-sentiment media-sentiment--empty">
         <p className="dashboard__empty">
-          Bu ülke için basın taraması desteklenmiyor — haber kaynağımız (GDELT) bu ülkeyi ayrı bir
-          yayın ülkesi olarak sınıflandırmıyor.
+          Bu ülke için basın taraması desteklenmiyor — haber kaynağımız (GDELT) bu ülkeyi ayrı bir yayın ülkesi olarak
+          sınıflandırmıyor.
         </p>
       </div>
     )
@@ -95,21 +95,43 @@ export default function MediaSentimentCard({ seriesId, iso2, seriesName }) {
         </span>
       </div>
 
-      <div className="media-sentiment__bar" role="img" aria-label={`Pozitif %${pct.positive}, nötr %${pct.neutral}, negatif %${pct.negative}`}>
+      <div
+        className="media-sentiment__bar"
+        role="img"
+        aria-label={`Pozitif %${pct.positive}, nötr %${pct.neutral}, negatif %${pct.negative}`}
+      >
         {pct.positive > 0 && (
-          <div className="media-sentiment__bar-seg media-sentiment__bar-seg--positive" style={{ width: `${pct.positive}%` }} />
+          <div
+            className="media-sentiment__bar-seg media-sentiment__bar-seg--positive"
+            style={{ width: `${pct.positive}%` }}
+          />
         )}
         {pct.neutral > 0 && (
-          <div className="media-sentiment__bar-seg media-sentiment__bar-seg--neutral" style={{ width: `${pct.neutral}%` }} />
+          <div
+            className="media-sentiment__bar-seg media-sentiment__bar-seg--neutral"
+            style={{ width: `${pct.neutral}%` }}
+          />
         )}
         {pct.negative > 0 && (
-          <div className="media-sentiment__bar-seg media-sentiment__bar-seg--negative" style={{ width: `${pct.negative}%` }} />
+          <div
+            className="media-sentiment__bar-seg media-sentiment__bar-seg--negative"
+            style={{ width: `${pct.negative}%` }}
+          />
         )}
       </div>
       <div className="media-sentiment__bar-legend">
-        <span><i className="media-sentiment__dot media-sentiment__dot--positive" />Olumlu %{pct.positive}</span>
-        <span><i className="media-sentiment__dot media-sentiment__dot--neutral" />Nötr %{pct.neutral}</span>
-        <span><i className="media-sentiment__dot media-sentiment__dot--negative" />Olumsuz %{pct.negative}</span>
+        <span>
+          <i className="media-sentiment__dot media-sentiment__dot--positive" />
+          Olumlu %{pct.positive}
+        </span>
+        <span>
+          <i className="media-sentiment__dot media-sentiment__dot--neutral" />
+          Nötr %{pct.neutral}
+        </span>
+        <span>
+          <i className="media-sentiment__dot media-sentiment__dot--negative" />
+          Olumsuz %{pct.negative}
+        </span>
       </div>
 
       {data.llmSummary && (

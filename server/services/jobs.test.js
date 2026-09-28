@@ -8,7 +8,13 @@ beforeEach(() => _resetJobsForTests())
 describe('startJob / getJob', () => {
   it('hemen queued kayıt döner, sonra running → done olur ve sonucu taşır', async () => {
     let coz
-    const { job, existing } = startJob('test', () => new Promise((r) => { coz = r }))
+    const { job, existing } = startJob(
+      'test',
+      () =>
+        new Promise((r) => {
+          coz = r
+        })
+    )
     expect(existing).toBe(false)
     expect(job.status).toBe('queued')
     await tick()
@@ -23,7 +29,9 @@ describe('startJob / getJob', () => {
 
   it('runner reddederse failed + hata mesajı; çağırana asla fırlatmaz', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { job } = startJob('test', async () => { throw new Error('GDELT kapalı') })
+    const { job } = startJob('test', async () => {
+      throw new Error('GDELT kapalı')
+    })
     await tick()
     await tick()
     expect(getJob(job.id)).toMatchObject({ status: 'failed', error: 'GDELT kapalı', result: null })
@@ -32,7 +40,9 @@ describe('startJob / getJob', () => {
 
   it('runner senkron fırlatsa bile failed olur', async () => {
     vi.spyOn(console, 'error').mockImplementation(() => {})
-    const { job } = startJob('test', () => { throw new Error('anında') })
+    const { job } = startJob('test', () => {
+      throw new Error('anında')
+    })
     await tick()
     await tick()
     expect(getJob(job.id).status).toBe('failed')
@@ -42,7 +52,12 @@ describe('startJob / getJob', () => {
   it('update() ilerlemeyi yalnızca running iken yazar ve birleştirir', async () => {
     let coz
     let upd
-    const { job } = startJob('test', (update) => { upd = update; return new Promise((r) => { coz = r }) })
+    const { job } = startJob('test', (update) => {
+      upd = update
+      return new Promise((r) => {
+        coz = r
+      })
+    })
     await tick()
     upd({ phase: 'news', done: 3, total: 25 })
     upd({ done: 4, current: 'DE' })
@@ -55,7 +70,12 @@ describe('startJob / getJob', () => {
 
   it('aynı anahtarla süren iş varken ikinci çağrı yeni iş açmaz, mevcut işi döner', async () => {
     let coz
-    const runner = vi.fn(() => new Promise((r) => { coz = r }))
+    const runner = vi.fn(
+      () =>
+        new Promise((r) => {
+          coz = r
+        })
+    )
     const a = startJob('test', runner, { key: 'series-enrich:1' })
     const b = startJob('test', runner, { key: 'series-enrich:1' })
     expect(b.existing).toBe(true)

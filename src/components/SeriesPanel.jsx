@@ -62,10 +62,7 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
             </p>
           )}
           {enrichment?.dizilah?.communityRating != null && (
-            <p
-              className="panel__series-imdb-line"
-              title="Dizilah topluluk puanı (5 üzerinden)."
-            >
+            <p className="panel__series-imdb-line" title="Dizilah topluluk puanı (5 üzerinden).">
               📺 {enrichment.dizilah.communityRating.toFixed(1)}/5
               {enrichment.dizilah.voteCount != null ? ` (${formatVotes(enrichment.dizilah.voteCount)} oy)` : ''}
               {enrichment.dizilah.channel ? ` · ${enrichment.dizilah.channel}` : ''}

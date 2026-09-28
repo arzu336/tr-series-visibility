@@ -1,9 +1,5 @@
 import { useEffect, useState } from 'react'
-import {
-  MARKET_SHARE_NOTE,
-  MEDIA_TONE_NOTE,
-  DESTINATION_SHARE_NOTE,
-} from '../lib/methodologyNotes.js'
+import { MARKET_SHARE_NOTE, MEDIA_TONE_NOTE, DESTINATION_SHARE_NOTE } from '../lib/methodologyNotes.js'
 import { fetchCulturalImpact, fetchTourismImpact, fetchExportImpact, fetchBenchmark } from '../lib/api.js'
 
 function round1(n) {
@@ -18,7 +14,8 @@ export default function ImpactStats() {
     Promise.all([fetchCulturalImpact(), fetchTourismImpact(), fetchExportImpact(), fetchBenchmark().catch(() => null)])
       .then(([cultural, tourism, exportData, benchmark]) => {
         const topDestination = tourism.topDestinations[0]
-        const totalDestScore = tourism.topDestinations.reduce((sum, d) => sum + d.totalScore, 0) + tourism.otherDestinationsScore
+        const totalDestScore =
+          tourism.topDestinations.reduce((sum, d) => sum + d.totalScore, 0) + tourism.otherDestinationsScore
         const tr = benchmark?.countries?.find((c) => c.code === 'TR')
 
         setStats({
@@ -43,7 +40,10 @@ export default function ImpactStats() {
     <div className="impact-stats">
       <div className="impact-stats__card">
         <div className="impact-stats__num">{stats.totalCountries}</div>
-        <div className="impact-stats__label" title="TMDB/JustWatch sağlayıcı verisinde en az bir Türk dizisi görünen ülke sayısı.">
+        <div
+          className="impact-stats__label"
+          title="TMDB/JustWatch sağlayıcı verisinde en az bir Türk dizisi görünen ülke sayısı."
+        >
           Takip Edilen Ülke ⓘ
         </div>
       </div>

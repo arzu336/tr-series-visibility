@@ -50,9 +50,7 @@ function pencereKarsilastir(satirlar, pencereAy) {
  * "hiçbir şey bulunamadı" ile "ölçemedik" karışmasın.
  */
 export function getRisingSeriesLanguages({ pencereAy = 3, enAz = 10 } = {}) {
-  const ciftler = db
-    .prepare('SELECT DISTINCT tmdb_id, lang FROM series_language_interest')
-    .all()
+  const ciftler = db.prepare('SELECT DISTINCT tmdb_id, lang FROM series_language_interest').all()
 
   const sonuclar = []
   let yetersizSayisi = 0

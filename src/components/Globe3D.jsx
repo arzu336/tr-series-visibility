@@ -160,10 +160,9 @@ export default function Globe3D({
 
     const highlightByIso2 = highlightFilter
       ? new Map(
-          Array.from(highlightFilter.byIso2 instanceof Map ? highlightFilter.byIso2.entries() : []).map(([iso2, score]) => [
-            iso2,
-            { score },
-          ])
+          Array.from(highlightFilter.byIso2 instanceof Map ? highlightFilter.byIso2.entries() : []).map(
+            ([iso2, score]) => [iso2, { score }]
+          )
         )
       : null
 
@@ -242,7 +241,17 @@ export default function Globe3D({
         }
         onSelect?.({ ...c, name: displayName(f) })
       })
-  }, [countries, geoFeatures, onSelect, actorHighlight, selectedIso2, seriesFilter, highlightFilter, continentHighlight, metric])
+  }, [
+    countries,
+    geoFeatures,
+    onSelect,
+    actorHighlight,
+    selectedIso2,
+    seriesFilter,
+    highlightFilter,
+    continentHighlight,
+    metric,
+  ])
 
   useEffect(() => {
     popupRef.current = popup
@@ -251,7 +260,10 @@ export default function Globe3D({
   useEffect(() => {
     const world = globeRef.current
     if (!world || !focusTarget) return
-    world.pointOfView({ lat: focusTarget.lat, lng: focusTarget.lng, altitude: focusTarget.altitude ?? FOCUS_ALTITUDE }, 1200)
+    world.pointOfView(
+      { lat: focusTarget.lat, lng: focusTarget.lng, altitude: focusTarget.altitude ?? FOCUS_ALTITUDE },
+      1200
+    )
   }, [focusTarget])
 
   const handleReset = () => {

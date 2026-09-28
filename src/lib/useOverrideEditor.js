@@ -4,7 +4,13 @@ import { useCallback, useEffect, useState } from 'react'
 // taksonomiyi yükle, satır başına taslak tut, kaydet/geri al, kaydederken satırı kilitle,
 // başarıda listeyi sessizce tazele (tablo unmount olmasın), hatayı satır adıyla göster.
 // Hook bu akışı tek yerde tutar; sekmeler yalnızca API çağrılarını ve tabloyu verir.
-export function useOverrideEditor({ fetchAll, save, revert, saveFailLabel = 'kaydedilemedi', revertFailLabel = 'geri alınamadı' }) {
+export function useOverrideEditor({
+  fetchAll,
+  save,
+  revert,
+  saveFailLabel = 'kaydedilemedi',
+  revertFailLabel = 'geri alınamadı',
+}) {
   const [items, setItems] = useState([])
   const [taxonomy, setTaxonomy] = useState([])
   const [status, setStatus] = useState('loading')

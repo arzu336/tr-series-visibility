@@ -222,7 +222,9 @@ export async function fetchRegionalInterestRaw(seriesName, iso2) {
 
 function extractRatingsFromKg(kg) {
   const ratingsEntry = (kg.web_results || []).find((w) => Array.isArray(w.ratings) && w.ratings.length > 0)
-  return ratingsEntry ? ratingsEntry.ratings.map((r) => ({ source: r.source, rating: r.rating, link: r.link || null })) : []
+  return ratingsEntry
+    ? ratingsEntry.ratings.map((r) => ({ source: r.source, rating: r.rating, link: r.link || null }))
+    : []
 }
 
 function extractWatchPlatforms(kg) {

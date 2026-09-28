@@ -51,11 +51,13 @@ async function getTopSeriesByOrigin(originCountry, originalLanguage, n = TOP_N_S
     )
   )
   const seen = new Set()
-  const results = pages.flatMap((p) => p.results || []).filter((show) => {
-    if (seen.has(show.id)) return false
-    seen.add(show.id)
-    return true
-  })
+  const results = pages
+    .flatMap((p) => p.results || [])
+    .filter((show) => {
+      if (seen.has(show.id)) return false
+      seen.add(show.id)
+      return true
+    })
   return results.slice(0, n).map((show) => ({
     id: show.id,
     name: show.original_name || show.name,

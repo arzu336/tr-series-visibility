@@ -71,17 +71,15 @@ const mediaByCountryStmt = db.prepare(`
  */
 function buildCulturalDimension(iso2, countryRow, kanonik) {
   const taramalar = mediaByCountryStmt.all(iso2)
-  const analizli = taramalar.filter(
-    (t) => t.dominant_sentiment !== 'yetersiz-veri' && t.positive_score != null
-  )
+  const analizli = taramalar.filter((t) => t.dominant_sentiment !== 'yetersiz-veri' && t.positive_score != null)
 
   const mediaTone =
     analizli.length === 0
       ? yetersiz(`${iso2} için analiz edilmiş basın taraması yok (${taramalar.length} tarama denendi)`)
-      : OK(
-          Math.round((analizli.reduce((s, t) => s + t.positive_score, 0) / analizli.length) * 1000) / 10,
-          { sampleSize: analizli.length, unit: 'yuzde-olumlu' }
-        )
+      : OK(Math.round((analizli.reduce((s, t) => s + t.positive_score, 0) / analizli.length) * 1000) / 10, {
+          sampleSize: analizli.length,
+          unit: 'yuzde-olumlu',
+        })
 
   const diziler = analizli.slice(0, 10).map((t) => {
     const k = kanonik.get(t.series_id) || {}
@@ -249,9 +247,7 @@ export function officialPlatformRecordsFor(iso2) {
   const conn = getPipelineDb()
   if (!conn) return yetersiz('pipeline.db açılamadı — resmî platform verisi okunamıyor')
   try {
-    const row = conn
-      .prepare('SELECT COUNT(*) n FROM netflix_country_rankings WHERE country_iso2 = ?')
-      .get(iso2)
+    const row = conn.prepare('SELECT COUNT(*) n FROM netflix_country_rankings WHERE country_iso2 = ?').get(iso2)
     if (row?.n > 0) {
       return OK(row.n, { unit: 'top10-kaydi', source: 'netflix', trust: trustOf('netflix') })
     }
@@ -269,7 +265,8 @@ function buildExportDimension(iso2, countryRow, countries) {
 
   return {
     hasOfficialPlatformData: platformKaydi.status === 'hesaplandi',
-    visibilityScore: countryRow?.score != null ? OK(Math.round(countryRow.score * 10) / 10) : yetersiz('görünürlük skoru yok'),
+    visibilityScore:
+      countryRow?.score != null ? OK(Math.round(countryRow.score * 10) / 10) : yetersiz('görünürlük skoru yok'),
     globalRank: sira >= 0 ? OK(sira + 1, { outOf: sirali.length }) : yetersiz('ülke sıralamada yok'),
     seriesCount: countryRow?.seriesCount != null ? OK(countryRow.seriesCount) : yetersiz('dizi sayısı bilinmiyor'),
     dataSource: countryRow?.dataSource ?? null,

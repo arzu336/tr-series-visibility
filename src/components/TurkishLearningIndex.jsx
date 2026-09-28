@@ -44,7 +44,9 @@ function GlobalDuolingoCard() {
       <div className="global-stat-card__label">🌍 Küresel Türkçe Öğrencisi</div>
       <div className="global-stat-card__value">{new Intl.NumberFormat('tr-TR').format(data.totalLearners)}</div>
       <div className="global-stat-card__trend">{trendText}</div>
-      <p className="dashboard__hint" style={{ margin: '0.4rem 0 0' }}>Küresel rakam — ülke bazlı değil.</p>
+      <p className="dashboard__hint" style={{ margin: '0.4rem 0 0' }}>
+        Küresel rakam — ülke bazlı değil.
+      </p>
     </div>
   )
 }
@@ -72,7 +74,9 @@ export default function TurkishLearningIndex() {
       {status === 'loading' && <div className="status">Yükleniyor…</div>}
 
       {status === 'pending' || (status === 'ready' && !data?.byCountry?.length) ? (
-        <p className="dashboard__empty" style={{ marginTop: '0.75rem' }}>Veri birikiyor.</p>
+        <p className="dashboard__empty" style={{ marginTop: '0.75rem' }}>
+          Veri birikiyor.
+        </p>
       ) : null}
 
       {status === 'ready' && data?.byCountry?.length > 0 && (

@@ -2,7 +2,13 @@ import { describe, it, expect } from 'vitest'
 import { attachPerCapitaScores, PER_CAPITA_BASIS, MIN_PER_CAPITA_DENOMINATOR } from './aggregate.js'
 
 const demo = {
-  DE: { population: 83_500_000, populationYear: 2024, internetPct: 93.5, internetYear: 2024, internetUsers: 78_072_500 },
+  DE: {
+    population: 83_500_000,
+    populationYear: 2024,
+    internetPct: 93.5,
+    internetYear: 2024,
+    internetUsers: 78_072_500,
+  },
   NI: { population: 7_000_000, populationYear: 2024, internetPct: 61.4, internetYear: 2024, internetUsers: 4_298_000 },
   XA: { population: 10_000_000, populationYear: 2023, internetPct: null, internetYear: null, internetUsers: null },
   XB: { population: 0, populationYear: 2024, internetPct: null, internetYear: null, internetUsers: null },
@@ -85,7 +91,15 @@ describe('attachPerCapitaScores', () => {
   })
 
   it('eşik tam sınırda dahil eder (>=)', () => {
-    const sinir = { ZZ: { population: MIN_PER_CAPITA_DENOMINATOR, populationYear: 2024, internetPct: null, internetYear: null, internetUsers: null } }
+    const sinir = {
+      ZZ: {
+        population: MIN_PER_CAPITA_DENOMINATOR,
+        populationYear: 2024,
+        internetPct: null,
+        internetYear: null,
+        internetUsers: null,
+      },
+    }
     const [c] = attachPerCapitaScores([{ iso2: 'ZZ', score: 100 }], sinir)
     expect(c.perCapitaReliable).toBe(true)
   })

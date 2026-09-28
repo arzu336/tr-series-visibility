@@ -67,7 +67,12 @@ export default function Map2D({
     })
     const path = geoPath(projection)
     const renderable = geoFeatures
-      .map((f) => ({ feature: f, iso2: featureIso2(f), d: path(f), key: featureIso2(f) || f.properties.ADM0_A3 || f.properties.NAME }))
+      .map((f) => ({
+        feature: f,
+        iso2: featureIso2(f),
+        d: path(f),
+        key: featureIso2(f) || f.properties.ADM0_A3 || f.properties.NAME,
+      }))
       .filter((r) => r.d)
     return { projection, renderable }
   }, [geoFeatures])
@@ -99,6 +104,15 @@ export default function Map2D({
     entries.forEach(([iso2, score]) => map.set(iso2, { score }))
     return map
   }, [highlightFilter])
+
+  // Tooltip ilk göründüğünde son bilinen fare konumuna yerleşir; sonrası handleMouseMove'da
+  // doğrudan DOM üzerinden güncellenir (render tetiklemeden).
+  useEffect(() => {
+    const el = tooltipRef.current
+    if (!hovered || !el) return
+    el.style.left = `${lastMouse.current.x + 12}px`
+    el.style.top = `${lastMouse.current.y + 12}px`
+  }, [hovered])
 
   const handleMouseMove = (e) => {
     const rect = containerRef.current?.getBoundingClientRect()
@@ -198,7 +212,7 @@ export default function Map2D({
         </g>
       </svg>
       {hovered && (
-        <div ref={tooltipRef} className="map2d__tooltip" style={{ left: lastMouse.current.x + 12, top: lastMouse.current.y + 12 }}>
+        <div ref={tooltipRef} className="map2d__tooltip">
           {(() => {
             const name = displayName(hovered)
             const iso2 = featureIso2(hovered)
@@ -236,8 +250,7 @@ export default function Map2D({
               return (
                 <>
                   <strong>{name}</strong>
-                  <br />
-                  ⚡ Arama hacmi tahmini: {c.searchInterestScore} (yayın verisi yok)
+                  <br />⚡ Arama hacmi tahmini: {c.searchInterestScore} (yayın verisi yok)
                 </>
               )
             }

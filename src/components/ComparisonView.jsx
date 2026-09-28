@@ -1,5 +1,11 @@
 import { useState } from 'react'
-import { fetchShareOfSearch, fetchRegionalBreakdown, fetchTrendsTimeSeries, fetchImdbData, fetchSeriesMeta } from '../lib/api.js'
+import {
+  fetchShareOfSearch,
+  fetchRegionalBreakdown,
+  fetchTrendsTimeSeries,
+  fetchImdbData,
+  fetchSeriesMeta,
+} from '../lib/api.js'
 import MultiSeriesTrendChart from './MultiSeriesTrendChart.jsx'
 
 const MAX_COMPARE = 3
@@ -171,7 +177,6 @@ export default function ComparisonView({ seriesList }) {
 
   return (
     <div>
-
       <div className="chip-selector">
         <div className="chip-selector__chips">
           {picked.map((p, i) => (
@@ -199,16 +204,22 @@ export default function ComparisonView({ seriesList }) {
               }}
             />
             <datalist id="compare-series-list">
-              {seriesList.filter((s) => !picked.some((p) => p.id === s.id)).map((s) => (
-                <option key={s.id} value={s.name} />
-              ))}
+              {seriesList
+                .filter((s) => !picked.some((p) => p.id === s.id))
+                .map((s) => (
+                  <option key={s.id} value={s.name} />
+                ))}
             </datalist>
             <button onClick={() => addSeries(query)} disabled={!seriesList.some((s) => s.name === query)}>
               Ekle
             </button>
           </div>
         )}
-        {picked.length >= MAX_COMPARE && <p className="dashboard__hint" style={{ margin: 0 }}>En fazla {MAX_COMPARE} dizi seçilebilir.</p>}
+        {picked.length >= MAX_COMPARE && (
+          <p className="dashboard__hint" style={{ margin: 0 }}>
+            En fazla {MAX_COMPARE} dizi seçilebilir.
+          </p>
+        )}
       </div>
 
       <div className="trends__controls">
@@ -240,7 +251,9 @@ export default function ComparisonView({ seriesList }) {
 
           <section className="dashboard__section">
             <h3 className="dashboard__section-title">Küresel Zaman Serisi Karşılaştırması</h3>
-            <MultiSeriesTrendChart series={cards.map((c) => ({ name: c.name, color: c.color, timeline: c.timeline }))} />
+            <MultiSeriesTrendChart
+              series={cards.map((c) => ({ name: c.name, color: c.color, timeline: c.timeline }))}
+            />
           </section>
 
           <section className="dashboard__section">

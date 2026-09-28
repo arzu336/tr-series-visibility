@@ -25,14 +25,24 @@ const cift = (s) => {
   const sorted = [...s].sort((a, b) => a.year - b.year)
   const after = sorted[sorted.length - 1]
   const before = sorted[sorted.length - 2]
-  return { before: before.visitorCount, after: after.visitorCount, beforeYear: before.year, afterYear: after.year, month: before.month }
+  return {
+    before: before.visitorCount,
+    after: after.visitorCount,
+    beforeYear: before.year,
+    afterYear: after.year,
+    month: before.month,
+  }
 }
 
 // tourismCorrelation.differenceInDifferences'ın gerçek çıktı şekli.
 const did = ({ treatmentBefore, treatmentAfter, controlBefore, controlAfter }) => {
   const t = treatmentAfter - treatmentBefore
   const c = controlAfter - controlBefore
-  return { didEstimate: t - c, treatmentChangePct: (t / treatmentBefore) * 100, controlChangePct: (c / controlBefore) * 100 }
+  return {
+    didEstimate: t - c,
+    treatmentChangePct: (t / treatmentBefore) * 100,
+    controlChangePct: (c / controlBefore) * 100,
+  }
 }
 
 const oncul = () => ({ status: 'hesaplanamaz', reason: 'test' })
@@ -95,17 +105,25 @@ describe('buildTourismDimension — gerçek sözleşmeyle', () => {
   })
 
   it('kontrol ülkesinin serisi yoksa gerekçesiyle hesaplanamaz', async () => {
-    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, suggestControlCountry: async () => ({ iso2: 'ZZ' }) })
+    const r = await buildTourismDimension(
+      'DE',
+      { score: 500 },
+      { ...deps, suggestControlCountry: async () => ({ iso2: 'ZZ' }) }
+    )
     expect(r.didEstimate.reason).toMatch(/ZZ için turist serisi yok/)
   })
 
   it('kontrol ülkesi servisi fırlatırsa çökmez', async () => {
-    const r = await buildTourismDimension('DE', { score: 500 }, {
-      ...deps,
-      suggestControlCountry: async () => {
-        throw new Error('World Bank erişilemedi')
-      },
-    })
+    const r = await buildTourismDimension(
+      'DE',
+      { score: 500 },
+      {
+        ...deps,
+        suggestControlCountry: async () => {
+          throw new Error('World Bank erişilemedi')
+        },
+      }
+    )
     expect(r.didEstimate.status).toBe('hesaplanamaz')
     expect(r.didEstimate.reason).toMatch(/World Bank erişilemedi/)
   })
@@ -120,7 +138,13 @@ describe('buildTourismDimension — gerçek sözleşmeyle', () => {
 
 describe('buildTourismDimension — sözleşme bozulursa NaN sızmaz (asıl regresyon)', () => {
   it('eski snake_case varsayımıyla gelen çift → hesaplanamaz, NaN değil', async () => {
-    const eskiCift = (s) => ({ before: { visitor_count: 1000 }, after: { visitor_count: 1200 }, beforeYear: 2024, afterYear: 2025, month: 7 })
+    const eskiCift = () => ({
+      before: { visitor_count: 1000 },
+      after: { visitor_count: 1200 },
+      beforeYear: 2024,
+      afterYear: 2025,
+      month: 7,
+    })
     const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, pickBeforeAfterPair: eskiCift })
     expect(r.didEstimate.status).toBe('hesaplanamaz')
     expect(r.didEstimate.reason).toMatch(/sayısal olmayan/)

@@ -12,7 +12,11 @@ export const DESTINATIONS = [
   { id: 'bodrum', name: 'Bodrum', keywords: ['bodrum', 'yalıkavak', 'bitez'] },
   { id: 'pamukkale', name: 'Pamukkale', keywords: ['pamukkale', 'hierapolis', 'denizli'] },
   { id: 'efes', name: 'Efes', keywords: ['efes', 'selçuk'] },
-  { id: 'karadeniz', name: 'Karadeniz (Trabzon/Rize)', keywords: ['karadeniz', 'trabzon', 'rize', 'uzungöl', 'artvin'] },
+  {
+    id: 'karadeniz',
+    name: 'Karadeniz (Trabzon/Rize)',
+    keywords: ['karadeniz', 'trabzon', 'rize', 'uzungöl', 'artvin'],
+  },
   { id: 'mardin', name: 'Mardin', keywords: ['mardin', 'midyat'] },
   { id: 'sanliurfa', name: 'Şanlıurfa', keywords: ['şanlıurfa', 'urfa', 'göbeklitepe', 'balıklıgöl'] },
   { id: 'nemrut', name: 'Nemrut Dağı', keywords: ['nemrut', 'adıyaman'] },
@@ -109,17 +113,42 @@ async function ensureDetectedInner(series) {
   await mapWithConcurrency(pending, CLASSIFY_CONCURRENCY, async (s) => {
     try {
       const destinationIds = await classifyDestinationsWithLLM(s.overview, s.name, DESTINATIONS)
-      upsertAutoDetectedStmt.run(s.id, s.name, s.overview, JSON.stringify(destinationIds), new Date().toISOString(), 'llm')
+      upsertAutoDetectedStmt.run(
+        s.id,
+        s.name,
+        s.overview,
+        JSON.stringify(destinationIds),
+        new Date().toISOString(),
+        'llm'
+      )
       deleteFailureStmt.run(s.id)
     } catch (err) {
       const autoDetected = detectDestinations(s.overview, s.name)
-      upsertAutoDetectedStmt.run(s.id, s.name, s.overview, JSON.stringify(autoDetected), new Date().toISOString(), 'keyword')
+      upsertAutoDetectedStmt.run(
+        s.id,
+        s.name,
+        s.overview,
+        JSON.stringify(autoDetected),
+        new Date().toISOString(),
+        'keyword'
+      )
       const previous = getFailureStmt.get(s.id)
       const failureCount = (previous?.failure_count || 0) + 1
       const failedAt = Date.now()
       const retryDelayMs = Math.min(6 * 60 * 60 * 1000, 5 * 60 * 1000 * 2 ** (failureCount - 1))
-      upsertFailureStmt.run(s.id, s.name, s.overview, failureCount, err.message.slice(0, 500), failedAt, failedAt + retryDelayMs)
-      console.error(`[destinations] "${s.name}" (id:${s.id}) LLM ile tespit edilemedi, anahtar kelimeye düşüldü:`, err.message)
+      upsertFailureStmt.run(
+        s.id,
+        s.name,
+        s.overview,
+        failureCount,
+        err.message.slice(0, 500),
+        failedAt,
+        failedAt + retryDelayMs
+      )
+      console.error(
+        `[destinations] "${s.name}" (id:${s.id}) LLM ile tespit edilemedi, anahtar kelimeye düşüldü:`,
+        err.message
+      )
     }
   })
 
@@ -144,12 +173,7 @@ export function setHumanTags(seriesId, destinationIds, reviewer) {
   if (!row) {
     throw new Error(`Dizi bulunamadı: ${seriesId}`)
   }
-  updateHumanTagsStmt.run(
-    JSON.stringify(destinationIds || []),
-    reviewer || 'anonim',
-    new Date().toISOString(),
-    id
-  )
+  updateHumanTagsStmt.run(JSON.stringify(destinationIds || []), reviewer || 'anonim', new Date().toISOString(), id)
   return rowToEntry(selectOneStmt.get(id))
 }
 

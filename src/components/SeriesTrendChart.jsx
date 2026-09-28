@@ -89,13 +89,26 @@ export default function SeriesTrendChart({ timeline, scopeLabel = null }) {
 
         {hovered && (
           <>
-            <line x1={hovered.x} x2={hovered.x} y1={PAD_TOP} y2={HEIGHT - PAD_BOTTOM} stroke="rgba(255,255,255,0.2)" strokeWidth="1" />
+            <line
+              x1={hovered.x}
+              x2={hovered.x}
+              y1={PAD_TOP}
+              y2={HEIGHT - PAD_BOTTOM}
+              stroke="rgba(255,255,255,0.2)"
+              strokeWidth="1"
+            />
             <circle cx={hovered.x} cy={hovered.y} r="3.5" fill={LINE_COLOR} />
           </>
         )}
         {points.map((pt, i) =>
           i % Math.ceil(n / MAX_AXIS_LABELS) === 0 || i === n - 1 ? (
-            <text key={`label-${pt.timestamp}`} x={pt.x} y={HEIGHT - 8} textAnchor="middle" className="period-chart__axis-label">
+            <text
+              key={`label-${pt.timestamp}`}
+              x={pt.x}
+              y={HEIGHT - 8}
+              textAnchor="middle"
+              className="period-chart__axis-label"
+            >
               {formatTrendsDate(pt.timestamp)}
             </text>
           ) : null

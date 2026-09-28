@@ -1,11 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  buildPercentileScale,
-  buildMapScale,
-  metricValueOf,
-  MAP_METRICS,
-  SOURCE_COUNTRY_ISO2,
-} from './scale.js'
+import { buildPercentileScale, buildMapScale, metricValueOf, MAP_METRICS, SOURCE_COUNTRY_ISO2 } from './scale.js'
 
 function ulke(iso2, score, scorePerCapita = null, dataSource = 'tmdb', perCapitaReliable = true) {
   return { iso2, score, scorePerCapita, dataSource, perCapitaReliable }
@@ -90,11 +84,7 @@ describe('buildMapScale — kaynak ülke (TR) muafiyeti', () => {
 })
 
 describe('buildMapScale — metrik seçimi', () => {
-  const countries = [
-    ulke('MX', 1126, 10.3),
-    ulke('NI', 848, 197.3),
-    ulke('CD', 15, 0.5),
-  ]
+  const countries = [ulke('MX', 1126, 10.3), ulke('NI', 848, 197.3), ulke('CD', 15, 0.5)]
 
   it('kişi başına metrik, katalog sayacından FARKLI bir sıralama üretir', () => {
     const toplam = buildMapScale(countries, MAP_METRICS.TOTAL).byIso2

@@ -40,7 +40,12 @@ function OverviewCell({ overview, highlightTerms }) {
     <td className="dashboard__overview">
       {rendered}
       {isLong && (
-        <button type="button" className="dashboard__link-btn dashboard__expand-hint" onClick={() => setExpanded((v) => !v)} aria-expanded={expanded}>
+        <button
+          type="button"
+          className="dashboard__link-btn dashboard__expand-hint"
+          onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+        >
           {expanded ? '(kısalt)' : '(devamını gör)'}
         </button>
       )}
@@ -52,7 +57,11 @@ export function HumanAuditIcon({ reviewer, at }) {
   if (!at) return null
   const formatted = new Date(at).toLocaleDateString('tr-TR')
   return (
-    <span className="dashboard__audit-icon" title={`${reviewer || 'anonim'} — ${formatted}`} aria-label={`Düzenleyen: ${reviewer || 'anonim'}, ${formatted}`}>
+    <span
+      className="dashboard__audit-icon"
+      title={`${reviewer || 'anonim'} — ${formatted}`}
+      aria-label={`Düzenleyen: ${reviewer || 'anonim'}, ${formatted}`}
+    >
       ⓘ
     </span>
   )
@@ -61,7 +70,11 @@ export function HumanAuditIcon({ reviewer, at }) {
 function EditControls({ item, taxonomy, draft, onDraftChange, onApprove, saving }) {
   return (
     <>
-      <select aria-label={`${item.name} için tema`} value={draft ?? item.effectiveTheme} onChange={(e) => onDraftChange(e.target.value)}>
+      <select
+        aria-label={`${item.name} için tema`}
+        value={draft ?? item.effectiveTheme}
+        onChange={(e) => onDraftChange(e.target.value)}
+      >
         {taxonomy.map((t) => (
           <option key={t} value={t}>
             {t}
@@ -103,7 +116,8 @@ function DestinationTagPicker({ taxonomy, draft, onToggle }) {
         ))}
       </div>
       <div className="tag-picker__search-wrap">
-        <input aria-label="Destinasyon ara ve eklemek için seçin"
+        <input
+          aria-label="Destinasyon ara ve eklemek için seçin"
           className="tag-picker__search"
           type="text"
           placeholder="Destinasyon ara ve eklemek için seçin..."
@@ -176,7 +190,12 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
       {error && (
         <div className="status status--error" role="alert">
           {error}
-          <button type="button" className="dashboard__link-btn" style={{ marginLeft: '0.75rem' }} onClick={() => setError(null)}>
+          <button
+            type="button"
+            className="dashboard__link-btn"
+            style={{ marginLeft: '0.75rem' }}
+            onClick={() => setError(null)}
+          >
             Kapat
           </button>
         </div>
@@ -188,14 +207,19 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
         <span className="dashboard__summary-item dashboard__summary-item--ok">
           {items.filter((i) => !i.isUntagged).length} dizi en az bir destinasyon içeriyor
         </span>
-        <input aria-label="Dizi ara"
+        <input
+          aria-label="Dizi ara"
           className="search-input"
           type="text"
           placeholder="Dizi ara..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select aria-label="Destinasyona göre filtrele" value={destFilter} onChange={(e) => setDestFilter(e.target.value)}>
+        <select
+          aria-label="Destinasyona göre filtrele"
+          value={destFilter}
+          onChange={(e) => setDestFilter(e.target.value)}
+        >
           <option value="">Tüm destinasyonlar</option>
           {taxonomy.map((d) => (
             <option key={d.id} value={d.id}>
@@ -272,61 +296,57 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
                 (id) => taxonomy.find((d) => d.id === id)?.keywords ?? []
               )
               return (
-              <tr key={item.id}>
-                <td>
-                  {item.name} <MapLinkButton seriesId={item.id} onViewSeriesOnMap={onViewSeriesOnMap} />
-                </td>
-                <OverviewCell overview={item.overview} highlightTerms={highlightTerms} />
-                <td>
-                  {editingId === item.id ? (
-                    <DestinationTagPicker
-                      taxonomy={taxonomy}
-                      draft={drafts[item.id] ?? item.effectiveDestinations}
-                      onToggle={(destId) => toggleDraft(item, destId)}
-                    />
-                  ) : (
-                    item.effectiveDestinations.map((id) => (
-                      <span key={id} className="badge badge--ok">
-                        {destName(id)}
-                      </span>
-                    ))
-                  )}
-                </td>
-                <td>
-                  {item.humanTags
-                    ? 'İnsan'
-                    : item.detectionMethod === 'llm'
-                      ? 'Yapay Zeka'
-                      : 'Anahtar kelime'}
-                  {item.humanTags && <HumanAuditIcon reviewer={item.humanTags.reviewer} at={item.humanTags.at} />}
-                </td>
-                <td>
-                  {!canEdit ? null : editingId === item.id ? (
-                    <button disabled={savingId === item.id} onClick={() => handleSave(item)}>
-                      Kaydet
-                    </button>
-                  ) : (
-                    <>
-                      <button className="dashboard__link-btn" onClick={() => setEditingId(item.id)}>
-                        Düzelt
+                <tr key={item.id}>
+                  <td>
+                    {item.name} <MapLinkButton seriesId={item.id} onViewSeriesOnMap={onViewSeriesOnMap} />
+                  </td>
+                  <OverviewCell overview={item.overview} highlightTerms={highlightTerms} />
+                  <td>
+                    {editingId === item.id ? (
+                      <DestinationTagPicker
+                        taxonomy={taxonomy}
+                        draft={drafts[item.id] ?? item.effectiveDestinations}
+                        onToggle={(destId) => toggleDraft(item, destId)}
+                      />
+                    ) : (
+                      item.effectiveDestinations.map((id) => (
+                        <span key={id} className="badge badge--ok">
+                          {destName(id)}
+                        </span>
+                      ))
+                    )}
+                  </td>
+                  <td>
+                    {item.humanTags ? 'İnsan' : item.detectionMethod === 'llm' ? 'Yapay Zeka' : 'Anahtar kelime'}
+                    {item.humanTags && <HumanAuditIcon reviewer={item.humanTags.reviewer} at={item.humanTags.at} />}
+                  </td>
+                  <td>
+                    {!canEdit ? null : editingId === item.id ? (
+                      <button disabled={savingId === item.id} onClick={() => handleSave(item)}>
+                        Kaydet
                       </button>
-                      {item.humanTags && (
-                        <>
-                          {' · '}
-                          <button
-                            className="dashboard__link-btn"
-                            disabled={savingId === item.id}
-                            onClick={() => handleRevert(item)}
-                            title="İnsan etiketini sil, sinopsis bazlı otomatik tespite geri dön"
-                          >
-                            AI önerisine dön
-                          </button>
-                        </>
-                      )}
-                    </>
-                  )}
-                </td>
-              </tr>
+                    ) : (
+                      <>
+                        <button className="dashboard__link-btn" onClick={() => setEditingId(item.id)}>
+                          Düzelt
+                        </button>
+                        {item.humanTags && (
+                          <>
+                            {' · '}
+                            <button
+                              className="dashboard__link-btn"
+                              disabled={savingId === item.id}
+                              onClick={() => handleRevert(item)}
+                              title="İnsan etiketini sil, sinopsis bazlı otomatik tespite geri dön"
+                            >
+                              AI önerisine dön
+                            </button>
+                          </>
+                        )}
+                      </>
+                    )}
+                  </td>
+                </tr>
               )
             })}
           </tbody>
@@ -363,7 +383,8 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
     revert: clearThemeOverride,
     saveFailLabel: 'onaylanamadı',
   })
-  const { items, taxonomy, status, error, setError, drafts, setDraft, savingId, editingId, setEditingId, reload } = editor
+  const { items, taxonomy, status, error, setError, drafts, setDraft, savingId, editingId, setEditingId, reload } =
+    editor
   const [search, setSearch] = useState('')
   const [themeFilter, setThemeFilter] = useState('')
   const [sortBy, setSortBy] = useState('confidence-asc')
@@ -390,9 +411,7 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
     setBulkSaving(true)
     setError(null)
     try {
-      await Promise.all(
-        targets.map((item) => submitThemeOverride(item.id, drafts[item.id] ?? item.effectiveTheme))
-      )
+      await Promise.all(targets.map((item) => submitThemeOverride(item.id, drafts[item.id] ?? item.effectiveTheme)))
       setSelectedIds(new Set())
       load({ silent: true })
     } catch (err) {
@@ -434,7 +453,9 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
   const approved =
     status === 'ready'
       ? sortItems(
-          items.filter((i) => i.effectiveConfidence >= CONFIDENCE_THRESHOLD && matchesQuery(i) && matchesThemeFilter(i)),
+          items.filter(
+            (i) => i.effectiveConfidence >= CONFIDENCE_THRESHOLD && matchesQuery(i) && matchesThemeFilter(i)
+          ),
           sortBy
         )
       : []
@@ -443,9 +464,7 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
   return (
     <div className="dashboard">
       <h2>Analist Paneli</h2>
-      {!canEdit && (
-        <p className="dashboard__hint">Salt okunur — düzenleme yalnızca Yönetici'ye açık.</p>
-      )}
+      {!canEdit && <p className="dashboard__hint">Salt okunur — düzenleme yalnızca Yönetici'ye açık.</p>}
 
       <nav className="app__nav dashboard__tabs">
         <button
@@ -475,7 +494,12 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
           {status === 'ready' && error && (
             <div className="status status--error" role="alert">
               {error}
-              <button type="button" className="dashboard__link-btn" style={{ marginLeft: '0.75rem' }} onClick={() => setError(null)}>
+              <button
+                type="button"
+                className="dashboard__link-btn"
+                style={{ marginLeft: '0.75rem' }}
+                onClick={() => setError(null)}
+              >
                 Kapat
               </button>
             </div>
@@ -489,14 +513,19 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
                 <span className="dashboard__summary-item dashboard__summary-item--ok">
                   {items.filter((i) => i.effectiveConfidence >= CONFIDENCE_THRESHOLD).length} dizi onaylı
                 </span>
-                <input aria-label="Dizi ara"
+                <input
+                  aria-label="Dizi ara"
                   className="search-input"
                   type="text"
                   placeholder="Dizi ara..."
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                 />
-                <select aria-label="Temaya göre filtrele" value={themeFilter} onChange={(e) => setThemeFilter(e.target.value)}>
+                <select
+                  aria-label="Temaya göre filtrele"
+                  value={themeFilter}
+                  onChange={(e) => setThemeFilter(e.target.value)}
+                >
                   <option value="">Tüm temalar</option>
                   {taxonomy.map((t) => (
                     <option key={t} value={t}>
@@ -539,7 +568,10 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
                         </option>
                       ))}
                     </select>
-                    <button disabled={bulkSaving || !bulkTheme} onClick={() => handleBulkChangeThemeAndApprove(needsReview)}>
+                    <button
+                      disabled={bulkSaving || !bulkTheme}
+                      onClick={() => handleBulkChangeThemeAndApprove(needsReview)}
+                    >
                       Seçilenlerin Temasını Değiştir &amp; Onayla
                     </button>
                     <button className="dashboard__link-btn" onClick={() => setSelectedIds(new Set())}>
@@ -592,7 +624,10 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
                           <td>
                             {item.name} <MapLinkButton seriesId={item.id} onViewSeriesOnMap={onViewSeriesOnMap} />
                           </td>
-                          <OverviewCell overview={item.overview} highlightTerms={THEME_KEYWORD_HINTS[item.effectiveTheme]} />
+                          <OverviewCell
+                            overview={item.overview}
+                            highlightTerms={THEME_KEYWORD_HINTS[item.effectiveTheme]}
+                          />
                           <td>{item.effectiveTheme}</td>
                           <td>
                             <span className="badge badge--uncertain">{item.effectiveConfidence}</span>
@@ -687,9 +722,7 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
         </>
       )}
 
-      {tab === 'destinations' && (
-        <DestinationSection canEdit={canEdit} onViewSeriesOnMap={onViewSeriesOnMap} />
-      )}
+      {tab === 'destinations' && <DestinationSection canEdit={canEdit} onViewSeriesOnMap={onViewSeriesOnMap} />}
 
       {tab === 'sentiment' && <MediaSentimentAuditSection canEdit={canEdit} />}
     </div>

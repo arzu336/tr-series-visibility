@@ -78,14 +78,19 @@ export default function MediaSentimentAuditSection({ canEdit = true }) {
     <>
       <div className="dashboard__summary">
         <span className="dashboard__summary-item dashboard__summary-item--ok">{items.length} tarama kaydı</span>
-        <input aria-label="Dizi ara"
+        <input
+          aria-label="Dizi ara"
           className="search-input"
           type="text"
           placeholder="Dizi ara..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
         />
-        <select aria-label="Basın tonuna göre filtrele" value={toneFilter} onChange={(e) => setToneFilter(e.target.value)}>
+        <select
+          aria-label="Basın tonuna göre filtrele"
+          value={toneFilter}
+          onChange={(e) => setToneFilter(e.target.value)}
+        >
           <option value="">Tüm tonlar</option>
           {TONE_OPTIONS.map((t) => (
             <option key={t} value={t}>
@@ -112,7 +117,10 @@ export default function MediaSentimentAuditSection({ canEdit = true }) {
           </thead>
           <tbody>
             {filtered.map((item) => (
-              <tr key={item.id} className={item.effectiveSentiment === 'negative' ? 'dashboard__row--uncertain' : undefined}>
+              <tr
+                key={item.id}
+                className={item.effectiveSentiment === 'negative' ? 'dashboard__row--uncertain' : undefined}
+              >
                 <td>{item.seriesName}</td>
                 <td>{countryNames[item.countryIso2]?.name || item.countryIso2}</td>
                 <td className="dashboard__overview">
@@ -136,7 +144,9 @@ export default function MediaSentimentAuditSection({ canEdit = true }) {
                         </li>
                       ))}
                       {item.totalNewsCount > item.articles.length && (
-                        <li className="dashboard__article-source">+{item.totalNewsCount - item.articles.length} haber daha</li>
+                        <li className="dashboard__article-source">
+                          +{item.totalNewsCount - item.articles.length} haber daha
+                        </li>
                       )}
                     </ul>
                   )}

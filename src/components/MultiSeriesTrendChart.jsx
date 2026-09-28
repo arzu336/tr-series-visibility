@@ -74,7 +74,9 @@ export default function MultiSeriesTrendChart({ series }) {
         onMouseLeave={() => setHoverX(null)}
       >
         {seriesPoints.map((s) => {
-          const linePath = s.points.map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`).join(' ')
+          const linePath = s.points
+            .map((pt, i) => `${i === 0 ? 'M' : 'L'}${pt.x.toFixed(1)},${pt.y.toFixed(1)}`)
+            .join(' ')
           return <path key={s.name} d={linePath} fill="none" stroke={s.color} strokeWidth="2.25" />
         })}
 
@@ -89,7 +91,15 @@ export default function MultiSeriesTrendChart({ series }) {
               strokeWidth="1"
             />
             {hovered.map((h) => (
-              <circle key={h.name} cx={h.point.x} cy={h.point.y} r="3.5" fill={h.color} stroke="rgba(16,25,28,0.6)" strokeWidth="1" />
+              <circle
+                key={h.name}
+                cx={h.point.x}
+                cy={h.point.y}
+                r="3.5"
+                fill={h.color}
+                stroke="rgba(16,25,28,0.6)"
+                strokeWidth="1"
+              />
             ))}
           </>
         )}

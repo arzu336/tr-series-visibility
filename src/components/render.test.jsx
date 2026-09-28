@@ -47,8 +47,16 @@ describe('useAsync tabanlı bileşenler ilk render', () => {
 
   it('CountryPanel skor kartını ve kişi başına paydayı basar', () => {
     const country = {
-      iso2: 'DE', name: 'Almanya', score: 500, seriesCount: 30, seriesList: [], dataSource: 'tmdb',
-      scorePerCapita: 6.4, perCapitaBasis: 'internet-kullanicisi', perCapitaYear: 2024, perCapitaReliable: true,
+      iso2: 'DE',
+      name: 'Almanya',
+      score: 500,
+      seriesCount: 30,
+      seriesList: [],
+      dataSource: 'tmdb',
+      scorePerCapita: 6.4,
+      perCapitaBasis: 'internet-kullanicisi',
+      perCapitaYear: 2024,
+      perCapitaReliable: true,
     }
     const html = renderToString(<CountryPanel country={country} allCountries={[country]} />)
     expect(html).toContain('Kişi başına erişilebilirlik skoru')
@@ -59,7 +67,13 @@ describe('useAsync tabanlı bileşenler ilk render', () => {
 
 describe('ErrorBoundary', () => {
   it('hata yokken çocuğu basar', () => {
-    expect(renderToString(<ErrorBoundary><p>içerik</p></ErrorBoundary>)).toContain('içerik')
+    expect(
+      renderToString(
+        <ErrorBoundary>
+          <p>içerik</p>
+        </ErrorBoundary>
+      )
+    ).toContain('içerik')
   })
 
   it('getDerivedStateFromError hata durumunu üretir', () => {

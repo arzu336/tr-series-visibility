@@ -103,7 +103,12 @@ export function isSecureRequest(req) {
   if (!req) return false
   if (req.secure) return true
   const proto = req.headers?.['x-forwarded-proto']
-  return String(proto || '').split(',')[0].trim().toLowerCase() === 'https'
+  return (
+    String(proto || '')
+      .split(',')[0]
+      .trim()
+      .toLowerCase() === 'https'
+  )
 }
 
 /**

@@ -53,23 +53,47 @@ function SeriesHeaderBlock({ meta, metaStatus, imdb, imdbStatus, social }) {
         <div>
           <h3 className="series-header__title">{meta.name}</h3>
           <div className="series-header__meta">
-            {yearOf(meta.firstAirDate) && <span><strong>{yearOf(meta.firstAirDate)}</strong></span>}
-            <span>{meta.totalEpisodes != null ? <><strong>{meta.totalEpisodes}</strong> bölüm</> : 'Bölüm sayısı bilinmiyor'}</span>
+            {yearOf(meta.firstAirDate) && (
+              <span>
+                <strong>{yearOf(meta.firstAirDate)}</strong>
+              </span>
+            )}
+            <span>
+              {meta.totalEpisodes != null ? (
+                <>
+                  <strong>{meta.totalEpisodes}</strong> bölüm
+                </>
+              ) : (
+                'Bölüm sayısı bilinmiyor'
+              )}
+            </span>
             <span>
               {imdbStatus === 'loading' && 'Puan yükleniyor…'}
               {imdbStatus === 'ready' && imdb?.rating != null && (
-                <>⭐ <strong>{imdb.rating.toFixed(1)}/10</strong> ({formatViews(imdb.votes)} oy)</>
+                <>
+                  ⭐ <strong>{imdb.rating.toFixed(1)}/10</strong> ({formatViews(imdb.votes)} oy)
+                </>
               )}
               {imdbStatus === 'ready' && imdb?.rating == null && 'Puan verisi yok'}
               {imdbStatus === 'unavailable' && 'Puan verisi yok'}
             </span>
-            {hasUserReviews && <span>İzleyici Beğenisi: <strong>%{kg.userReviewsPct}</strong></span>}
+            {hasUserReviews && (
+              <span>
+                İzleyici Beğenisi: <strong>%{kg.userReviewsPct}</strong>
+              </span>
+            )}
             {otherRatings.map((r) => (
-              <span key={r.source}>{r.source}: <strong>{r.rating}</strong></span>
+              <span key={r.source}>
+                {r.source}: <strong>{r.rating}</strong>
+              </span>
             ))}
           </div>
           <div className="series-header__themes">
-            {meta.theme ? <span className="badge badge--theme">{meta.theme}</span> : <span className="badge badge--uncertain">Tema sınıflandırılmamış</span>}
+            {meta.theme ? (
+              <span className="badge badge--theme">{meta.theme}</span>
+            ) : (
+              <span className="badge badge--uncertain">Tema sınıflandırılmamış</span>
+            )}
           </div>
           {meta.overview && <p className="series-header__overview">{meta.overview}</p>}
         </div>
@@ -107,7 +131,10 @@ function GlobalFootprintCard({ result, seriesId, onShowOnMap }) {
             <div key={row.country} className="benchmark-card__row">
               <div className="benchmark-card__row-label">{ulkeAdi(row.country)}</div>
               <div className="benchmark-card__row-bar-track">
-                <div className="benchmark-card__row-bar" style={{ width: `${(row.value / maxValue) * 100}%`, background: '#EE3135' }} />
+                <div
+                  className="benchmark-card__row-bar"
+                  style={{ width: `${(row.value / maxValue) * 100}%`, background: '#EE3135' }}
+                />
               </div>
               <div className="benchmark-card__row-value">{row.value}</div>
             </div>
@@ -153,9 +180,7 @@ function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, sca
         <p className="dashboard__empty">Bu dizi için henüz hiçbir ülkede basın taraması yapılmadı.</p>
       )}
       {status === 'ready' && summary?.status === 'no-data' && (
-        <p className="dashboard__empty">
-          {summary.scannedCount} ülke tarandı ama hiçbirinde haber bulunamadı.
-        </p>
+        <p className="dashboard__empty">{summary.scannedCount} ülke tarandı ama hiçbirinde haber bulunamadı.</p>
       )}
       {status === 'ready' && summary?.status === 'ready' && (
         <>
@@ -171,7 +196,9 @@ function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, sca
               .map((c) => (
                 <li key={c.iso2} className="panel__series-item">
                   <div className="panel__series-row">
-                    <span className="panel__series-info"><span className="panel__series-name">{countryNames[c.iso2]?.name || c.iso2}</span></span>
+                    <span className="panel__series-info">
+                      <span className="panel__series-name">{countryNames[c.iso2]?.name || c.iso2}</span>
+                    </span>
                     <span className="panel__series-score">%{c.positivePct} olumlu</span>
                   </div>
                 </li>
@@ -197,15 +224,21 @@ function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, sca
       )}
       {scanStatus === 'done' && scanResult && (
         <div className="dashboard__bulk-bar" style={{ marginTop: '0.6rem' }}>
-          {scanResult.countriesTargeted} ülke hedeflendi — basın: {scanResult.news.scanned} tarandı ({scanResult.news.liveCalls} canlı),
-          sosyal: {scanResult.social.scanned} tarandı ({scanResult.social.liveCalls} canlı).
+          {scanResult.countriesTargeted} ülke hedeflendi — basın: {scanResult.news.scanned} tarandı (
+          {scanResult.news.liveCalls} canlı), sosyal: {scanResult.social.scanned} tarandı ({scanResult.social.liveCalls}{' '}
+          canlı).
           {/* Denetim raporu D.6: basın taraması artık ücretsiz GDELT'e gittiği için SerpAPI
               kotasına TABİ DEĞİL — `news.budgetExhausted` alanı da kaldırıldı. Bu uyarı yalnızca
               hâlâ SerpAPI kullanan sosyal tarama (YouTube + Bilgi Grafiği) için geçerli. */}
-          {scanResult.social.budgetExhausted && ' Sosyal tarama sırasında aylık SerpAPI kotası doldu (basın taraması ücretsiz kaynaktan sürer).'}
+          {scanResult.social.budgetExhausted &&
+            ' Sosyal tarama sırasında aylık SerpAPI kotası doldu (basın taraması ücretsiz kaynaktan sürer).'}
         </div>
       )}
-      {scanStatus === 'error' && <div className="status status--error" style={{ marginTop: '0.6rem' }}>Tarama başarısız: {scanError}</div>}
+      {scanStatus === 'error' && (
+        <div className="status status--error" style={{ marginTop: '0.6rem' }}>
+          Tarama başarısız: {scanError}
+        </div>
+      )}
     </div>
   )
 }
@@ -387,8 +420,7 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
       .then((data) => {
         if (!isStale()) setSocial(data)
       })
-      .catch(() => {
-      })
+      .catch(() => {})
 
     const selectedId = seriesList.find((s) => s.name === name)?.id
     if (selectedId == null) return
@@ -439,8 +471,12 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
       const data = await waitForJob(job.id, { onProgress: (j) => setEnrichProgress(j.progress) })
       setEnrichResult(data)
       setEnrichStatus('done')
-      fetchMediaSentimentSummary(selectedId).then(setSentimentSummary).catch(() => {})
-      fetchSocialListening(selected).then(setSocial).catch(() => {})
+      fetchMediaSentimentSummary(selectedId)
+        .then(setSentimentSummary)
+        .catch(() => {})
+      fetchSocialListening(selected)
+        .then(setSocial)
+        .catch(() => {})
     } catch (err) {
       setEnrichError(err.message)
       setEnrichStatus('error')
@@ -450,7 +486,8 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
   return (
     <div>
       <div className="trends__controls">
-        <input aria-label="Bir dizi ara ve seç"
+        <input
+          aria-label="Bir dizi ara ve seç"
           className="search-input"
           list="trends-series-list"
           type="text"
@@ -463,19 +500,30 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
             <option key={s.id} value={s.name} />
           ))}
         </datalist>
-        <button onClick={() => handleQuery()} disabled={status === 'querying' || !seriesList.some((s) => s.name === selected)}>
+        <button
+          onClick={() => handleQuery()}
+          disabled={status === 'querying' || !seriesList.some((s) => s.name === selected)}
+        >
           {status === 'querying' ? 'Sorgulanıyor…' : 'Sorgula'}
         </button>
       </div>
 
-      {status === 'idle' && <p className="dashboard__empty">Bir dizi seç ve "Sorgula"ya bas — sonuçlar burada görünecek.</p>}
+      {status === 'idle' && (
+        <p className="dashboard__empty">Bir dizi seç ve "Sorgula"ya bas — sonuçlar burada görünecek.</p>
+      )}
       {status === 'error' && <div className="status status--error">Hata: {error}</div>}
 
       {status === 'ready' && (
         <>
           <section className="dashboard__section">
             <h3 className="dashboard__section-title">Dizi Başlık &amp; Tema</h3>
-            <SeriesHeaderBlock meta={meta} metaStatus={metaStatus} imdb={imdb} imdbStatus={imdbStatus} social={social} />
+            <SeriesHeaderBlock
+              meta={meta}
+              metaStatus={metaStatus}
+              imdb={imdb}
+              imdbStatus={imdbStatus}
+              social={social}
+            />
           </section>
 
           <section className="dashboard__section">
@@ -521,11 +569,15 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
               <>
                 <SeriesTrendChart timeline={timeSeries} scopeLabel={tsGeo ? ulkeAdi(tsGeo) : null} />
                 <p className="ts-scope__note">
-                  Google Trends 0-100 ölçeği <strong>her kapsam için kendi içinde bağıldır</strong>: bu
-                  grafik {tsGeo ? `${ulkeAdi(tsGeo)} içindeki` : 'dünya genelindeki'} zaman yönünü gösterir,
-                  ülkeler arası mutlak hacim karşılaştırması için kullanılamaz.
+                  Google Trends 0-100 ölçeği <strong>her kapsam için kendi içinde bağıldır</strong>: bu grafik{' '}
+                  {tsGeo ? `${ulkeAdi(tsGeo)} içindeki` : 'dünya genelindeki'} zaman yönünü gösterir, ülkeler arası
+                  mutlak hacim karşılaştırması için kullanılamaz.
                 </p>
-                {insightStatus === 'loading' && <p className="dashboard__empty" style={{ marginTop: '0.6rem' }}>Yapay zeka yorumu hazırlanıyor…</p>}
+                {insightStatus === 'loading' && (
+                  <p className="dashboard__empty" style={{ marginTop: '0.6rem' }}>
+                    Yapay zeka yorumu hazırlanıyor…
+                  </p>
+                )}
                 {insightStatus === 'ready' && insight?.insightText && (
                   <div className="theme-insight__ai-box" style={{ marginTop: '0.8rem' }}>
                     <span className="theme-insight__ai-label">🤖 Yapay Zeka</span>

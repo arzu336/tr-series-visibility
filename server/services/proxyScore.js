@@ -1,11 +1,6 @@
 import { queryTrends } from '../serpapi.js'
 
-const FALLBACK_QUERY_TERMS = [
-  'Turkish series',
-  'مسلسلات تركية',
-  'турецкие сериалы',
-  'سریال‌های ترکی',
-]
+const FALLBACK_QUERY_TERMS = ['Turkish series', 'مسلسلات تركية', 'турецкие сериалы', 'سریال‌های ترکی']
 
 /**
  * Ülke başına EN YÜKSEK değeri alır. Ortalama almak yanlış olurdu: her terim kendi 0-100

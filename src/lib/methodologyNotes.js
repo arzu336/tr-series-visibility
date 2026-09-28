@@ -1,4 +1,3 @@
-
 /** Haritanın ve ülke/kıta skorlarının ne ölçtüğü. */
 export const VISIBILITY_SCORE_NOTE =
   'Bu skor ülkelerdeki fiili izlenme oranını değil; ilgili ülkede flatrate/ücretsiz yayında olan ' +
@@ -28,8 +27,7 @@ export const MAP_SCALE_NOTE =
   'Mutlak sayı için ülke paneline bakın.'
 
 /** Kıta düzeyinde aynı skorun ortalaması. */
-export const CONTINENT_SCORE_NOTE =
-  'Kıtadaki ülkelerin görünürlük skorlarının ortalaması. ' + VISIBILITY_SCORE_NOTE
+export const CONTINENT_SCORE_NOTE = 'Kıtadaki ülkelerin görünürlük skorlarının ortalaması. ' + VISIBILITY_SCORE_NOTE
 
 /** Küresel pazar payı — ihracat değil, TMDB popülerlik payı. */
 export const MARKET_SHARE_NOTE =

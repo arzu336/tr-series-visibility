@@ -91,7 +91,8 @@ export default function AdminUsersPanel({ currentUserId }) {
         <span className="dashboard__summary-item dashboard__summary-item--ok">
           {items.filter((u) => u.status !== 'pending').length} karara bağlandı
         </span>
-        <input aria-label="İsim veya e-posta ara"
+        <input
+          aria-label="İsim veya e-posta ara"
           className="search-input"
           type="text"
           placeholder="İsim veya e-posta ara..."
@@ -106,9 +107,8 @@ export default function AdminUsersPanel({ currentUserId }) {
         <div className="reset-password-banner">
           <strong>{resetResult.name}</strong> için geçici şifre oluşturuldu: <code>{resetResult.tempPassword}</code>
           <br />
-          Bu şifreyi güvenli bir kanaldan (yüz yüze, kurum içi mesajlaşma vb.) iletin — bir daha
-          gösterilmeyecek. Kullanıcı giriş yaptıktan sonra "Şifremi Değiştir" ile kendi şifresini
-          belirleyebilir.{' '}
+          Bu şifreyi güvenli bir kanaldan (yüz yüze, kurum içi mesajlaşma vb.) iletin — bir daha gösterilmeyecek.
+          Kullanıcı giriş yaptıktan sonra "Şifremi Değiştir" ile kendi şifresini belirleyebilir.{' '}
           <button type="button" className="dashboard__link-btn" onClick={() => setResetResult(null)}>
             Kapat
           </button>
@@ -141,7 +141,11 @@ export default function AdminUsersPanel({ currentUserId }) {
                     <button disabled={actingId === u.id} onClick={() => act(approveUser, u.id)}>
                       Onayla
                     </button>{' '}
-                    <button disabled={actingId === u.id} className="dashboard__link-btn" onClick={() => act(rejectUser, u.id)}>
+                    <button
+                      disabled={actingId === u.id}
+                      className="dashboard__link-btn"
+                      onClick={() => act(rejectUser, u.id)}
+                    >
                       Reddet
                     </button>
                   </td>
@@ -206,8 +210,7 @@ export default function AdminUsersPanel({ currentUserId }) {
                       >
                         Sıfırla
                       </button>
-                    )}
-                    {' '}
+                    )}{' '}
                     {(() => {
                       const isSelf = u.id === currentUserId
                       const isLastAdmin = u.isAdmin && adminCount <= 1

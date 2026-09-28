@@ -4,7 +4,7 @@ Türk dizilerinin ülke bazlı erişilebilirliğini, tema dağılımını, arama
 
 ## Ne yapar
 
-- **Harita (3D küre / 2D):** her ülke için görünürlük skoru — varsayılan metrik milyon internet kullanıcısı başına, alternatif olarak ham toplam. Renkler yüzdelik dilime göre atanır; kaynak ülke (TR), küçük paydalı ülkeler ve tahmin katmanı ölçek dışında ayrı renklerle gösterilir.
+- **Harita (3D küre / 2D):** her ülke için milyon internet kullanıcısı başına görünürlük skoru (ham toplam ülke panelindeki kartta görünür). Renkler yüzdelik dilime göre atanır; kaynak ülke (TR), küçük paydalı ülkeler ve tahmin katmanı ölçek dışında ayrı renklerle gösterilir.
 - **Ülke paneli:** toplam ve kişi başına skor, dönemsel trend, ülkede en çok ilgi gören diziler (arama payı + Netflix Top 10 + basın algısı + yayın varlığı bileşik skoru), yayındaki dizilerin listesi.
 - **Arama ilgisi:** Google Trends tabanlı ülke dağılımı, zaman serisi, çok dizili kıyaslama, sosyal dinleme, basın taraması, IMDb bilgileri.
 - **Analist paneli:** LLM'in ürettiği tema/destinasyon etiketlerinin ve basın tonunun insan tarafından denetlenip düzeltilmesi.
@@ -17,16 +17,37 @@ Tüm metrikler ne ölçtüklerini ve ne ölçmediklerini arayüzde belirtir; met
 
 ```
 server/                 Express API + SQLite (node:sqlite, WAL)
-  index.js              route'lar, oturum/yetki, güvenlik middleware'leri
-  data-pipeline.js      TMDB çekme + zenginleştirme
+  index.js              uygulama kurulumu (helmet, CORS, statik dosyalar) ve router'ların takılması
+  env.js                .env yükleme — ilk import, diğer modüller process.env'i okumadan önce
+  routes/
+    auth.js             çerez, hız sınırları, giriş/çıkış, /api oturum duvarı, requireAdmin
+    admin.js            kullanıcı onay/yetki/şifre işlemleri (yalnızca yönetici)
+    data.js             harita verisi, tarih/dönem serileri, benchmark, Türkçe öğrenme göstergeleri
+    analyst.js          tema, destinasyon ve basın tonu listeleri + insan düzeltmeleri
+    trends.js           arama ilgisi, sosyal dinleme, IMDb, kişi, bileşik ülke sıralaması, iş takibi
+    impact.js           etki & ihracat analizi, ülke özeti (yalnızca yönetici)
+    shared.js           ortak hata sarmalayıcıları (upstream, badRequest)
+  data-pipeline.js      TMDB çekme + arka plan LLM sınıflandırma
   aggregate.js          ülke skoru ve kişi başına normalizasyon
   scheduler.js          zamanlanmış işler (günlük tazeleme + haftalık zincir)
+  trend-store.js        anlık görüntü/trend deposu fabrikası (history, benchmark, duolingo)
   impact.js             DiD / korelasyon motoru
   llm.js, themes.js     LLM sınıflandırma, retry/backoff
-  services/             dış kaynak istemcileri, önbellek/bütçe, bileşik skor, Python köprüsü
-src/                    React + Vite arayüzü (components/, lib/, data/)
+  auth.js, users.js     oturum (SHA-256 token), kullanıcı hesapları
+  services/             dış kaynak istemcileri (serpApiCache, gdeltNews, tourismData, …),
+                        kota/önbellek (liveCallQuota), bileşik skor (countryScoringEngine),
+                        ülke özeti (countrySummary), iş kaydı (jobs), haftalık Netflix senkronu
+                        (netflixPipelineRunner), Python köprüsü (pipelineDb, pipelineData)
+src/                    React + Vite arayüzü
+  components/           harita (Map2D, Globe3D), paneller, analist/etki/yönetici sekmeleri, ErrorBoundary
+  lib/                  api.js (fetch sarmalayıcıları), scale.js (renk ölçeği), methodologyNotes.js;
+                        hook'lar: useAsync (iptal edilebilir veri çekme), useAuth (oturum),
+                        useDialog (modal erişilebilirliği), useOverrideEditor (analist düzeltme
+                        akışı), usePersistedState (localStorage tercihleri)
+  data/                 ülke merkezleri, kıta eşlemesi, Türkçe adlar
 data-pipeline-python/   ayrı zenginleştirme hattı; kendi SQLite'ına yazar, Node salt okunur okur
 public/map/             küre dokuları ve ülke sınırları (dış istek yok)
+.github/workflows/      CI: Node (vitest + build) ve Python (pytest)
 ```
 
 ## Veri kaynakları

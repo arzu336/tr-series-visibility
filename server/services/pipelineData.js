@@ -4,14 +4,14 @@ export function getSeriesEnrichment(tmdbId) {
   const conn = getPipelineDb()
   if (!conn) return null
 
-  const mapping = conn
-    .prepare('SELECT name, dizilah_slug, imdb_id FROM series_mapping WHERE tmdb_id = ?')
-    .get(tmdbId)
+  const mapping = conn.prepare('SELECT name, dizilah_slug, imdb_id FROM series_mapping WHERE tmdb_id = ?').get(tmdbId)
   if (!mapping) return null
 
   let dizilah = null
   const dizilahRow = conn
-    .prepare('SELECT title, channel, status, first_air_date, total_episodes, average_rating, vote_count, source_url FROM dizilah_series WHERE slug = ?')
+    .prepare(
+      'SELECT title, channel, status, first_air_date, total_episodes, average_rating, vote_count, source_url FROM dizilah_series WHERE slug = ?'
+    )
     .get(mapping.dizilah_slug)
   if (dizilahRow && dizilahRow.title) {
     dizilah = {

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useAsync } from '../lib/useAsync.js'
 import { fetchExportImpact, fetchBenchmark, fetchGlobalPeriods } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import { trendLabel } from '../lib/trend.js'
@@ -124,7 +125,10 @@ export default function ExportImpactTab({ onSelectCountry }) {
         <div className="dashboard__header-row">
           <h3 className="dashboard__section-title">İlk 5 Pazar Yoğunlaşması</h3>
           {marketShare != null && (
-            <span className="badge badge--info" title="Türkiye'nin toplam küresel dizi ihracat pazarındaki payı (bkz. Küresel Kıyaslama).">
+            <span
+              className="badge badge--info"
+              title="Türkiye'nin toplam küresel dizi ihracat pazarındaki payı (bkz. Küresel Kıyaslama)."
+            >
               Türkiye Küresel Pazar Payı: %{marketShare}
             </span>
           )}
@@ -146,8 +150,8 @@ export default function ExportImpactTab({ onSelectCountry }) {
           />
         </div>
         <p className="donut-panel__hint">
-          İlk 5 pazar toplam görünürlüğün %{topCountryShare}'ini oluşturuyor; kalan {otherCountryCount} ülke geri
-          kalan payı paylaşıyor.
+          İlk 5 pazar toplam görünürlüğün %{topCountryShare}'ini oluşturuyor; kalan {otherCountryCount} ülke geri kalan
+          payı paylaşıyor.
         </p>
       </section>
 

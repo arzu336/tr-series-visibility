@@ -1,6 +1,12 @@
 import db, { inTransaction } from '../db.js'
 import { getEnrichmentTargets, getTopActors } from './enrichmentTargets.js'
-import { cacheFirstSerpApi, fetchTrendsByCountryRaw, actorTrendsCacheKey, TRENDS_TTL_MS, getSerpApiUsageThisMonth } from './serpApiCache.js'
+import {
+  cacheFirstSerpApi,
+  fetchTrendsByCountryRaw,
+  actorTrendsCacheKey,
+  TRENDS_TTL_MS,
+  getSerpApiUsageThisMonth,
+} from './serpApiCache.js'
 import { resolveIso2FromLabel } from './countryLookup.js'
 
 const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000
@@ -44,7 +50,9 @@ export async function runActorTrendsCollectionIfNeeded() {
     for (const actor of actors) {
       const usage = getSerpApiUsageThisMonth()
       if (usage.used >= usage.budget) {
-        console.warn(`[actorTrendsCollector] aylık SerpAPI kotası doldu (${usage.used}/${usage.budget}) — kalan oyuncular bir sonraki döngüye bırakıldı.`)
+        console.warn(
+          `[actorTrendsCollector] aylık SerpAPI kotası doldu (${usage.used}/${usage.budget}) — kalan oyuncular bir sonraki döngüye bırakıldı.`
+        )
         break
       }
       try {

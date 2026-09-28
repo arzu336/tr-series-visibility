@@ -10,7 +10,14 @@ export default function CircularProgress({ pct, color = '#f0ad4e', label }) {
   return (
     <div className="circular-progress" title={label}>
       <svg width={SIZE} height={SIZE} viewBox={`0 0 ${SIZE} ${SIZE}`}>
-        <circle cx={SIZE / 2} cy={SIZE / 2} r={RADIUS} fill="none" stroke="rgba(255,255,255,0.1)" strokeWidth={STROKE} />
+        <circle
+          cx={SIZE / 2}
+          cy={SIZE / 2}
+          r={RADIUS}
+          fill="none"
+          stroke="rgba(255,255,255,0.1)"
+          strokeWidth={STROKE}
+        />
         <circle
           cx={SIZE / 2}
           cy={SIZE / 2}

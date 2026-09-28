@@ -34,9 +34,10 @@ export default class ErrorBoundary extends Component {
   render() {
     if (!this.state.error) return this.props.children
     if (this.props.fallback) return this.props.fallback(this.state.error, this.handleRetry)
-    const chunkHatasi = /Failed to fetch dynamically imported module|Loading chunk|Importing a module script failed/i.test(
-      this.state.error?.message || ''
-    )
+    const chunkHatasi =
+      /Failed to fetch dynamically imported module|Loading chunk|Importing a module script failed/i.test(
+        this.state.error?.message || ''
+      )
     return (
       <div className="status status--error" role="alert" style={{ margin: '1rem' }}>
         <strong>{chunkHatasi ? 'Bu bölüm yüklenemedi.' : 'Bu bölümde bir hata oluştu.'}</strong>
@@ -49,7 +50,12 @@ export default class ErrorBoundary extends Component {
           Yeniden dene
         </button>
         {chunkHatasi && (
-          <button type="button" className="dashboard__link-btn" style={{ marginLeft: '0.5rem' }} onClick={() => window.location.reload()}>
+          <button
+            type="button"
+            className="dashboard__link-btn"
+            style={{ marginLeft: '0.5rem' }}
+            onClick={() => window.location.reload()}
+          >
             Sayfayı yenile
           </button>
         )}

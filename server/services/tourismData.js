@@ -11,8 +11,18 @@ const SHEET_NAME = 'Milliyet'
 const SUBTOTAL_ROW_RE = /^TOPLAM|^DİĞ\.|^YABANCI TOPLAM/
 
 const TURKISH_MONTHS = {
-  ocak: 1, şubat: 2, mart: 3, nisan: 4, mayıs: 5, haziran: 6,
-  temmuz: 7, ağustos: 8, eylül: 9, ekim: 10, kasım: 11, aralık: 12,
+  ocak: 1,
+  şubat: 2,
+  mart: 3,
+  nisan: 4,
+  mayıs: 5,
+  haziran: 6,
+  temmuz: 7,
+  ağustos: 8,
+  eylül: 9,
+  ekim: 10,
+  kasım: 11,
+  aralık: 12,
 }
 
 const getMetaStmt = db.prepare('SELECT value FROM meta WHERE key = ?')
@@ -43,9 +53,7 @@ export async function findLatestBulletin() {
   while ((match = anchorRe.exec(html))) {
     const [, href, text] = match
     if (!/HABER\s*BÜLTEN/i.test(text)) continue
-    const monthMatch = Object.keys(TURKISH_MONTHS).find((m) =>
-      text.toLocaleLowerCase('tr').includes(m)
-    )
+    const monthMatch = Object.keys(TURKISH_MONTHS).find((m) => text.toLocaleLowerCase('tr').includes(m))
     const yearMatch = text.match(/\d{4}/)
     if (!monthMatch || !yearMatch) continue
     return {
@@ -158,7 +166,13 @@ export function pickBeforeAfterPair(series) {
   const sorted = [...best].sort((a, b) => a.year - b.year)
   const after = sorted[sorted.length - 1]
   const before = sorted[sorted.length - 2]
-  return { before: before.visitorCount, after: after.visitorCount, beforeYear: before.year, afterYear: after.year, month: before.month }
+  return {
+    before: before.visitorCount,
+    after: after.visitorCount,
+    beforeYear: before.year,
+    afterYear: after.year,
+    month: before.month,
+  }
 }
 
 function round1(n) {

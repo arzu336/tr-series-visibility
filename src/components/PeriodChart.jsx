@@ -88,13 +88,7 @@ export default function PeriodChart({ periods, valueKey, range, onRangeChange, u
         <path d={areaPath} fill={AREA_COLOR} stroke="none" />
         <path d={linePath} fill="none" stroke={LINE_COLOR} strokeWidth="2" />
         {points.map((pt, i) => (
-          <circle
-            key={pt.period.period}
-            cx={pt.x}
-            cy={pt.y}
-            r={i === points.length - 1 ? 4 : 2.5}
-            fill={LINE_COLOR}
-          />
+          <circle key={pt.period.period} cx={pt.x} cy={pt.y} r={i === points.length - 1 ? 4 : 2.5} fill={LINE_COLOR} />
         ))}
         {points.map((pt, i) =>
           i % Math.ceil(points.length / 8) === 0 || i === points.length - 1 ? (

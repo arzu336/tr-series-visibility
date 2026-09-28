@@ -1,6 +1,10 @@
 import db from '../db.js'
 import { getEnrichedVisibility } from '../data-pipeline.js'
-import { getExpandedCandidatePool, getTravelLeadingIndicator, LEADING_INDICATOR_LAG_WEEKS } from './tourismCorrelation.js'
+import {
+  getExpandedCandidatePool,
+  getTravelLeadingIndicator,
+  LEADING_INDICATOR_LAG_WEEKS,
+} from './tourismCorrelation.js'
 import { getSerpApiUsageThisMonth, TIMESERIES_TTL_MS } from './serpApiCache.js'
 
 const TRAVEL_QUERIES = ['Travel to Turkey', 'Istanbul', 'Antalya']

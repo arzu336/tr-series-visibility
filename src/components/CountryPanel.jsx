@@ -46,7 +46,10 @@ function RegionalInterest({ seriesName, iso2 }) {
           <div key={r.region} className="benchmark-card__row">
             <div className="benchmark-card__row-label">{r.region}</div>
             <div className="benchmark-card__row-bar-track">
-              <div className="benchmark-card__row-bar" style={{ width: `${(r.value / maxValue) * 100}%`, background: '#3987e5' }} />
+              <div
+                className="benchmark-card__row-bar"
+                style={{ width: `${(r.value / maxValue) * 100}%`, background: '#3987e5' }}
+              />
             </div>
             <div className="benchmark-card__row-value">{r.value}</div>
           </div>
@@ -69,7 +72,12 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
         if (!series.has(s.id)) series.set(s.id, { id: s.id, name: s.name, posterPath: s.posterPath })
         for (const actor of s.cast || []) {
           if (!actors.has(actor.id)) {
-            actors.set(actor.id, { id: actor.id, name: actor.name, profilePath: actor.profilePath, seriesNames: new Set() })
+            actors.set(actor.id, {
+              id: actor.id,
+              name: actor.name,
+              profilePath: actor.profilePath,
+              seriesNames: new Set(),
+            })
           }
           actors.get(actor.id).seriesNames.add(s.name)
         }
@@ -81,9 +89,7 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
   const trimmed = query.trim().toLocaleLowerCase('tr')
   const showResults = trimmed.length >= MIN_QUERY_LENGTH
   const countryResults = showResults
-    ? countryIndex
-        .filter((c) => c.name.toLocaleLowerCase('tr').includes(trimmed))
-        .slice(0, MAX_RESULTS_PER_GROUP)
+    ? countryIndex.filter((c) => c.name.toLocaleLowerCase('tr').includes(trimmed)).slice(0, MAX_RESULTS_PER_GROUP)
     : []
   const actorResults = showResults
     ? Array.from(actorIndex.values())
@@ -99,7 +105,8 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
 
   return (
     <div className="panel-search">
-      <input aria-label="Ülke, dizi veya oyuncu ara"
+      <input
+        aria-label="Ülke, dizi veya oyuncu ara"
         type="text"
         className="panel-search__input"
         placeholder="Ülke, dizi veya oyuncu ara…"
@@ -184,9 +191,7 @@ function CountryScoreCard({ country }) {
       </div>
       <div
         className={
-          perCapita.status === 'unreliable'
-            ? 'panel__score-item panel__score-item--unreliable'
-            : 'panel__score-item'
+          perCapita.status === 'unreliable' ? 'panel__score-item panel__score-item--unreliable' : 'panel__score-item'
         }
         title={PER_CAPITA_SCORE_NOTE}
       >
@@ -407,89 +412,89 @@ export default function CountryPanel({
                       </button>
                     ))}
                   </div>
-                  {seriesRange !== 'current' && seriesPopularity && Object.values(seriesPopularity).some((v) => v.isPartial) && (
-                    <p className="dashboard__hint">Bazı diziler için veri henüz kısmi.</p>
-                  )}
+                  {seriesRange !== 'current' &&
+                    seriesPopularity &&
+                    Object.values(seriesPopularity).some((v) => v.isPartial) && (
+                      <p className="dashboard__hint">Bazı diziler için veri henüz kısmi.</p>
+                    )}
                   <ul className="panel__series-list">
                     {sortedSeriesList.map((s, i) => {
-                  const key = s.id ?? s.name
-                  const isExpanded = expandedId === key
-                  const isActiveOnMap = activeSeriesId != null && s.id === activeSeriesId
-                  const rawScore =
-                    seriesRange !== 'current' && seriesPopularity?.[s.id]?.value != null
-                      ? seriesPopularity[s.id].value
-                      : s.popularity
-                  return (
-                    <li
-                      key={key}
-                      className={
-                        isExpanded
-                          ? 'panel__series-item panel__series-item--expanded'
-                          : 'panel__series-item'
-                      }
-                      role="button"
-                      tabIndex={0}
-                      aria-expanded={isExpanded}
-                      aria-label={`${s.name} — ${isExpanded ? 'ayrıntıyı kapat' : 'ayrıntıyı aç ve haritada göster'}`}
-                      onClick={() => handleSelectSeriesRow(s, isExpanded, key)}
-                      onKeyDown={onEnterOrSpace(() => handleSelectSeriesRow(s, isExpanded, key))}
-                    >
-                      <div className="panel__series-row">
-                        <span className="panel__series-rank">{i + 1}.</span>
-                        {s.posterPath ? (
-                          <img className="panel__series-poster" src={`${POSTER_BASE}${s.posterPath}`} alt="" />
-                        ) : (
-                          <span className="panel__series-poster panel__series-poster--empty" aria-hidden="true" />
-                        )}
-                        <span className="panel__series-info">
-                          <span className="panel__series-name">
-                            {s.name}
-                            {isActiveOnMap && (
-                              <span className="panel__series-onmap" title="Haritada gösteriliyor">
-                                🗺️
+                      const key = s.id ?? s.name
+                      const isExpanded = expandedId === key
+                      const isActiveOnMap = activeSeriesId != null && s.id === activeSeriesId
+                      const rawScore =
+                        seriesRange !== 'current' && seriesPopularity?.[s.id]?.value != null
+                          ? seriesPopularity[s.id].value
+                          : s.popularity
+                      return (
+                        <li
+                          key={key}
+                          className={
+                            isExpanded ? 'panel__series-item panel__series-item--expanded' : 'panel__series-item'
+                          }
+                          role="button"
+                          tabIndex={0}
+                          aria-expanded={isExpanded}
+                          aria-label={`${s.name} — ${isExpanded ? 'ayrıntıyı kapat' : 'ayrıntıyı aç ve haritada göster'}`}
+                          onClick={() => handleSelectSeriesRow(s, isExpanded, key)}
+                          onKeyDown={onEnterOrSpace(() => handleSelectSeriesRow(s, isExpanded, key))}
+                        >
+                          <div className="panel__series-row">
+                            <span className="panel__series-rank">{i + 1}.</span>
+                            {s.posterPath ? (
+                              <img className="panel__series-poster" src={`${POSTER_BASE}${s.posterPath}`} alt="" />
+                            ) : (
+                              <span className="panel__series-poster panel__series-poster--empty" aria-hidden="true" />
+                            )}
+                            <span className="panel__series-info">
+                              <span className="panel__series-name">
+                                {s.name}
+                                {isActiveOnMap && (
+                                  <span className="panel__series-onmap" title="Haritada gösteriliyor">
+                                    🗺️
+                                  </span>
+                                )}
                               </span>
-                            )}
-                          </span>
-                          <span className="panel__series-meta">
-                            {yearOf(s.firstAirDate) || '—'} · {s.theme}
-                          </span>
-                        </span>
-                      </div>
-                      {isExpanded && (
-                        <div className="panel__series-detail" onClick={(e) => e.stopPropagation()}>
-                          <p className="panel__series-overview">{s.overview || 'Bu dizi için özet bulunmuyor.'}</p>
-                          <p className="panel__series-raw-score">
-                            Ham popülerlik puanı: <strong>{rawScore.toFixed(1)}</strong>
-                            {seriesRange !== 'current' && seriesPopularity?.[s.id]?.isPartial && (
-                              <span title="Bu dönem için veri henüz kısmi"> *</span>
-                            )}
-                            {seriesRange !== 'current' && seriesPopularity?.[s.id]?.source === 'reytingtv_rank' && (
-                              <span
-                                className="panel__series-source-tag"
-                                title="Türkiye'deki gerçek günlük reyting sırasına dayanıyor (canlı popülerlik verisi değil)"
-                              >
-                                TR
+                              <span className="panel__series-meta">
+                                {yearOf(s.firstAirDate) || '—'} · {s.theme}
                               </span>
-                            )}
-                          </p>
-                          <CastBar cast={s.cast} onSelectActor={onSelectActor} />
-                          <HybridScoreTag seriesName={s.name} iso2={country.iso2} />
-                          {onGoToSeriesAnalysis && (
-                            <button
-                              className="dashboard__link-btn"
-                              style={{ marginTop: '0.5rem' }}
-                              onClick={() => onGoToSeriesAnalysis(s.name)}
-                            >
-                              📊 Dizi Analizine Git
-                            </button>
+                            </span>
+                          </div>
+                          {isExpanded && (
+                            <div className="panel__series-detail" onClick={(e) => e.stopPropagation()}>
+                              <p className="panel__series-overview">{s.overview || 'Bu dizi için özet bulunmuyor.'}</p>
+                              <p className="panel__series-raw-score">
+                                Ham popülerlik puanı: <strong>{rawScore.toFixed(1)}</strong>
+                                {seriesRange !== 'current' && seriesPopularity?.[s.id]?.isPartial && (
+                                  <span title="Bu dönem için veri henüz kısmi"> *</span>
+                                )}
+                                {seriesRange !== 'current' && seriesPopularity?.[s.id]?.source === 'reytingtv_rank' && (
+                                  <span
+                                    className="panel__series-source-tag"
+                                    title="Türkiye'deki gerçek günlük reyting sırasına dayanıyor (canlı popülerlik verisi değil)"
+                                  >
+                                    TR
+                                  </span>
+                                )}
+                              </p>
+                              <CastBar cast={s.cast} onSelectActor={onSelectActor} />
+                              <HybridScoreTag seriesName={s.name} iso2={country.iso2} />
+                              {onGoToSeriesAnalysis && (
+                                <button
+                                  className="dashboard__link-btn"
+                                  style={{ marginTop: '0.5rem' }}
+                                  onClick={() => onGoToSeriesAnalysis(s.name)}
+                                >
+                                  📊 Dizi Analizine Git
+                                </button>
+                              )}
+                              <h4 className="panel__series-detail-heading">Basın &amp; Medya Algısı</h4>
+                              <MediaSentimentCard seriesId={s.id} iso2={country.iso2} />
+                            </div>
                           )}
-                          <h4 className="panel__series-detail-heading">Basın &amp; Medya Algısı</h4>
-                          <MediaSentimentCard seriesId={s.id} iso2={country.iso2} seriesName={s.name} />
-                        </div>
-                      )}
-                    </li>
-                  )
-                })}
+                        </li>
+                      )
+                    })}
                   </ul>
                 </>
               )}

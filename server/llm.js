@@ -81,7 +81,10 @@ async function callLLMForJson(prompt, maxTokens = 300) {
           return sonuc
         }
       } catch (err) {
-        lastError = err.name === 'AbortError' ? new Error(`LLM isteği ${LLM_TIMEOUT_MS / 1000} saniyede zaman aşımına uğradı`) : err
+        lastError =
+          err.name === 'AbortError'
+            ? new Error(`LLM isteği ${LLM_TIMEOUT_MS / 1000} saniyede zaman aşımına uğradı`)
+            : err
         if (attempt === MAX_RETRIES) throw lastError
       } finally {
         clearTimeout(timer)

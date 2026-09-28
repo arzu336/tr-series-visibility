@@ -32,7 +32,10 @@ const loginLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
-    const email = String(req.body?.email || '').trim().toLocaleLowerCase('tr').slice(0, 200)
+    const email = String(req.body?.email || '')
+      .trim()
+      .toLocaleLowerCase('tr')
+      .slice(0, 200)
     return `${ipKeyGenerator(req.ip)}|${email}`
   },
   message: { error: 'Çok fazla giriş denemesi yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.' },

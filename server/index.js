@@ -39,7 +39,9 @@ app.use(
   })
 )
 
-const trustProxyEnv = String(process.env.TRUST_PROXY || '').trim().toLowerCase()
+const trustProxyEnv = String(process.env.TRUST_PROXY || '')
+  .trim()
+  .toLowerCase()
 if (trustProxyEnv && trustProxyEnv !== 'false' && trustProxyEnv !== '0') {
   const hop = Number(trustProxyEnv)
   app.set('trust proxy', Number.isInteger(hop) && hop > 0 ? hop : 1)

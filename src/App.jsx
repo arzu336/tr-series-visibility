@@ -41,12 +41,18 @@ export default function App() {
   const [continentHighlight, setContinentHighlight] = useState(null)
   const [seriesFilter, setSeriesFilter] = useState(null)
   const [highlightFilter, setHighlightFilter] = useState(null)
-  const [sidebarCollapsed, setSidebarCollapsed] = usePersistedState(SIDEBAR_COLLAPSED_KEY, darEkranVarsayilani, boolStorage)
+  const [sidebarCollapsed, setSidebarCollapsed] = usePersistedState(
+    SIDEBAR_COLLAPSED_KEY,
+    darEkranVarsayilani,
+    boolStorage
+  )
   const [panelCollapsed, setPanelCollapsed] = usePersistedState(PANEL_COLLAPSED_KEY, darEkranVarsayilani, boolStorage)
   const [activeSeriesId, setActiveSeriesId] = useState(null)
   const [searchedSeriesId, setSearchedSeriesId] = useState(null)
   const [view, setView] = useState('map')
-  const [mapView, setMapView] = usePersistedState(MAP_VIEW_STORAGE_KEY, '2d', { parse: (s) => (s === '3d' ? '3d' : '2d') })
+  const [mapView, setMapView] = usePersistedState(MAP_VIEW_STORAGE_KEY, '2d', {
+    parse: (s) => (s === '3d' ? '3d' : '2d'),
+  })
   // Harita tek metrikle boyanır (kişi başına — bkz. lib/scale.js); kullanıcı seçicisi kaldırıldı.
   const mapMetric = MAP_METRICS.PER_CAPITA
   const [showPasswordModal, setShowPasswordModal] = useState(false)
@@ -117,21 +123,25 @@ export default function App() {
     return () => document.removeEventListener('keydown', handleKeyDown)
   }, [selected, selectedActorId, searchedSeriesId, handleCloseSelection])
 
-  const activeSeries =
-    selected?.seriesList?.find((s) => s.id === activeSeriesId) ?? selected?.seriesList?.[0] ?? null
+  const activeSeries = selected?.seriesList?.find((s) => s.id === activeSeriesId) ?? selected?.seriesList?.[0] ?? null
 
-  const imdbReq = useAsync(() => fetchImdbData(activeSeries.id), [activeSeries?.id], { enabled: activeSeries?.id != null })
+  const imdbReq = useAsync(() => fetchImdbData(activeSeries.id), [activeSeries?.id], {
+    enabled: activeSeries?.id != null,
+  })
   const imdbData = imdbReq.status === 'ready' ? imdbReq.data : null
   const imdbStatus =
     imdbReq.status === 'ready' ? imdbReq.data.status : imdbReq.status === 'error' ? 'unavailable' : imdbReq.status
 
-  const handleSelect = useCallback((country) => {
-    setSelected(country)
-    setActorHighlight(null)
-    setActiveSeriesId(null)
-    setSearchedSeriesId(null)
-    setPanelCollapsed(false)
-  }, [])
+  const handleSelect = useCallback(
+    (country) => {
+      setSelected(country)
+      setActorHighlight(null)
+      setActiveSeriesId(null)
+      setSearchedSeriesId(null)
+      setPanelCollapsed(false)
+    },
+    [setPanelCollapsed]
+  )
 
   const handleSelectCountryFromReport = useCallback(
     (iso2) => {
@@ -144,18 +154,21 @@ export default function App() {
       setPanelCollapsed(false)
       setView('map')
     },
-    [countries]
+    [countries, setPanelCollapsed]
   )
 
   const handleSelectSeries = useCallback((seriesId) => {
     setActiveSeriesId(seriesId)
   }, [])
 
-  const handleSelectSeriesGlobal = useCallback((seriesId) => {
-    setSearchedSeriesId(seriesId)
-    setSelectedActorId(null)
-    setPanelCollapsed(false)
-  }, [])
+  const handleSelectSeriesGlobal = useCallback(
+    (seriesId) => {
+      setSearchedSeriesId(seriesId)
+      setSelectedActorId(null)
+      setPanelCollapsed(false)
+    },
+    [setPanelCollapsed]
+  )
 
   const handleViewSeriesOnMap = useCallback(
     (seriesId) => {
@@ -165,10 +178,13 @@ export default function App() {
     [handleSelectSeriesGlobal]
   )
 
-  const handleSelectActor = useCallback((personId) => {
-    setSelectedActorId(personId)
-    setPanelCollapsed(false)
-  }, [])
+  const handleSelectActor = useCallback(
+    (personId) => {
+      setSelectedActorId(personId)
+      setPanelCollapsed(false)
+    },
+    [setPanelCollapsed]
+  )
 
   const handleSelectCountryGlobal = handleSelectCountryFromReport
 
@@ -210,17 +226,20 @@ export default function App() {
     setSeriesFilter(null)
   }, [])
 
-  const handleShowSeriesOnMap = useCallback((result) => {
-    setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
-    setHighlightFilter(null)
-    setActorHighlight(null)
-    setView('map')
-    if (result.seriesId != null) {
-      setSearchedSeriesId(result.seriesId)
-      setSelectedActorId(null)
-      setPanelCollapsed(false)
-    }
-  }, [])
+  const handleShowSeriesOnMap = useCallback(
+    (result) => {
+      setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
+      setHighlightFilter(null)
+      setActorHighlight(null)
+      setView('map')
+      if (result.seriesId != null) {
+        setSearchedSeriesId(result.seriesId)
+        setSelectedActorId(null)
+        setPanelCollapsed(false)
+      }
+    },
+    [setPanelCollapsed]
+  )
 
   const handleGoToSeriesAnalysis = useCallback((seriesName) => {
     window.history.pushState(null, '', `?series=${encodeURIComponent(seriesName)}`)
@@ -279,7 +298,8 @@ export default function App() {
               <h1 title="Türk Dizileri — Kültürel Görünürlük Haritası">Türk Dizileri — Kültürel Görünürlük Haritası</h1>
               {meta && (
                 <p className="app__meta">
-                  {meta.seriesCount} dizi · {countries.length} ülke · güncelleme: {new Date(meta.updatedAt).toLocaleString('tr-TR')}
+                  {meta.seriesCount} dizi · {countries.length} ülke · güncelleme:{' '}
+                  {new Date(meta.updatedAt).toLocaleString('tr-TR')}
                 </p>
               )}
             </div>
@@ -368,125 +388,122 @@ export default function App() {
 
       <main className="app__main">
         <ErrorBoundary name="görünüm" resetKey={view}>
-        <Suspense fallback={<div className="status">Yükleniyor…</div>}>
-          {view === 'dashboard' && user?.isAdmin && (
-            <AnalystDashboard
-              canEdit={Boolean(user?.isAdmin)}
-              onViewSeriesOnMap={handleViewSeriesOnMap}
-            />
-          )}
-          {view === 'trends' && <TrendsExplorer onShowOnMap={handleShowSeriesOnMap} />}
-          {view === 'impact' && user?.isAdmin && (
-            <ImpactAnalysisTabs onSelectCountry={handleSelectCountryFromReport} />
-          )}
-          {view === 'admin' && user?.isAdmin && <AdminUsersPanel currentUserId={user.id} />}
-          {view === 'map' && (
-            <>
-              {status === 'loading' && <div className="status">Veri yükleniyor…</div>}
-              {status === 'error' && <div className="status status--error">Veri alınamadı: {error}</div>}
-              {status === 'ready' && (
-                <div className="app__map-layout">
-                  <ContinentSidebar
-                    countries={countries}
-                    onSelectCountry={handleSelectCountryFromReport}
-                    onFocusContinent={handleFocusContinent}
-                    collapsed={sidebarCollapsed}
-                    onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
-                  />
-                  <div className="app__map-pane">
-                    <div className="app__map-controls">
-                      <MapViewToggle value={mapView} onChange={setMapView} />
+          <Suspense fallback={<div className="status">Yükleniyor…</div>}>
+            {view === 'dashboard' && user?.isAdmin && (
+              <AnalystDashboard canEdit={Boolean(user?.isAdmin)} onViewSeriesOnMap={handleViewSeriesOnMap} />
+            )}
+            {view === 'trends' && <TrendsExplorer onShowOnMap={handleShowSeriesOnMap} />}
+            {view === 'impact' && user?.isAdmin && (
+              <ImpactAnalysisTabs onSelectCountry={handleSelectCountryFromReport} />
+            )}
+            {view === 'admin' && user?.isAdmin && <AdminUsersPanel currentUserId={user.id} />}
+            {view === 'map' && (
+              <>
+                {status === 'loading' && <div className="status">Veri yükleniyor…</div>}
+                {status === 'error' && <div className="status status--error">Veri alınamadı: {error}</div>}
+                {status === 'ready' && (
+                  <div className="app__map-layout">
+                    <ContinentSidebar
+                      countries={countries}
+                      onSelectCountry={handleSelectCountryFromReport}
+                      onFocusContinent={handleFocusContinent}
+                      collapsed={sidebarCollapsed}
+                      onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
+                    />
+                    <div className="app__map-pane">
+                      <div className="app__map-controls">
+                        <MapViewToggle value={mapView} onChange={setMapView} />
+                      </div>
+                      {seriesFilter && (
+                        <div className="series-filter-badge">
+                          <span>
+                            Gösterilen Veri: <strong>{seriesFilter.seriesName}</strong> Küresel İlgi Dağılımı
+                          </span>
+                          <button onClick={clearSeriesFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
+                        </div>
+                      )}
+                      {highlightFilter && (
+                        <div className="series-filter-badge">
+                          <span>
+                            {highlightFilter.kind === 'actor' ? (
+                              <>
+                                Filtre: <strong>{highlightFilter.label}</strong> Projeleri
+                              </>
+                            ) : (
+                              <>
+                                Filtre: <strong>{highlightFilter.label}</strong> — Yayınlandığı Ülkeler
+                              </>
+                            )}
+                          </span>
+                          <button onClick={clearHighlightFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
+                        </div>
+                      )}
+                      {mapView === '3d' ? (
+                        <Globe3D
+                          countries={countries}
+                          metric={mapMetric}
+                          onSelect={handleSelect}
+                          popup={popup}
+                          focusTarget={focusTarget}
+                          actorHighlight={actorHighlight}
+                          selectedIso2={selected?.iso2}
+                          seriesFilter={seriesFilter}
+                          highlightFilter={highlightFilter}
+                          continentHighlight={continentHighlight}
+                          onResetView={handleResetMapView}
+                        />
+                      ) : (
+                        <Map2D
+                          countries={countries}
+                          metric={mapMetric}
+                          onSelect={handleSelect}
+                          popup={popup}
+                          focusTarget={focusTarget}
+                          actorHighlight={actorHighlight}
+                          selectedIso2={selected?.iso2}
+                          seriesFilter={seriesFilter}
+                          highlightFilter={highlightFilter}
+                          continentHighlight={continentHighlight}
+                          onResetView={handleResetMapView}
+                        />
+                      )}
+                      <Legend
+                        caption={
+                          seriesFilter
+                            ? `"${seriesFilter.seriesName}" için ülke bazlı Google Trends arama ilgisi (0-100) — gerçek izlenme rakamı değil, arama ilgisine dayalı bir yakınsama (proxy) göstergesidir.`
+                            : highlightFilter
+                              ? highlightFilter.kind === 'actor'
+                                ? `"${highlightFilter.label}" oyuncusunun takip edilen dizilerinden en az birinin gerçekten yayınlandığı ülkeler işaretlenir.`
+                                : `"${highlightFilter.label}" dizisinin gerçekten yayınlandığı ülkeler işaretlenir.`
+                              : undefined
+                        }
+                        metric={mapMetric}
+                      />
+                      <CountryPanel
+                        country={selected}
+                        allCountries={countries}
+                        onClose={handleCloseSelection}
+                        onSelectActor={handleSelectActor}
+                        onSelectSeries={handleSelectSeries}
+                        onSelectSeriesGlobal={handleSelectSeriesGlobal}
+                        onSelectCountry={handleSelectCountryGlobal}
+                        activeSeriesId={activeSeries?.id}
+                        collapsed={panelCollapsed}
+                        onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
+                        activeActorId={selectedActorId}
+                        onCloseActor={() => setSelectedActorId(null)}
+                        onShowActorNetwork={handleShowActorNetwork}
+                        activeSeriesGlobalId={searchedSeriesId}
+                        onCloseSeriesGlobal={() => setSearchedSeriesId(null)}
+                        onShowSeriesOnMap={handleShowSeriesAvailability}
+                        onGoToSeriesAnalysis={handleGoToSeriesAnalysis}
+                      />
                     </div>
-                    {seriesFilter && (
-                      <div className="series-filter-badge">
-                        <span>
-                          Gösterilen Veri: <strong>{seriesFilter.seriesName}</strong> Küresel İlgi Dağılımı
-                        </span>
-                        <button onClick={clearSeriesFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
-                      </div>
-                    )}
-                    {highlightFilter && (
-                      <div className="series-filter-badge">
-                        <span>
-                          {highlightFilter.kind === 'actor' ? (
-                            <>
-                              Filtre: <strong>{highlightFilter.label}</strong> Projeleri
-                            </>
-                          ) : (
-                            <>
-                              Filtre: <strong>{highlightFilter.label}</strong> — Yayınlandığı Ülkeler
-                            </>
-                          )}
-                        </span>
-                        <button onClick={clearHighlightFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
-                      </div>
-                    )}
-                    {mapView === '3d' ? (
-                      <Globe3D
-                        countries={countries}
-                        metric={mapMetric}
-                        onSelect={handleSelect}
-                        popup={popup}
-                        focusTarget={focusTarget}
-                        actorHighlight={actorHighlight}
-                        selectedIso2={selected?.iso2}
-                        seriesFilter={seriesFilter}
-                        highlightFilter={highlightFilter}
-                        continentHighlight={continentHighlight}
-                        onResetView={handleResetMapView}
-                      />
-                    ) : (
-                      <Map2D
-                        countries={countries}
-                        metric={mapMetric}
-                        onSelect={handleSelect}
-                        popup={popup}
-                        focusTarget={focusTarget}
-                        actorHighlight={actorHighlight}
-                        selectedIso2={selected?.iso2}
-                        seriesFilter={seriesFilter}
-                        highlightFilter={highlightFilter}
-                        continentHighlight={continentHighlight}
-                        onResetView={handleResetMapView}
-                      />
-                    )}
-                    <Legend
-                      caption={
-                        seriesFilter
-                          ? `"${seriesFilter.seriesName}" için ülke bazlı Google Trends arama ilgisi (0-100) — gerçek izlenme rakamı değil, arama ilgisine dayalı bir yakınsama (proxy) göstergesidir.`
-                          : highlightFilter
-                            ? highlightFilter.kind === 'actor'
-                              ? `"${highlightFilter.label}" oyuncusunun takip edilen dizilerinden en az birinin gerçekten yayınlandığı ülkeler işaretlenir.`
-                              : `"${highlightFilter.label}" dizisinin gerçekten yayınlandığı ülkeler işaretlenir.`
-                            : undefined
-                      }
-                      metric={mapMetric}
-                    />
-                    <CountryPanel
-                      country={selected}
-                      allCountries={countries}
-                      onClose={handleCloseSelection}
-                      onSelectActor={handleSelectActor}
-                      onSelectSeries={handleSelectSeries}
-                      onSelectSeriesGlobal={handleSelectSeriesGlobal}
-                      onSelectCountry={handleSelectCountryGlobal}
-                      activeSeriesId={activeSeries?.id}
-                      collapsed={panelCollapsed}
-                      onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
-                      activeActorId={selectedActorId}
-                      onCloseActor={() => setSelectedActorId(null)}
-                      onShowActorNetwork={handleShowActorNetwork}
-                      activeSeriesGlobalId={searchedSeriesId}
-                      onCloseSeriesGlobal={() => setSearchedSeriesId(null)}
-                      onShowSeriesOnMap={handleShowSeriesAvailability}
-                      onGoToSeriesAnalysis={handleGoToSeriesAnalysis}
-                    />
                   </div>
-                </div>
-              )}
-            </>
-          )}
-        </Suspense>
+                )}
+              </>
+            )}
+          </Suspense>
         </ErrorBoundary>
       </main>
     </div>

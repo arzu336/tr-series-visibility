@@ -4,7 +4,7 @@ const metaDeposu = new Map()
 
 vi.mock('./db.js', () => ({
   default: {
-    prepare: (sql) => ({
+    prepare: () => ({
       get: (key) => (metaDeposu.has(key) ? { value: metaDeposu.get(key) } : undefined),
       run: (key, value) => metaDeposu.set(key, value),
       all: () => [],
@@ -13,7 +13,10 @@ vi.mock('./db.js', () => ({
 }))
 
 const cagriSirasi = []
-const kaydet = (ad) => vi.fn(async () => { cagriSirasi.push(ad) })
+const kaydet = (ad) =>
+  vi.fn(async () => {
+    cagriSirasi.push(ad)
+  })
 
 vi.mock('./auth.js', () => ({ purgeExpiredSessions: vi.fn(() => 0) }))
 vi.mock('./cache.js', () => ({ purgeExpiredCacheEntries: vi.fn(() => 0) }))
@@ -22,7 +25,9 @@ vi.mock('./period-history.js', () => ({ rollupMonthlyIfNeeded: kaydet('gunluk:ro
 vi.mock('./series-period-history.js', () => ({ rollupSeriesMonthlyIfNeeded: kaydet('gunluk:seriesRollup') }))
 vi.mock('./services/tourismData.js', () => ({ syncTourismDataIfNeeded: kaydet('zincir:tourismSync') }))
 vi.mock('./services/autoNewsScheduler.js', () => ({ runAutoNewsScanIfNeeded: kaydet('zincir:news') }))
-vi.mock('./services/tourismTrendsCollector.js', () => ({ runTourismTrendsCollectionIfNeeded: kaydet('zincir:tourismTrends') }))
+vi.mock('./services/tourismTrendsCollector.js', () => ({
+  runTourismTrendsCollectionIfNeeded: kaydet('zincir:tourismTrends'),
+}))
 vi.mock('./services/socialEnricher.js', () => ({ runSocialEnrichmentIfNeeded: kaydet('zincir:social') }))
 vi.mock('./services/actorTrendsCollector.js', () => ({ runActorTrendsCollectionIfNeeded: kaydet('zincir:actor') }))
 vi.mock('./services/netflixPipelineRunner.js', () => ({ runNetflixSyncIfNeeded: kaydet('zincir:netflix') }))
@@ -103,7 +108,10 @@ describe('zamanlanmış tetikleme', () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
 
     await expect(runScheduledRefreshInner()).resolves.toBeUndefined()
-    expect(consoleError).toHaveBeenCalledWith('[scheduler] Netflix senkronizasyonu başarısız:', 'python: command not found')
+    expect(consoleError).toHaveBeenCalledWith(
+      '[scheduler] Netflix senkronizasyonu başarısız:',
+      'python: command not found'
+    )
 
     cagriSirasi.length = 0
     await runScheduledRefreshInner()

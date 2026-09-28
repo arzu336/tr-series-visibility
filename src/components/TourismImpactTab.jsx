@@ -77,7 +77,10 @@ function DidTable({ countries }) {
             <td style={{ color: c.treatmentChangePct >= 0 ? '#5cb85c' : '#f0574a' }}>
               {c.treatmentChangePct != null ? `${c.treatmentChangePct > 0 ? '+' : ''}${c.treatmentChangePct}%` : '—'}
             </td>
-            <td style={{ color: c.didEstimate >= 0 ? '#5cb85c' : '#f0574a' }} title="Bu ülkedeki turist artışının, benzer ama dizi etkisi olmayan karşılaştırılan ülkeye göre ne kadar fazla ya da az olduğu.">
+            <td
+              style={{ color: c.didEstimate >= 0 ? '#5cb85c' : '#f0574a' }}
+              title="Bu ülkedeki turist artışının, benzer ama dizi etkisi olmayan karşılaştırılan ülkeye göre ne kadar fazla ya da az olduğu."
+            >
               {c.didEstimate > 0 ? '+' : ''}
               {c.didEstimate.toLocaleString('tr-TR')} kişi
             </td>
@@ -121,8 +124,7 @@ function LeadingSignalSection({ leadingSignal }) {
   if (!leadingSignal || leadingSignal.status !== 'gerçek-veri-mevcut') {
     return (
       <p className="dashboard__empty">
-        Öncü seyahat sinyali için henüz veri toplanmadı. Haftalık tarama çalıştığında burada
-        görünecek.
+        Öncü seyahat sinyali için henüz veri toplanmadı. Haftalık tarama çalıştığında burada görünecek.
       </p>
     )
   }
@@ -133,11 +135,10 @@ function LeadingSignalSection({ leadingSignal }) {
   return (
     <>
       <p className="leading-signal__intro">
-        Bir dizinin o ülkedeki arama ilgisi ile aynı ülkeden gelen seyahat aramalarının
-        (&ldquo;Istanbul&rdquo;, &ldquo;Antalya&rdquo;, &ldquo;Travel to Turkey&rdquo;)
-        {' '}<strong>{lagWeeksRange}</strong> gecikmeli korelasyonu. {countriesScanned} ülke tarandı,{' '}
-        {signals.length} sinyal hesaplandı; bunlardan <strong>{significantCount} tanesi</strong>{' '}
-        istatistiksel eşiği geçiyor. Korelasyon nedensellik değildir.
+        Bir dizinin o ülkedeki arama ilgisi ile aynı ülkeden gelen seyahat aramalarının (&ldquo;Istanbul&rdquo;,
+        &ldquo;Antalya&rdquo;, &ldquo;Travel to Turkey&rdquo;) <strong>{lagWeeksRange}</strong> gecikmeli korelasyonu.{' '}
+        {countriesScanned} ülke tarandı, {signals.length} sinyal hesaplandı; bunlardan{' '}
+        <strong>{significantCount} tanesi</strong> istatistiksel eşiği geçiyor. Korelasyon nedensellik değildir.
       </p>
 
       {strongestSignal ? (
@@ -152,14 +153,15 @@ function LeadingSignalSection({ leadingSignal }) {
             {strongestSignal.direction === 'pozitif' ? 'aynı yönde' : 'ters yönde'} hareket ediyor.
           </span>
           <span className="leading-signal__hero-note">
-            En güçlü anlamlı sinyal · {strongestSignal.lagWeeks} hafta gecikme · {strongestSignal.sampleSize} haftalık örneklem
+            En güçlü anlamlı sinyal · {strongestSignal.lagWeeks} hafta gecikme · {strongestSignal.sampleSize} haftalık
+            örneklem
           </span>
         </div>
       ) : (
         <div className="leading-signal__hero">
           <span className="leading-signal__hero-label">
-            Hesaplanan {signals.length} sinyalin hiçbiri istatistiksel eşiği geçmiyor — bu
-            örneklemde öne çıkarılabilecek bir bulgu yok.
+            Hesaplanan {signals.length} sinyalin hiçbiri istatistiksel eşiği geçmiyor — bu örneklemde öne
+            çıkarılabilecek bir bulgu yok.
           </span>
         </div>
       )}
@@ -214,8 +216,8 @@ function LeadingSignalSection({ leadingSignal }) {
       </table>
       {signals.length > gosterilecek.length && (
         <p className="dashboard__empty" style={{ marginTop: '0.5rem' }}>
-          En güçlü {gosterilecek.length} sinyal gösteriliyor ({signals.length} sinyalin tamamı
-          anlamlılığa ve büyüklüğe göre sıralı).
+          En güçlü {gosterilecek.length} sinyal gösteriliyor ({signals.length} sinyalin tamamı anlamlılığa ve büyüklüğe
+          göre sıralı).
         </p>
       )}
     </>

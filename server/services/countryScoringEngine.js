@@ -17,14 +17,16 @@ function getNetflixScore(iso2, tmdbId) {
   if (!conn) return null
   try {
     const row = conn
-      .prepare('SELECT rank_score, weeks_in_top10, peak_rank, last_week_date FROM netflix_country_rankings WHERE country_iso2 = ? AND tmdb_id = ?')
+      .prepare(
+        'SELECT rank_score, weeks_in_top10, peak_rank, last_week_date FROM netflix_country_rankings WHERE country_iso2 = ? AND tmdb_id = ?'
+      )
       .get(iso2, tmdbId)
     if (!row) return null
     return {
       value: row.rank_score,
       evidence: `Resmi platform Top 10: ${row.weeks_in_top10} hafta, en iyi #${row.peak_rank} (${row.last_week_date || 'tarih yok'})`,
     }
-  } catch (err) {
+  } catch {
     return null
   }
 }
@@ -125,9 +127,19 @@ export async function calculateCountryCompositeScore(countryIso2) {
     const availability = getAvailabilityScore(raw.providersById[s.id]?.[iso2])
 
     const factors = [
-      { key: 'shareOfSearch', weight: WEIGHTS.shareOfSearch, value: sos ? sos.shareOfSearchPct : null, evidence: sos ? `Arama payı: %${sos.shareOfSearchPct}` : null },
+      {
+        key: 'shareOfSearch',
+        weight: WEIGHTS.shareOfSearch,
+        value: sos ? sos.shareOfSearchPct : null,
+        evidence: sos ? `Arama payı: %${sos.shareOfSearchPct}` : null,
+      },
       { key: 'netflix', weight: WEIGHTS.netflix, value: netflix?.value ?? null, evidence: netflix?.evidence ?? null },
-      { key: 'mediaSentiment', weight: WEIGHTS.mediaSentiment, value: sentiment?.value ?? null, evidence: sentiment?.evidence ?? null },
+      {
+        key: 'mediaSentiment',
+        weight: WEIGHTS.mediaSentiment,
+        value: sentiment?.value ?? null,
+        evidence: sentiment?.evidence ?? null,
+      },
       { key: 'availability', weight: WEIGHTS.availability, value: availability.value, evidence: availability.evidence },
     ]
     const { score, usedFactors } = weightedComposite(factors)

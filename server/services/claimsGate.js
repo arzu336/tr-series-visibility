@@ -1,4 +1,3 @@
-
 /**
  * Bir nesnenin iddia olup olmadığı — ayırt edici `claim_id`, `passed_gates` DEĞİL.
  *

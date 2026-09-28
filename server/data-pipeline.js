@@ -80,7 +80,10 @@ export async function getEnrichedVisibility({ waitForClassification = false } = 
       ? { ...c, trend: { direction: 'yetersiz-veri', changePct: null, windowDays: null }, history: [] }
       : { ...c, trend: getTrend(history, c.iso2, c.score), history: (history[c.iso2] || []).slice(-20) }
   )
-  maybeRecordSnapshot(history, data.countries.filter((c) => c.dataSource !== 'proxy'))
+  maybeRecordSnapshot(
+    history,
+    data.countries.filter((c) => c.dataSource !== 'proxy')
+  )
   maybeRecordSeriesSnapshot(raw.series)
 
   return { data, raw, destinationStore }

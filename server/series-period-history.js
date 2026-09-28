@@ -128,7 +128,12 @@ export function getSeriesPopularityMap(range) {
     const current = currentMonthAverages()
     const result = new Map()
     for (const [tmdbId, c] of current) {
-      result.set(tmdbId, { value: round1(c.sum / c.count), sampleCount: c.count, isPartial: false, source: 'tmdb_snapshot' })
+      result.set(tmdbId, {
+        value: round1(c.sum / c.count),
+        sampleCount: c.count,
+        isPartial: false,
+        source: 'tmdb_snapshot',
+      })
     }
     yuzdelikAta([...result.values()])
     return result

@@ -1,4 +1,3 @@
-
 const BASIS_LABELS = {
   'internet-kullanicisi': 'milyon internet kullanıcısı',
   nufus: 'milyon kişi (nüfus)',

@@ -47,8 +47,9 @@ export function differenceInDifferences({ treatmentBefore, treatmentAfter, contr
 
 function logGamma(x) {
   const cof = [
-    76.18009172947146, -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2,
-    -0.5395239384953e-5,
+    // eslint-disable-next-line no-loss-of-precision -- Lanczos katsayıları (Numerical Recipes); double'a yuvarlanması yöntemin parçası, değiştirilmemeli
+    76.18009172947146,
+    -86.50532032941677, 24.01409824083091, -1.231739572450155, 0.1208650973866179e-2, -0.5395239384953e-5,
   ]
   let y = x
   let tmp = x + 5.5
@@ -58,6 +59,7 @@ function logGamma(x) {
     y += 1
     ser += cof[j] / y
   }
+  // eslint-disable-next-line no-loss-of-precision -- sqrt(2π) sabiti, aynı gerekçe
   return -tmp + Math.log((2.5066282746310005 * ser) / x)
 }
 
@@ -254,7 +256,12 @@ export async function computeTourismCorrelation(countries) {
   const pairs = withData.filter((w) => w.visibilityChangePct != null && w.treatmentChangePct != null)
   const hasEnoughForCorrelation = pairs.length >= 3
   const correlation = hasEnoughForCorrelation
-    ? round2(pearsonCorrelation(pairs.map((p) => p.visibilityChangePct), pairs.map((p) => p.treatmentChangePct)))
+    ? round2(
+        pearsonCorrelation(
+          pairs.map((p) => p.visibilityChangePct),
+          pairs.map((p) => p.treatmentChangePct)
+        )
+      )
     : null
   const pValue = hasEnoughForCorrelation ? pValueForPearsonR(correlation, pairs.length) : null
   const hasEnoughForConfidenceInterval = pairs.length >= 4
@@ -262,7 +269,10 @@ export async function computeTourismCorrelation(countries) {
 
   const topCandidate = [...withData].sort((a, b) => b.visibilityScore - a.visibilityScore)[0]
   const leadingIndicator = topCandidate
-    ? await getTravelLeadingIndicator(topCandidate.iso2, candidates.find((c) => c.iso2 === topCandidate.iso2)?.topSeriesName)
+    ? await getTravelLeadingIndicator(
+        topCandidate.iso2,
+        candidates.find((c) => c.iso2 === topCandidate.iso2)?.topSeriesName
+      )
     : null
 
   return {

@@ -25,6 +25,7 @@ export function inTransaction(fn) {
     try {
       db.exec('ROLLBACK')
     } catch {
+      // İşlem zaten sonlanmış olabilir (ör. bağlantı kapandı); asıl hata aşağıda fırlatılıyor.
     }
     throw err
   }
@@ -302,29 +303,31 @@ db.exec('DROP TABLE IF EXISTS spot_checks')
 
 db.exec('DROP TABLE IF EXISTS trakt_cache')
 
-const cacheColumns = db.prepare("PRAGMA table_info(cache_entries)").all()
+const cacheColumns = db.prepare('PRAGMA table_info(cache_entries)').all()
 if (!cacheColumns.some((c) => c.name === 'updated_at')) {
   db.exec('ALTER TABLE cache_entries ADD COLUMN updated_at INTEGER')
 }
 
-const usersColumns = db.prepare("PRAGMA table_info(users)").all()
+const usersColumns = db.prepare('PRAGMA table_info(users)').all()
 if (!usersColumns.some((c) => c.name === 'access_level')) {
-  db.exec("ALTER TABLE users ADD COLUMN access_level TEXT")
-  db.exec("UPDATE users SET access_level = CASE WHEN is_admin = 1 THEN 'admin' ELSE 'analyst' END WHERE access_level IS NULL")
+  db.exec('ALTER TABLE users ADD COLUMN access_level TEXT')
+  db.exec(
+    "UPDATE users SET access_level = CASE WHEN is_admin = 1 THEN 'admin' ELSE 'analyst' END WHERE access_level IS NULL"
+  )
 }
 
-const themeColumns = db.prepare("PRAGMA table_info(theme_classifications)").all()
+const themeColumns = db.prepare('PRAGMA table_info(theme_classifications)').all()
 if (themeColumns.some((c) => c.name === 'sentiment')) {
   db.exec('ALTER TABLE theme_classifications DROP COLUMN sentiment')
 }
 
-const destColumns = db.prepare("PRAGMA table_info(destination_classifications)").all()
+const destColumns = db.prepare('PRAGMA table_info(destination_classifications)').all()
 if (!destColumns.some((c) => c.name === 'detection_method')) {
-  db.exec("ALTER TABLE destination_classifications ADD COLUMN detection_method TEXT")
+  db.exec('ALTER TABLE destination_classifications ADD COLUMN detection_method TEXT')
   db.exec("UPDATE destination_classifications SET detection_method = 'keyword' WHERE detection_method IS NULL")
 }
 
-const mediaSentimentColumns = db.prepare("PRAGMA table_info(media_sentiment)").all()
+const mediaSentimentColumns = db.prepare('PRAGMA table_info(media_sentiment)').all()
 if (!mediaSentimentColumns.some((c) => c.name === 'override_sentiment')) {
   db.exec('ALTER TABLE media_sentiment ADD COLUMN override_sentiment TEXT')
   db.exec('ALTER TABLE media_sentiment ADD COLUMN override_reviewer TEXT')
@@ -332,18 +335,18 @@ if (!mediaSentimentColumns.some((c) => c.name === 'override_sentiment')) {
 }
 
 if (!mediaSentimentColumns.some((c) => c.name === 'source')) {
-  db.exec("ALTER TABLE media_sentiment ADD COLUMN source TEXT")
+  db.exec('ALTER TABLE media_sentiment ADD COLUMN source TEXT')
   db.exec("UPDATE media_sentiment SET source = 'serpapi' WHERE source IS NULL")
 }
 
-const seriesMonthlyColumns = db.prepare("PRAGMA table_info(series_popularity_monthly)").all()
+const seriesMonthlyColumns = db.prepare('PRAGMA table_info(series_popularity_monthly)').all()
 if (!seriesMonthlyColumns.some((c) => c.name === 'source')) {
-  db.exec("ALTER TABLE series_popularity_monthly ADD COLUMN source TEXT")
+  db.exec('ALTER TABLE series_popularity_monthly ADD COLUMN source TEXT')
 }
 db.exec("UPDATE series_popularity_monthly SET source = 'tmdb_snapshot' WHERE source IS NULL")
 
 const seriesMonthlyPk = db
-  .prepare("PRAGMA table_info(series_popularity_monthly)")
+  .prepare('PRAGMA table_info(series_popularity_monthly)')
   .all()
   .filter((c) => c.pk > 0)
   .map((c) => c.name)

@@ -59,9 +59,7 @@ const MIN_CONTINENT_SCALE = 1.15
 const MAX_CONTINENT_SCALE = 2.0
 
 export function continentCentroid(countryList) {
-  const points = (countryList || [])
-    .map((c) => countryNames[c.iso2])
-    .filter(Boolean)
+  const points = (countryList || []).map((c) => countryNames[c.iso2]).filter(Boolean)
   if (points.length === 0) return null
 
   const lat = points.reduce((sum, p) => sum + p.lat, 0) / points.length

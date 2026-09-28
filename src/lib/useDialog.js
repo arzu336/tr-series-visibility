@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react'
 
-const FOCUSABLE = 'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
+const FOCUSABLE =
+  'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])'
 
 // Modal erişilebilirliği: Escape kapatır, Tab odak kutunun içinde döner (focus trap), açılışta
 // ilk alan odaklanır, kapanışta odak açan öğeye geri verilir. Bileşen `ref`'i diyalog kutusuna

@@ -5,16 +5,7 @@ import { mapWithConcurrency } from './utils/concurrency.js'
 
 const CLASSIFY_CONCURRENCY = 5
 
-export const THEMES = [
-  'aile',
-  'kadın hakları',
-  'göç',
-  'adalet',
-  'aşk',
-  'suç örgütü',
-  'tarih',
-  'diğer',
-]
+export const THEMES = ['aile', 'kadın hakları', 'göç', 'adalet', 'aşk', 'suç örgütü', 'tarih', 'diğer']
 
 const selectAllStmt = db.prepare('SELECT * FROM theme_classifications')
 const selectOneStmt = db.prepare('SELECT * FROM theme_classifications WHERE id = ?')
@@ -76,7 +67,15 @@ async function ensureClassifiedInner(series) {
       const failureCount = (previous?.failure_count || 0) + 1
       const failedAt = Date.now()
       const retryDelayMs = Math.min(6 * 60 * 60 * 1000, 5 * 60 * 1000 * 2 ** (failureCount - 1))
-      upsertFailureStmt.run(s.id, s.name, s.overview, failureCount, err.message.slice(0, 500), failedAt, failedAt + retryDelayMs)
+      upsertFailureStmt.run(
+        s.id,
+        s.name,
+        s.overview,
+        failureCount,
+        err.message.slice(0, 500),
+        failedAt,
+        failedAt + retryDelayMs
+      )
       console.error(`[themes] "${s.name}" (id:${s.id}) LLM ile sınıflandırılamadı:`, err.message)
     }
   })

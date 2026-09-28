@@ -33,9 +33,13 @@ export function createTrendStore({
     ? db.prepare(
         `DELETE FROM ${table} WHERE ${keyColumn} = ? AND rowid NOT IN (SELECT rowid FROM ${table} WHERE ${keyColumn} = ? ORDER BY captured_at DESC LIMIT ?)`
       )
-    : db.prepare(`DELETE FROM ${table} WHERE rowid NOT IN (SELECT rowid FROM ${table} ORDER BY captured_at DESC LIMIT ?)`)
+    : db.prepare(
+        `DELETE FROM ${table} WHERE rowid NOT IN (SELECT rowid FROM ${table} ORDER BY captured_at DESC LIMIT ?)`
+      )
   const selectMetaStmt = db.prepare('SELECT value FROM meta WHERE key = ?')
-  const setMetaStmt = db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value')
+  const setMetaStmt = db.prepare(
+    'INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'
+  )
 
   const entry = (v, capturedAt) => ({ [valueField]: v, capturedAt })
 

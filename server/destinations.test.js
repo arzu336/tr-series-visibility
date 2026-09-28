@@ -3,7 +3,7 @@ import { detectDestinations } from './destinations.js'
 
 describe('detectDestinations', () => {
   it('sinopsiste geçen yer adından doğru destinasyonu bulur', () => {
-    expect(detectDestinations('Bir aile Kapadokya\'da balon turuna çıkar.', 'Test Dizisi')).toEqual(['kapadokya'])
+    expect(detectDestinations("Bir aile Kapadokya'da balon turuna çıkar.", 'Test Dizisi')).toEqual(['kapadokya'])
   })
 
   it('hiçbir bilinen yer adı geçmiyorsa boş dizi döner (uydurmaz)', () => {
@@ -16,7 +16,7 @@ describe('detectDestinations', () => {
   })
 
   it('birden fazla eşleşmeyi anahtar kelime sayısına göre sıralar', () => {
-    const result = detectDestinations('Mardin ve Midyat\'ta geçen hikaye, bir de Adana\'ya uğrarlar.', '')
+    const result = detectDestinations("Mardin ve Midyat'ta geçen hikaye, bir de Adana'ya uğrarlar.", '')
     expect(result[0]).toBe('mardin')
     expect(result).toContain('adana')
   })

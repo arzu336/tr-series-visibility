@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  isClaimLike,
-  onlyVerifiedClaims,
-  countUnverified,
-  sanitizeClaimsPayload,
-} from './claimsGate.js'
+import { isClaimLike, onlyVerifiedClaims, countUnverified, sanitizeClaimsPayload } from './claimsGate.js'
 
 const dogrulanmis = { claim_id: 'a', passed_gates: true, failed_gates: [], change_pct: 45.5 }
 const dogrulanmamis = { claim_id: 'b', passed_gates: false, failed_gates: ['volume'], change_pct: 100 }

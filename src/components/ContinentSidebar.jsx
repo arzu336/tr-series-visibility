@@ -14,8 +14,18 @@ function round1(n) {
 }
 
 const MONTH_NAMES_TR = [
-  'Ocak', 'Şubat', 'Mart', 'Nisan', 'Mayıs', 'Haziran',
-  'Temmuz', 'Ağustos', 'Eylül', 'Ekim', 'Kasım', 'Aralık',
+  'Ocak',
+  'Şubat',
+  'Mart',
+  'Nisan',
+  'Mayıs',
+  'Haziran',
+  'Temmuz',
+  'Ağustos',
+  'Eylül',
+  'Ekim',
+  'Kasım',
+  'Aralık',
 ]
 
 function ExportTourismStats({ tourismItems, continentCountries }) {
@@ -130,7 +140,9 @@ export default function ContinentSidebar({
           {continentStats.map((c) => (
             <button
               key={c.id}
-              className={c.id === selectedId ? 'sidebar__continent-btn sidebar__continent-btn--active' : 'sidebar__continent-btn'}
+              className={
+                c.id === selectedId ? 'sidebar__continent-btn sidebar__continent-btn--active' : 'sidebar__continent-btn'
+              }
               onClick={() => handleSelectContinent(c.id)}
               disabled={c.countryCount === 0}
             >
@@ -169,7 +181,9 @@ export default function ContinentSidebar({
             {/* Türkçe Dil Öğrenim İlgisi */}
             <div className="sidebar__big-card">
               <div className="sidebar__big-card-label">🇹🇷 Türkçe Dil Öğrenim İlgisi</div>
-              {learningStatus === 'loading' && <div className="sidebar__big-card-value sidebar__big-card-value--muted">Yükleniyor…</div>}
+              {learningStatus === 'loading' && (
+                <div className="sidebar__big-card-value sidebar__big-card-value--muted">Yükleniyor…</div>
+              )}
               {learningStatus !== 'loading' && !topLearningCountry && (
                 <div className="sidebar__big-card-value sidebar__big-card-value--muted">Veri birikiyor</div>
               )}
@@ -204,7 +218,8 @@ export default function ContinentSidebar({
                         >
                           <span className="sidebar__top-country-name">{nameOf(country.iso2)}</span>
                           <span className="sidebar__top-country-meta">
-                            Skor: {round1(country.score)} · Kıta payı %{computeSharePct(country.score, selected.totalScore)}
+                            Skor: {round1(country.score)} · Kıta payı %
+                            {computeSharePct(country.score, selected.totalScore)}
                           </span>
                         </button>
                       </li>

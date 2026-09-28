@@ -21,7 +21,12 @@ const h = vi.hoisted(() => {
   const durum = { coz: null }
   return {
     durum,
-    siniflandirma: vi.fn(() => new Promise((resolve) => { durum.coz = resolve })),
+    siniflandirma: vi.fn(
+      () =>
+        new Promise((resolve) => {
+          durum.coz = resolve
+        })
+    ),
     tespit: vi.fn(async () => ({})),
     temaDeposu: {},
   }
@@ -31,11 +36,23 @@ const siniflandirmaCoz = () => h.durum.coz?.()
 
 vi.mock('./tmdb.js', async (orig) => ({ ...(await orig()), getRawSeriesData: async () => HAM }))
 vi.mock('./cache.js', () => ({ getCached: () => null, setCached: () => {} }))
-vi.mock('./themes.js', async (orig) => ({ ...(await orig()), ensureClassified: h.siniflandirma, getThemeStore: () => h.temaDeposu }))
-vi.mock('./destinations.js', async (orig) => ({ ...(await orig()), ensureDetected: h.tespit, getDestinationStore: () => ({}) }))
+vi.mock('./themes.js', async (orig) => ({
+  ...(await orig()),
+  ensureClassified: h.siniflandirma,
+  getThemeStore: () => h.temaDeposu,
+}))
+vi.mock('./destinations.js', async (orig) => ({
+  ...(await orig()),
+  ensureDetected: h.tespit,
+  getDestinationStore: () => ({}),
+}))
 vi.mock('./services/countryDemographics.js', () => ({ getCountryDemographics: async () => ({}) }))
 vi.mock('./services/proxyScore.js', () => ({ getFallbackInterestScores: async () => ({}) }))
-vi.mock('./history.js', () => ({ loadHistoryStore: () => ({}), getTrend: () => ({ direction: 'yetersiz-veri' }), maybeRecordSnapshot: () => {} }))
+vi.mock('./history.js', () => ({
+  loadHistoryStore: () => ({}),
+  getTrend: () => ({ direction: 'yetersiz-veri' }),
+  maybeRecordSnapshot: () => {},
+}))
 vi.mock('./series-period-history.js', () => ({ maybeRecordSeriesSnapshot: () => {} }))
 vi.mock('./aggregate.js', async (orig) => {
   const gercek = await orig()
@@ -83,7 +100,9 @@ describe('getEnrichedVisibility — sınıflandırmayı beklemez', () => {
 
   it('waitForClassification: true ile (scheduler) bitmesini bekler', async () => {
     let bitti = false
-    const soz = getEnrichedVisibility({ waitForClassification: true }).then(() => { bitti = true })
+    const soz = getEnrichedVisibility({ waitForClassification: true }).then(() => {
+      bitti = true
+    })
     await new Promise((r) => setTimeout(r, 20))
     expect(bitti).toBe(false)
     siniflandirmaCoz()

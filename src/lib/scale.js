@@ -118,9 +118,7 @@ export function buildPercentileScale(values) {
 export function buildMapScale(countries, metric = MAP_METRICS.PER_CAPITA) {
   const perCapita = metric === MAP_METRICS.PER_CAPITA
   const inDomain = (c) =>
-    c.dataSource !== 'proxy' &&
-    c.iso2 !== SOURCE_COUNTRY_ISO2 &&
-    !(perCapita && c.perCapitaReliable === false)
+    c.dataSource !== 'proxy' && c.iso2 !== SOURCE_COUNTRY_ISO2 && !(perCapita && c.perCapitaReliable === false)
 
   const scale = buildPercentileScale((countries || []).filter(inDomain).map((c) => metricValueOf(c, metric)))
 

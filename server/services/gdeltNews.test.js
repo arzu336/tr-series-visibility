@@ -82,12 +82,28 @@ describe('normalizeGdeltArticles', () => {
 })
 
 const CANLI_ULKE_ADLARI = [
-  ['Ukraine', 'UA'], ['Bulgaria', 'BG'], ['Pakistan', 'PK'], ['Bosnia-Herzegovina', 'BA'],
-  ['Serbia', 'RS'], ['Poland', 'PL'], ['Hungary', 'HU'], ['Slovak Republic', 'SK'],
-  ['United Kingdom', 'GB'], ['Russia', 'RU'], ['Macedonia', 'MK'], ['Germany', 'DE'],
-  ['Azerbaijan', 'AZ'], ['India', 'IN'], ['Turkey', 'TR'], ['United States', 'US'],
-  ['Saudi Arabia', 'SA'], ['Greece', 'GR'], ['Italy', 'IT'], ['Bangladesh', 'BD'],
-  ['Israel', 'IL'], ['South Africa', 'ZA'],
+  ['Ukraine', 'UA'],
+  ['Bulgaria', 'BG'],
+  ['Pakistan', 'PK'],
+  ['Bosnia-Herzegovina', 'BA'],
+  ['Serbia', 'RS'],
+  ['Poland', 'PL'],
+  ['Hungary', 'HU'],
+  ['Slovak Republic', 'SK'],
+  ['United Kingdom', 'GB'],
+  ['Russia', 'RU'],
+  ['Macedonia', 'MK'],
+  ['Germany', 'DE'],
+  ['Azerbaijan', 'AZ'],
+  ['India', 'IN'],
+  ['Turkey', 'TR'],
+  ['United States', 'US'],
+  ['Saudi Arabia', 'SA'],
+  ['Greece', 'GR'],
+  ['Italy', 'IT'],
+  ['Bangladesh', 'BD'],
+  ['Israel', 'IL'],
+  ['South Africa', 'ZA'],
 ]
 
 describe('ülke adı doğrulaması — canlı GDELT adlarıyla', () => {

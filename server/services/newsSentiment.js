@@ -233,7 +233,9 @@ export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle,
     articles = sonuc.news
   } catch (err) {
     if (existing) {
-      console.error(`[newsSentiment] ${seriesName}/${iso2} için canlı istek başarısız (${err.message}), stale önbellek dönülüyor.`)
+      console.error(
+        `[newsSentiment] ${seriesName}/${iso2} için canlı istek başarısız (${err.message}), stale önbellek dönülüyor.`
+      )
       return rowToResult(existing, { stale: true, staleReason: err.message })
     }
     throw err
@@ -243,7 +245,21 @@ export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle,
   const expiresAt = now.getTime() + NEWS_SENTIMENT_TTL_MS
 
   if (articles.length === 0) {
-    upsertStmt.run(seriesId, iso2, query, 0, null, null, null, 'yetersiz-veri', null, JSON.stringify([]), nowIso, expiresAt, NEWS_SOURCE)
+    upsertStmt.run(
+      seriesId,
+      iso2,
+      query,
+      0,
+      null,
+      null,
+      null,
+      'yetersiz-veri',
+      null,
+      JSON.stringify([]),
+      nowIso,
+      expiresAt,
+      NEWS_SOURCE
+    )
     return rowToResult(getStmt.get(seriesId, iso2), { fromCache: false, stale: false })
   }
 

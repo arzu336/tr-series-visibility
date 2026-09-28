@@ -46,7 +46,8 @@ function sahteExec(senaryo = {}) {
       }
       cb(
         null,
-        senaryo.stdout ?? `2026-09-27 00:30:01 INFO    [netflix_pipeline] 400 TMDB dizisi yüklendi\nRESULT_JSON ${OZET}\n`,
+        senaryo.stdout ??
+          `2026-09-27 00:30:01 INFO    [netflix_pipeline] 400 TMDB dizisi yüklendi\nRESULT_JSON ${OZET}\n`,
         senaryo.stderr || ''
       )
     }
@@ -123,7 +124,14 @@ describe('runNetflixPipeline — alt süreç sarmalayıcısı', () => {
       const exec = sahteExec()
       await runNetflixPipeline({ exec })
       const env = exec.cagrilar[0].opts.env
-      for (const gizli of ['SERPAPI_API_KEY', 'TMDB_API_KEY', 'APP_PASSWORD', 'LLM_API_KEY', 'ADMIN_EMAIL', 'OMDB_API_KEY']) {
+      for (const gizli of [
+        'SERPAPI_API_KEY',
+        'TMDB_API_KEY',
+        'APP_PASSWORD',
+        'LLM_API_KEY',
+        'ADMIN_EMAIL',
+        'OMDB_API_KEY',
+      ]) {
         expect(env).not.toHaveProperty(gizli)
       }
       expect(env.NETFLIX_DOWNLOAD_DEADLINE_S).toBe('540')
@@ -136,7 +144,10 @@ describe('runNetflixPipeline — alt süreç sarmalayıcısı', () => {
   })
 
   it('çıkış kodu ≠ 0 → failed, reddetmez, stderr taşınır', async () => {
-    const exec = sahteExec({ hata: { code: 1, message: 'Command failed' }, stderr: 'Traceback: RuntimeError: hiç veri indirilemedi' })
+    const exec = sahteExec({
+      hata: { code: 1, message: 'Command failed' },
+      stderr: 'Traceback: RuntimeError: hiç veri indirilemedi',
+    })
     const sonuc = await runNetflixPipeline({ exec })
     expect(sonuc.status).toBe('failed')
     expect(sonuc.reason).toMatch(/çıkış kodu 1/)

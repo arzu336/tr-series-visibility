@@ -30,7 +30,9 @@ export function burnPasswordVerification(password) {
 }
 
 function normalizeEmail(email) {
-  return String(email || '').trim().toLowerCase()
+  return String(email || '')
+    .trim()
+    .toLowerCase()
 }
 
 const selectByEmailStmt = db.prepare('SELECT * FROM users WHERE email = ?')
@@ -188,7 +190,8 @@ export function changeUserPassword(id, currentPassword, newPassword) {
 
 export function publicUser(entry) {
   if (!entry) return null
-  const { passwordHash, ...rest } = entry
+  const rest = { ...entry }
+  delete rest.passwordHash
   return rest
 }
 
@@ -203,11 +206,15 @@ export function ensureBootstrapAdmin() {
   }
   const PLACEHOLDER_PASSWORDS = ['change_this_password', 'changeme', 'password']
   if (PLACEHOLDER_PASSWORDS.includes(password.toLowerCase())) {
-    console.error('[users] APP_PASSWORD örnek/varsayılan değerde — bootstrap admin OLUŞTURULMADI. .env dosyasında gerçek bir şifre tanımlayın.')
+    console.error(
+      '[users] APP_PASSWORD örnek/varsayılan değerde — bootstrap admin OLUŞTURULMADI. .env dosyasında gerçek bir şifre tanımlayın.'
+    )
     return
   }
   if (password.length < MIN_ADMIN_PASSWORD_LENGTH) {
-    console.error(`[users] APP_PASSWORD en az ${MIN_ADMIN_PASSWORD_LENGTH} karakter olmalı — bootstrap admin OLUŞTURULMADI.`)
+    console.error(
+      `[users] APP_PASSWORD en az ${MIN_ADMIN_PASSWORD_LENGTH} karakter olmalı — bootstrap admin OLUŞTURULMADI.`
+    )
     return
   }
   const email = normalizeEmail(process.env.ADMIN_EMAIL || 'admin@kurum.gov.tr')
@@ -221,6 +228,18 @@ export function ensureBootstrapAdmin() {
   }
 
   const id = 'usr_' + crypto.randomBytes(12).toString('hex')
-  insertStmt.run(id, 'Yönetici', email, 'Sistem Yöneticisi', hashPassword(password), 'approved', 1, 'admin', now, now, null)
+  insertStmt.run(
+    id,
+    'Yönetici',
+    email,
+    'Sistem Yöneticisi',
+    hashPassword(password),
+    'approved',
+    1,
+    'admin',
+    now,
+    now,
+    null
+  )
   console.log(`[users] Bootstrap admin oluşturuldu: ${email}`)
 }

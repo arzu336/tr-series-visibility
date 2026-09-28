@@ -35,7 +35,9 @@ async function enrichSeriesAcrossCountries(seriesName, countryIso2s, { throttle 
     }
     try {
       const key = localizedSocialCacheKey(seriesName, iso2)
-      const result = await cacheFirstSerpApi(key, SOCIAL_TTL_MS, () => fetchLocalizedSocialListeningRaw(seriesName, iso2))
+      const result = await cacheFirstSerpApi(key, SOCIAL_TTL_MS, () =>
+        fetchLocalizedSocialListeningRaw(seriesName, iso2)
+      )
       scanned++
       if (!result.fromCache) {
         liveCalls++

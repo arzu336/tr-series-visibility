@@ -65,11 +65,14 @@ export default function DonutChart({
   }
 
   return (
-    <div
-      className="donut"
-      onMouseLeave={() => onHoverChange?.(null)}
-    >
-      <svg viewBox={`0 0 ${SIZE} ${SIZE}`} width={SIZE} height={SIZE} role="img" aria-label="Parça-bütün dağılımı (donut grafik)">
+    <div className="donut" onMouseLeave={() => onHoverChange?.(null)}>
+      <svg
+        viewBox={`0 0 ${SIZE} ${SIZE}`}
+        width={SIZE}
+        height={SIZE}
+        role="img"
+        aria-label="Parça-bütün dağılımı (donut grafik)"
+      >
         <defs>
           <filter id={glowFilterId} x="-60%" y="-60%" width="220%" height="220%">
             <feGaussianBlur stdDeviation="6" result="blur" />
@@ -107,13 +110,7 @@ export default function DonutChart({
               role={clickable && !s.isOther ? 'button' : undefined}
             >
               {isHovered && !s.isOther && (
-                <path
-                  d={d}
-                  fill={s.color}
-                  opacity="0.75"
-                  filter={`url(#${glowFilterId})`}
-                  className="donut__glow"
-                />
+                <path d={d} fill={s.color} opacity="0.75" filter={`url(#${glowFilterId})`} className="donut__glow" />
               )}
               <path
                 d={d}
