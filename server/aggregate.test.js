@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { attachPerCapitaScores, PER_CAPITA_BASIS, MIN_PER_CAPITA_DENOMINATOR } from './aggregate.js'
+import { attachPerCapitaScores, platformNames, PER_CAPITA_BASIS, MIN_PER_CAPITA_DENOMINATOR } from './aggregate.js'
 
 const demo = {
   DE: {
@@ -114,5 +114,26 @@ describe('attachPerCapitaScores', () => {
     expect(sonuc.score).toBe(500)
     expect(sonuc.seriesCount).toBe(30)
     expect(sonuc.dominantTheme).toBe('aile')
+  })
+})
+
+describe('platformNames', () => {
+  it('tekrarları ve ana adı da listede olan varyantları atar', () => {
+    const entry = {
+      flatrate: [
+        { provider_name: 'Netflix' },
+        { provider_name: 'HBO Max' },
+        { provider_name: 'HBO Max Amazon Channel' },
+      ],
+      free: [{ provider_name: 'Netflix Standard with Ads' }, { provider_name: 'Netflix' }],
+    }
+    expect(platformNames(entry)).toEqual(['Netflix', 'HBO Max'])
+  })
+
+  it('yalnızca varyant varsa onu korur; boş kayıtta boş döner', () => {
+    expect(platformNames({ free: [{ provider_name: 'Netflix Standard with Ads' }] })).toEqual([
+      'Netflix Standard with Ads',
+    ])
+    expect(platformNames({})).toEqual([])
   })
 })

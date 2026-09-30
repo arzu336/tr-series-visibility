@@ -6,6 +6,17 @@ import { resolveIso2FromLabel } from './services/countryLookup.js'
 const UNCERTAIN_THRESHOLD = 70
 const DESTINATION_NAMES = Object.fromEntries(DESTINATIONS.map((d) => [d.id, d.name]))
 
+/**
+ * Bir ülke kaydındaki platform adları, tekrarsız. Aynı platformun varyantı ("Netflix Standard with Ads",
+ * "HBO Max Amazon Channel") ana adı da listedeyse atılır; yalnızca varyant varsa olduğu gibi kalır.
+ */
+export function platformNames(entry) {
+  const names = [
+    ...new Set(STREAMABLE_KEYS.flatMap((key) => (entry[key] || []).map((p) => p.provider_name)).filter(Boolean)),
+  ]
+  return names.filter((name) => !names.some((other) => other !== name && name.startsWith(`${other} `)))
+}
+
 export function buildVisibility(rawData, themeStore, destinationStore = {}) {
   const { series, providersById } = rawData
   const byCountry = new Map()
@@ -47,6 +58,8 @@ export function buildVisibility(rawData, themeStore, destinationStore = {}) {
         theme,
         destinations,
         cast: show.cast || [],
+        // Dizinin bu ülkede izlenebildiği platformlar (dizi satırının altında gösterilir).
+        platforms: platformNames(entry),
       })
       if (!bucket.topSeries || show.popularity > bucket.topSeries.popularity) {
         bucket.topSeries = {

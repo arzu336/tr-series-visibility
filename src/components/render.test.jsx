@@ -54,11 +54,20 @@ describe('useAsync tabanlı bileşenler ilk render', () => {
     expect(renderToString(<CountryPanel country={null} allCountries={[]} />)).toContain('bir ülkeye tıklayın')
   })
 
-  it('CountryPanel ilk render: izlenme gerçekleri iskeleti ve yayın varlığı başlığı; skor etiketi yok', () => {
-    const country = { iso2: 'DE', name: 'Almanya', score: 500, seriesCount: 30, seriesList: [], dataSource: 'tmdb' }
+  it('CountryPanel ilk render: yayın varlığı başlığı ve dizi altında platform; izlenme gerçekleri kartı ve skor etiketi yok', () => {
+    const country = {
+      iso2: 'DE',
+      name: 'Almanya',
+      score: 500,
+      seriesCount: 30,
+      seriesList: [{ id: 1, name: 'Terzi', cast: [], platforms: ['Netflix', 'HBO Max'] }],
+      dataSource: 'tmdb',
+    }
     const html = renderToString(<CountryPanel country={country} allCountries={[country]} />)
-    expect(html).toContain('İzlenme gerçekleri yükleniyor')
+    expect(html).not.toContain('İzlenme gerçekleri')
+    expect(html).not.toContain('İzlenme düzeyi')
     expect(html).toMatch(/Yayındaki diziler — (<!-- -->)?30(<!-- -->)? dizi/)
+    expect(html).toContain('Netflix · HBO Max')
     expect(html).not.toMatch(/skor/i)
   })
 })

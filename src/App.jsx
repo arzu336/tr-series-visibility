@@ -5,7 +5,6 @@ import Login from './components/Login.jsx'
 import ChangePasswordModal from './components/ChangePasswordModal.jsx'
 import ContinentSidebar from './components/ContinentSidebar.jsx'
 import MapViewToggle from './components/MapViewToggle.jsx'
-import ChartsStrip from './components/ChartsStrip.jsx'
 
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { useAsync } from './lib/useAsync.js'
@@ -438,7 +437,6 @@ export default function App() {
                       <div className="app__map-controls">
                         <MapViewToggle value={mapView} onChange={setMapView} />
                       </div>
-                      <ChartsStrip onSelectSeries={handleSelectSeriesGlobal} />
                       {seriesFilter && (
                         <div className="series-filter-badge">
                           <span>

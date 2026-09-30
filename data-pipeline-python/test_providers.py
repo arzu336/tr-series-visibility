@@ -182,6 +182,94 @@ class TestFlixPatrol:
             source_url="u", series_index=[], fetched_at="t",
         ) == []
 
+    def test_iter_pages_tek_oturum_404_yeniden_denenmez_ve_skip(self):
+        import providers.flixpatrol as fp
+
+        class Sayfa:
+            def __init__(self, status, html=""):
+                self.status, self.html_content = status, html
+
+        class Oturum:
+            def __init__(self, html):
+                self.html, self.urls, self.kapandi = html, [], False
+
+            def fetch(self, url):
+                self.urls.append(url)
+                return Sayfa(200, self.html) if "/disney/" in url else Sayfa(404)
+
+            def close(self):
+                self.kapandi = True
+
+        oturum = Oturum(self.HTML)
+        acilis = []
+
+        def ac():
+            acilis.append(1)
+            return oturum
+
+        p = FlixPatrolProvider(request_delay_s=0)
+        ulkeler = {"spain": "ES", "italy": "IT"}
+        platformlar = {"disney": "disney", "shahid": "shahid"}
+        sayfalar = list(
+            p.iter_pages(countries=ulkeler, platforms=platformlar, skip={("ES", "disney")}, open_session=ac, fetched_at="t")
+        )
+        assert [(i, pl, st, len(r)) for i, pl, st, r in sayfalar] == [
+            ("ES", "shahid", 404, 0),
+            ("IT", "disney", 200, 3),
+            ("IT", "shahid", 404, 0),
+        ]
+        assert len(acilis) == 1 and oturum.kapandi  # tüm koşu tek oturum, sonunda kapanır
+        assert len(oturum.urls) == 3  # 404 yeniden denenmedi, atlanan çifte istek gitmedi
+        assert fp.build_url("disney", "spain") not in oturum.urls
+
+    def test_iter_pages_is_kalmadiysa_oturum_acmaz(self):
+        p = FlixPatrolProvider(request_delay_s=0)
+
+        def ac():
+            raise AssertionError("oturum açılmamalıydı")
+
+        assert list(p.iter_pages(countries={"spain": "ES"}, platforms={"disney": "disney"}, skip={("ES", "disney")}, open_session=ac)) == []
+
+    def test_runner_sayfa_sayfa_kaydeder_ve_kaldigi_yerden_devam_eder(self, tmp_path):
+        import fetch_flixpatrol as ff
+        from providers.flixpatrol import parse_top10_tv
+
+        bugun = datetime.date.today().isoformat()
+
+        def satirlar(iso2):
+            return parse_top10_tv(
+                self.HTML, platform="disney", country_iso2=iso2, period_date=bugun,
+                source_url="u", series_index=[], fetched_at="t",
+            )
+
+        class YaridaKesilen:
+            enabled = True
+
+            def iter_pages(self, skip=None, **kw):
+                yield "ES", "disney", 200, satirlar("ES")
+                raise RuntimeError("bağlantı koptu")
+
+        class Devam:
+            enabled = True
+            gelen_skip = None
+
+            def iter_pages(self, skip=None, **kw):
+                Devam.gelen_skip = skip
+                yield "IT", "disney", 200, satirlar("IT")
+                yield "IT", "shahid", 404, []
+
+        dbp = tmp_path / "p.db"
+        with pytest.raises(RuntimeError):
+            ff.run(db_path=dbp, provider=YaridaKesilen())
+        conn = sqlite3.connect(dbp)
+        assert conn.execute("SELECT COUNT(*) FROM chart_entries WHERE provider='flixpatrol'").fetchone()[0] == 3
+        conn.close()
+
+        sonuc = ff.run(db_path=dbp, provider=Devam())
+        assert Devam.gelen_skip == {("ES", "disney")}
+        assert (sonuc["status"], sonuc["chart_entries_written"], sonuc["pages"], sonuc["empty_pages"]) == ("ok", 3, 2, 1)
+        assert sonuc["skipped_pairs"] == 1
+
 
 def test_weekly_rows_to_entries():
     e = weekly_rows_to_entries([("AR", "2026-09-13", 5, "Kurulus Osman", 1)], "t")[0]

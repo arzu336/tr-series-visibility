@@ -16,7 +16,8 @@ KAPSAM SINIRLARI (2026-09-30, canlı doğrulandı)
   (Payment Required) döner — geçmiş veri FlixPatrol'un ücretli aboneliğine kilitli; giriş
   yapılmış oturum cookie'si olmadan backfill YAPILAMAZ (bkz. SESSION_COOKIES).
 - IMDb/TMDB kimliği liste/detay sayfasında YOK. Bu yüzden eşleştirme, diğer sağlayıcılarla
-  aynı yolu izler: başlık, ana uygulamanın canlı TMDB dizi index'ine (match_series) eşlenir;
+  aynı yolu izler: başlık, ana uygulamanın canlı TMDB dizi index'ine ve başlık takma adlarına
+  (netflix_pipeline.load_title_aliases) TAM AD ile eşlenir (resolve_netflix_title);
   eşleşmeyen satır 'unknown'/'other' olarak saklanır — isimden kanonik atama YAPILMAZ.
 - Yalnızca "TOP 10 TV Shows" tablosu alınır (filmler hariç).
 
@@ -37,7 +38,8 @@ from typing import Optional
 
 from bs4 import BeautifulSoup
 
-import reytingtv_ranker as rtv  # load_tmdb_series_index, match_series (ortak eşleştirme)
+import netflix_pipeline as nfp  # resolve_netflix_title, load_title_aliases (tam-ad eşleştirme)
+import reytingtv_ranker as rtv  # load_tmdb_series_index
 from logsetup import get_logger
 from providers.base import ChartEntry, ChartProvider, classify_program_kind
 
@@ -126,7 +128,9 @@ def parse_top10_tv(
         href = anchor["href"]
         detail_url = href if href.startswith("http") else f"https://flixpatrol.com{href}"
 
-        match = rtv.match_series(title, series_index) if series_index else None
+        # FlixPatrol satırı dizinin KENDİ adıdır (kanal adı içeren program metni değil): alt-dize
+        # araması yanlış eşleşme üretir, bu yüzden Netflix hattındaki tam-ad çözümleyici kullanılır.
+        match = nfp.resolve_netflix_title(title, series_index) if series_index else None
         sid = match.tmdb_id if match else None
         out.append(
             ChartEntry(
@@ -147,30 +151,46 @@ def parse_top10_tv(
     return out
 
 
-def _fetch_html(url: str) -> Optional[str]:
-    """Scrapling StealthyFetcher ile Cloudflare'ı geçerek HTML döner. Scrapling yalnızca
-    burada (fetch anında) import edilir — modülün import'u ve testler scrapling gerektirmez."""
-    from scrapling.fetchers import StealthyFetcher  # lazy import
+# Bu durumlar kalıcıdır, yeniden denemek yalnızca zaman kaybettirir:
+# 404 = o platform o ülkede listelenmiyor, 402 = geçmiş tarih paywall'ı.
+NO_RETRY_STATUSES = {402, 404}
 
-    cookies = [
-        {"name": k, "value": v, "domain": ".flixpatrol.com", "path": "/"}
-        for k, v in SESSION_COOKIES.items()
-    ]
+
+def _open_session():
+    """Tüm koşu için TEK tarayıcı oturumu açar. Cloudflare çözümü oturumda kaldığından her
+    sayfada baştan çözülmez (sayfa başına ~30 sn yerine birkaç sn). Scrapling yalnızca burada
+    import edilir — modülün import'u ve testler scrapling gerektirmez."""
+    from scrapling.fetchers import StealthySession  # lazy import
+
+    kwargs = dict(headless=True, solve_cloudflare=True, network_idle=True)
+    if SESSION_COOKIES:
+        kwargs["cookies"] = [
+            {"name": k, "value": v, "domain": ".flixpatrol.com", "path": "/"}
+            for k, v in SESSION_COOKIES.items()
+        ]
+    session = StealthySession(**kwargs)
+    session.start()
+    return session
+
+
+def _fetch_html(session, url: str) -> tuple[Optional[str], Optional[int]]:
+    """(html, durum_kodu) döner; alınamazsa html None. Kalıcı durumlarda (404/402) yeniden denemez."""
+    status = None
     last_err = None
     for attempt in range(MAX_RETRIES):
         try:
-            kwargs = dict(headless=True, solve_cloudflare=True, network_idle=True)
-            if cookies:
-                kwargs["cookies"] = cookies
-            page = StealthyFetcher.fetch(url, **kwargs)
-            if getattr(page, "status", None) == 200:
-                return page.html_content
-            last_err = f"status={getattr(page, 'status', '?')}"
+            page = session.fetch(url)
+            status = getattr(page, "status", None)
+            if status == 200:
+                return page.html_content, status
+            if status in NO_RETRY_STATUSES:
+                return None, status
+            last_err = f"status={status}"
         except Exception as exc:  # noqa: BLE001
             last_err = str(exc)
         time.sleep(REQUEST_DELAY_S * (attempt + 1))
-    log.warning(f"flixpatrol: alınamadı {url} ({last_err})")
-    return None
+    log.warning(f"flixpatrol: alinamadi {url} ({last_err})")
+    return None, status
 
 
 class FlixPatrolProvider(ChartProvider):
@@ -202,52 +222,76 @@ class FlixPatrolProvider(ChartProvider):
             "enabled": self.enabled,
         }
 
-    def fetch(
+    def iter_pages(
         self,
         countries: Optional[dict[str, str]] = None,
         platforms: Optional[dict[str, str]] = None,
         day: Optional[str] = None,
         limit: Optional[int] = None,
         fetched_at: str = "",
-        **kwargs,
-    ) -> list[ChartEntry]:
-        """Güncel TV Top 10'u ülke × platform için kazır. `day` verilirse tarihli sayfa
-        denenir (giriş cookie'si yoksa 402 → boş)."""
+        skip: Optional[set[tuple[str, str]]] = None,
+        open_session=_open_session,
+    ):
+        """Ülke × platform sayfalarını TEK TEK üretir: (iso2, platform, durum_kodu, satırlar).
+
+        Çağıran her sayfayı alır almaz kaydedebilsin diye üreteçtir — koşu yarıda kesilse bile
+        o ana kadarki veri kaybolmaz. `skip`: zaten çekilmiş (iso2, platform) çiftleri; bunlar
+        için istek atılmaz (kaldığı yerden devam).
+        """
         if not self.enabled:
             raise RuntimeError(f"{ENV_ENABLE}=0 — FlixPatrol sağlayıcısı devre dışı.")
 
         countries = countries or COUNTRIES
         platforms = platforms or PLATFORMS
+        skip = skip or set()
         period_date = day or date.today().isoformat()
+        todo = [
+            (c_slug, c_iso2, p_slug, p_name)
+            for c_slug, c_iso2 in countries.items()
+            for p_slug, p_name in platforms.items()
+            if (c_iso2, p_name) not in skip
+        ]
+        if limit:
+            todo = todo[:limit]
+        if not todo:
+            return
 
-        series_index = (
-            rtv.load_tmdb_series_index(self.node_app_db_path)
-            if self.node_app_db_path
-            else []
-        )
-
-        out: list[ChartEntry] = []
-        count = 0
-        for c_slug, c_iso2 in countries.items():
-            for p_slug, p_name in platforms.items():
-                if limit and count >= limit:
-                    return out
-                count += 1
+        series_index = rtv.load_tmdb_series_index(self.node_app_db_path) if self.node_app_db_path else []
+        if series_index:
+            # FlixPatrol dizileri uluslararası (çoğunlukla İngilizce) adlarıyla listeler; katalog
+            # Türkçe adları taşır. Netflix hattının takma adları (IMDb AKA + yayın adı) eklenir.
+            series_index = series_index + nfp.load_title_aliases(series_index)
+        session = open_session()
+        try:
+            for c_slug, c_iso2, p_slug, p_name in todo:
                 url = build_url(p_slug, c_slug, day)
-                html = _fetch_html(url)
-                time.sleep(self.request_delay_s)
-                if not html:
-                    continue
-                rows = parse_top10_tv(
-                    html,
-                    platform=p_name,
-                    country_iso2=c_iso2,
-                    period_date=period_date,
-                    source_url=url,
-                    series_index=series_index,
-                    fetched_at=fetched_at,
+                html, status = _fetch_html(session, url)
+                rows = (
+                    parse_top10_tv(
+                        html,
+                        platform=p_name,
+                        country_iso2=c_iso2,
+                        period_date=period_date,
+                        source_url=url,
+                        series_index=series_index,
+                        fetched_at=fetched_at,
+                    )
+                    if html
+                    else []
                 )
-                if rows:
-                    log.info(f"flixpatrol: {c_iso2}/{p_name} -> {len(rows)} dizi")
-                out.extend(rows)
+                log.info(f"flixpatrol: {c_iso2}/{p_name} -> {len(rows)} dizi (durum {status})")
+                yield c_iso2, p_name, status, rows
+                time.sleep(self.request_delay_s)
+        finally:
+            try:
+                session.close()
+            except Exception:  # noqa: BLE001
+                pass
+
+    def fetch(self, **kwargs) -> list[ChartEntry]:
+        """Güncel TV Top 10'u ülke × platform için kazır ve tüm satırları tek listede döner.
+        Uzun koşularda `iter_pages` tercih edilir (sayfa sayfa kayıt)."""
+        out: list[ChartEntry] = []
+        for _iso2, _platform, _status, rows in self.iter_pages(**kwargs):
+            out.extend(rows)
         return out

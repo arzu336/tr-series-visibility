@@ -60,7 +60,7 @@ export default function ChartList({
   return (
     <ol className={compact ? 'chart-list chart-list--compact' : 'chart-list'}>
       {items.map((it, i) => {
-        const key = `${it.seriesId ?? it.titleRaw ?? it.name}-${it.rank ?? i}`
+        const key = `${it.seriesId ?? it.titleRaw ?? it.name}-${it.rank ?? i}-${it.platform ?? ''}`
         const periods = it.weeksInList ?? it.periods
         const inner = (
           <>

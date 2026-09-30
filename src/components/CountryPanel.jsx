@@ -6,9 +6,8 @@ import { fetchRegionalInterest, fetchCountryCharts } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import PeriodChart from './PeriodChart.jsx'
 import MediaSentimentCard, { HybridScoreTag } from './MediaSentimentCard.jsx'
-import ChartList, { ChartSource, fmtDateTr } from './ChartList.jsx'
-import { WATCH_LEVEL_COLORS, NO_SIGNAL_COLOR } from '../lib/scale.js'
-import { WATCH_LEVEL_NOTE, AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
+import ChartList, { fmtDateTr } from './ChartList.jsx'
+import { AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import { useAsync } from '../lib/useAsync.js'
 import { onEnterOrSpace } from '../lib/useDialog.js'
 import { EMPTY } from '../lib/emptyStates.js'
@@ -191,84 +190,33 @@ function yearAgoText(ya) {
   return `1 yıl önce liste yoktu; en yakın kayıt ${fmtDateTr(ya.periodDate)}: ${liste}`
 }
 
-const SOURCE_LABEL = {
-  netflix_tudum: 'Netflix Top 10',
-  wikipedia: 'Wikipedia',
-  google_trends: 'Google Trends (önbellek)',
-  tmdb_providers: 'TMDB/JustWatch',
-}
-
-/** Ülke paneli üst kartı: kaynak sırasındaki ilk dolu gerçek öne, diğerleri altında; izlenme düzeyi ve uyarılar. */
-export function WatchFactsCard({ charts, status }) {
-  if (status === 'loading' || status === 'idle')
-    return <p className="dashboard__empty">İzlenme gerçekleri yükleniyor…</p>
-  if (status === 'error' || !charts) return <p className="dashboard__empty">İzlenme gerçekleri alınamadı.</p>
-  const level = charts.watch?.level ?? null
-  // JSON'dan gelir: kimlik karşılaştırması olmaz, kaynak+tür ile ayır
-  const sameFact = (a, b) => a && b && a.source === b.source && a.kind === b.kind
-  const others = charts.facts.filter((f) => !sameFact(f, charts.primary))
-  return (
-    <div className="panel__watch-card" role="group" aria-label="İzlenme gerçekleri">
-      <div className="panel__watch-level" title={WATCH_LEVEL_NOTE}>
-        <span className="legend__swatch" style={{ background: level ? WATCH_LEVEL_COLORS[level] : NO_SIGNAL_COLOR }} />
-        İzlenme düzeyi: <strong>{level ?? 'sinyal yetersiz'}</strong>
-        {charts.watch?.index != null
-          ? ` · yüzdelik konum ${charts.watch.index}/100 · güven ${charts.watch.confidence}`
-          : ''}{' '}
-        ⓘ
-      </div>
-      {charts.primary ? (
-        <p className="panel__watch-primary">
-          {charts.primary.text}
-          <span className="panel__watch-source">{SOURCE_LABEL[charts.primary.source] || charts.primary.source}</span>
-        </p>
-      ) : (
-        <p className="panel__watch-primary">{EMPTY.countryNoCharts}</p>
-      )}
-      {others.map((f) => (
-        <p key={f.source + f.kind} className="panel__watch-fact">
-          {f.text}
-          <span className="panel__watch-source">{SOURCE_LABEL[f.source] || f.source}</span>
-        </p>
-      ))}
-      {(charts.watch?.warnings || [])
-        .filter((w) => w.code !== 'regional-wiki')
-        .map((w) => (
-          <p key={w.code} className="panel__watch-warning" role="note">
-            ⚠ {w.text}
-          </p>
-        ))}
-    </div>
-  )
-}
-
-/** "Şu an listede" + "Bu ülkede en çok izlenenler" + "1 yıl önce" — Netflix; Netflix yoksa Wikipedia listesi. */
+/**
+ * "Şu an listede" + "Bu ülkede en çok izlenenler" — tüm platformların listeleri birlikte (her satırda
+ * hangi platform olduğu yazar). Hiçbir platformda liste yoksa Wikipedia okunma sıralamasına düşer.
+ */
 export function WatchLists({ charts, onSelectSeries }) {
   if (!charts) return null
   const nf = charts.netflix
-  if (nf?.status === 'hesaplandi') {
+  const lists = charts.lists
+  if (lists && (lists.now.length > 0 || lists.top.length > 0 || nf?.status === 'hesaplandi')) {
     return (
       <>
         <h3>Şu an listede</h3>
         <div className="panel__now">
           <ChartList
             compact
-            items={nf.now}
-            emptyText={`Netflix Top 10 (${fmtDateTr(charts.latestWeek)}): bu hafta Türk dizisi yok.`}
+            items={lists.now.map((it) => ({ ...it, meta: it.platform }))}
+            emptyText="Bu hafta listelerde Türk dizisi yok."
             onSelect={onSelectSeries}
           />
         </div>
         <h3>Bu ülkede en çok izlenenler</h3>
         <ChartList
-          items={nf.top.map((t, i) => ({ ...t, rank: i + 1 }))}
-          emptyText={`Son 52 haftada Netflix Top 10'a Türk dizisi girmedi${nf.lastEntry ? `; son giriş ${fmtDateTr(nf.lastEntry)}` : ''}.`}
+          items={lists.top.map((t, i) => ({ ...t, rank: i + 1, meta: t.platforms.join(', ') }))}
+          emptyText="Son 52 haftada listelere Türk dizisi girmedi."
           onSelect={onSelectSeries}
         />
-        {yearAgoText(nf.yearAgo) && <p className="panel__year-ago">{yearAgoText(nf.yearAgo)}</p>}
-        <ChartSource
-          source={nf.source}
-          periodLabel={`son 52 hafta (${fmtDateTr(nf.window.from)} → ${fmtDateTr(nf.window.to)})`}
-        />
+        {yearAgoText(nf?.yearAgo) && <p className="panel__year-ago">{yearAgoText(nf.yearAgo)}</p>}
       </>
     )
   }
@@ -276,27 +224,17 @@ export function WatchLists({ charts, onSelectSeries }) {
   return (
     <>
       <h3>Bu ülkede en çok izlenenler</h3>
-      {nf?.status === 'hesaplanamaz' && <p className="dashboard__hint">{nf.reason}</p>}
       {wiki ? (
-        <>
-          <ChartList
-            items={wiki.items.map((it, i) => ({
-              rank: i + 1,
-              seriesId: it.seriesId,
-              name: it.name,
-              kind: 'series',
-              meta: `${Math.round(it.views / 1000)}k okunma`,
-            }))}
-            onSelect={onSelectSeries}
-          />
-          <ChartSource
-            source={{
-              label: 'Wikipedia okunması',
-              platform: `${wiki.lang} Vikipedi${wiki.regional ? ' (ortak dil; okunma ülkeye ayrılamaz)' : ''}`,
-            }}
-            periodLabel="son 12 ay"
-          />
-        </>
+        <ChartList
+          items={wiki.items.map((it, i) => ({
+            rank: i + 1,
+            seriesId: it.seriesId,
+            name: it.name,
+            kind: 'series',
+            meta: `${Math.round(it.views / 1000)}k okunma`,
+          }))}
+          onSelect={onSelectSeries}
+        />
       ) : (
         <p className="dashboard__empty">{EMPTY.countryNoCharts}</p>
       )}
@@ -429,8 +367,6 @@ export default function CountryPanel({
                 <p className="panel__subtitle">{country.seriesCount} dizi yayında</p>
               )}
 
-              <WatchFactsCard charts={charts} status={chartsReq.status} />
-
               <WatchLists charts={charts} onSelectSeries={(id) => onSelectSeriesGlobal?.(id)} />
 
               <h3>Listeye giren diziler — zaman içinde</h3>
@@ -447,13 +383,13 @@ export default function CountryPanel({
                     onRangeChange={setPeriodRange}
                     unitLabel="dizi"
                   />
-                  <p className="dashboard__hint">Dönem başına Netflix Top 10'a giren farklı Türk dizisi sayısı.</p>
+                  <p className="dashboard__hint">Dönem başına listelere giren farklı Türk dizisi sayısı.</p>
                 </>
               ) : (
                 <p className="dashboard__empty">
                   {country.dataSource === 'proxy'
                     ? EMPTY.visibilityHistoryProxy
-                    : 'Bu ülkede Netflix Top 10 kaydı yok; zaman çizelgesi oluşmadı.'}
+                    : 'Bu ülkede liste kaydı yok; zaman çizelgesi oluşmadı.'}
                 </p>
               )}
 
@@ -475,14 +411,6 @@ export default function CountryPanel({
                     Yayındaki diziler — {country.seriesCount} dizi
                     {charts?.access?.platformCount ? `, ${charts.access.platformCount} platformda` : ''} ⓘ
                   </h3>
-                  {charts?.access?.platforms?.length > 0 && (
-                    <p className="dashboard__hint">
-                      {charts.access.platforms
-                        .slice(0, 6)
-                        .map((p) => `${p.name} (${p.count})`)
-                        .join(' · ')}
-                    </p>
-                  )}
                   <ul className="panel__series-list">
                     {sortedSeriesList.map((s, i) => {
                       const key = s.id ?? s.name
@@ -520,6 +448,9 @@ export default function CountryPanel({
                               <span className="panel__series-meta">
                                 {yearOf(s.firstAirDate) || '—'} · {s.theme}
                               </span>
+                              {s.platforms?.length > 0 && (
+                                <span className="panel__series-meta">{s.platforms.join(' · ')}</span>
+                              )}
                             </span>
                           </div>
                           {isExpanded && (

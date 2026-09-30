@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest'
-import { chartForPeriod, topInWindow, yearAgo, timeline, globalTopForWeek, addDays, isRecap } from './charts.js'
+import {
+  chartForPeriod,
+  topInWindow,
+  yearAgo,
+  timeline,
+  globalTopForWeek,
+  addDays,
+  isRecap,
+  buildCountryLists,
+  weekEndOf,
+} from './charts.js'
 
 const row = (period_date, rank, series_id, title_raw, extra = {}) => ({
   provider: 'netflix_tudum',
@@ -140,5 +150,52 @@ describe('özet yayını', () => {
     const list = chartForPeriod(rows, '2026-08-23', { nameOf: () => 'Daha 17' })
     expect(list.map((e) => e.name)).toEqual(['Daha 17', 'Daha 17 (özet)'])
     expect(list.map((e) => e.weeksInList)).toEqual([2, 1])
+  })
+})
+
+describe('buildCountryLists — tüm platformlar birlikte', () => {
+  const flix = (period_date, segment, rank, series_id, title_raw) =>
+    row(period_date, rank, series_id, title_raw, { provider: 'flixpatrol', period_type: 'day', segment })
+  const netflixRows = [row('2026-09-20', 6, 1, 'My Name Is Farah'), row('2026-09-27', 5, 1, 'My Name Is Farah')]
+  const flixRows = [
+    flix('2026-09-23', 'disney', 7, 3, 'Seni Tanıyorum'),
+    flix('2026-09-30', 'disney', 2, 3, 'Seni Tanıyorum'),
+    flix('2026-09-30', 'disney', 1, null, 'Loki'), // katalog dışı: listeye girmez
+    flix('2026-09-30', 'shahid', 4, 1, 'Adım Farah'),
+    flix('2026-08-01', 'hbo-max', 3, 2, 'Enfes Bir Akşam'), // bayat: "şu an"a girmez, 52 haftaya girer
+  ]
+  const sonuc = buildCountryLists({
+    netflixRows,
+    flixRows,
+    latestWeek: '2026-09-27',
+    prevWeek: '2026-09-20',
+    today: '2026-09-30',
+    nameOf,
+  })
+
+  it('şu an: her platformun güncel listesi, gerçek sıra ve platform adıyla; yabancı ve bayat satır yok', () => {
+    expect(sonuc.now.map((i) => [i.rank, i.name, i.platform, i.trend])).toEqual([
+      [2, 'Seni Tanıyorum', 'Disney+', '↑5'],
+      [4, 'Adım Farah', 'Shahid', 'yeni'],
+      [5, 'Adım Farah', 'Netflix', '↑1'],
+    ])
+  })
+
+  it('en çok izlenenler: farklı hafta sayısı (aynı hafta iki platform tek sayılır) ve platform listesi', () => {
+    expect(sonuc.top.map((t) => [t.name, t.periods, t.bestRank, t.platforms])).toEqual([
+      ['Adım Farah', 3, 4, ['Netflix', 'Shahid']],
+      ['Seni Tanıyorum', 2, 2, ['Disney+']],
+      ['Enfes Bir Akşam', 1, 3, ['HBO Max']],
+    ])
+    expect(sonuc.window.to).toBe('2026-09-30')
+  })
+
+  it('veri yoksa boş listeler ve pencere yok', () => {
+    expect(buildCountryLists({})).toEqual({ now: [], top: [], window: null })
+  })
+
+  it('weekEndOf haftanın Pazar gününü verir', () => {
+    expect(weekEndOf('2026-09-30')).toBe('2026-10-04') // Çarşamba
+    expect(weekEndOf('2026-09-27')).toBe('2026-09-27') // Pazar
   })
 })

@@ -182,6 +182,97 @@ export function globalTopForWeek(rows, week, { nameOf = (id, raw) => raw } = {})
     .sort((a, b) => b.countries - a.countries || a.bestRank - b.bestRank)
 }
 
+// Liste platformları: chart_entries'te Netflix ayrı sağlayıcıdır (netflix_tudum, haftalık); diğerleri
+// flixpatrol sağlayıcısından gelir ve platform `segment` alanında taşınır (günlük anlık görüntü).
+export const PLATFORM_LABELS = {
+  netflix: 'Netflix',
+  disney: 'Disney+',
+  'amazon-prime': 'Prime Video',
+  'hbo-max': 'HBO Max',
+  'apple-tv': 'Apple TV+',
+  shahid: 'Shahid',
+}
+/** Bu kadar günden eski bir platform listesi "şu an" sayılmaz. */
+export const LIST_STALE_DAYS = 14
+
+const platformLabel = (slug) => PLATFORM_LABELS[slug] ?? slug
+
+/** Tarihin ait olduğu haftanın Pazar günü (Netflix hafta anahtarıyla aynı biçim). */
+export function weekEndOf(ymd) {
+  const dow = new Date(ymd + 'T00:00:00Z').getUTCDay()
+  return addDays(ymd, (7 - dow) % 7)
+}
+
+/**
+ * Ülke listeleri, tüm platformlar birlikte. `now`: her platformun en güncel listesindeki Türk dizileri
+ * (gerçek sıra + platform). `top`: son 52 haftada en çok hafta listede kalanlar (hangi platformlarda).
+ * Yalnızca kataloğa eşleşen diziler alınır; eşleşmeyen satırlar (yabancı yapımlar) listeye girmez.
+ */
+export function buildCountryLists({
+  netflixRows = [],
+  flixRows = [],
+  latestWeek = null,
+  prevWeek = null,
+  today = new Date().toISOString().slice(0, 10),
+  nameOf = (id, raw) => raw,
+} = {}) {
+  const now = []
+  if (latestWeek)
+    for (const it of chartForPeriod(netflixRows, latestWeek, { prevPeriodDate: prevWeek, nameOf }))
+      now.push({ ...it, platform: PLATFORM_LABELS.netflix })
+
+  const bySlug = new Map()
+  for (const r of flixRows) {
+    if (!bySlug.has(r.segment)) bySlug.set(r.segment, [])
+    bySlug.get(r.segment).push(r)
+  }
+  const isSeries = (r) => r.series_id != null && r.program_kind === 'series'
+  const staleBefore = addDays(today, -LIST_STALE_DAYS)
+  let flixLatest = null
+  for (const [slug, all] of bySlug) {
+    // Tarihler TÜM satırlardan: önceki anlık görüntüde Türk dizisi olmasa da "önceki dönem" odur.
+    const dates = [...new Set(all.map((r) => r.period_date))].sort()
+    const last = dates.at(-1)
+    if (!flixLatest || last > flixLatest) flixLatest = last
+    if (last < staleBefore) continue
+    const series = all.filter(isSeries)
+    for (const it of chartForPeriod(series, last, { prevPeriodDate: dates.at(-2) ?? null, nameOf }))
+      now.push({ ...it, platform: platformLabel(slug) })
+  }
+  now.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'tr'))
+
+  const to = [latestWeek, flixLatest].filter(Boolean).sort().at(-1) ?? null
+  const from = to ? addDays(to, -(WINDOW_WEEKS * 7 - 1)) : null
+  const agg = new Map()
+  if (to) {
+    const tagged = [...netflixRows.map((r) => [r, 'netflix']), ...flixRows.filter(isSeries).map((r) => [r, r.segment])]
+    for (const [r, slug] of tagged) {
+      if (r.period_date < from || r.period_date > to) continue
+      const k = keyOf(r)
+      const a = agg.get(k) || {
+        seriesId: r.series_id ?? null,
+        name: displayName(r, nameOf),
+        kind: r.program_kind || 'unknown',
+        weekSet: new Set(),
+        platformSet: new Set(),
+        bestRank: 99,
+        lastDate: null,
+      }
+      a.weekSet.add(weekEndOf(r.period_date))
+      a.platformSet.add(platformLabel(slug))
+      a.bestRank = Math.min(a.bestRank, r.rank)
+      if (!a.lastDate || r.period_date > a.lastDate) a.lastDate = r.period_date
+      agg.set(k, a)
+    }
+  }
+  const top = [...agg.values()]
+    .map(({ weekSet, platformSet, ...a }) => ({ ...a, periods: weekSet.size, platforms: [...platformSet].sort() }))
+    .sort((a, b) => b.periods - a.periods || a.bestRank - b.bestRank || a.name.localeCompare(b.name, 'tr'))
+    .slice(0, 10)
+
+  return { now, top, window: to ? { from, to, weeks: WINDOW_WEEKS } : null }
+}
+
 // ---------------------------------------------------------------- okuyucular
 
 function readRows(conn, where, params) {
@@ -299,7 +390,7 @@ export async function getTurkeyTv({ date, segment = 'Total', onlySeries = true }
 
 /** Ülke paneli: kaynak sırasına göre gerçekler + liste + 1 yıl önce + zaman çizelgesi. */
 export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
-  const cacheKey = `charts:country:${iso2}:${week ?? 'latest'}:${range}`
+  const cacheKey = `charts:country:v2:${iso2}:${week ?? 'latest'}:${range}`
   const cached = getCached(cacheKey)
   if (cached) return cached
   const conn = getPipelineDb()
@@ -360,6 +451,11 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
       lastEntry: lastRow,
     }
   }
+
+  // Tüm platformlar birlikte: Netflix (haftalık) + FlixPatrol platformları (anlık görüntü).
+  const flixRows = conn ? readRows(conn, "provider='flixpatrol' AND country_iso2=?", [iso2]) : []
+  const lists = buildCountryLists({ netflixRows: rows, flixRows, latestWeek: latest, prevWeek: prev, nameOf })
+  const flixSeries = flixRows.filter((r) => r.series_id != null && r.program_kind === 'series')
 
   // 2) Wikipedia (ülkenin dilleri)
   const langs = languagesOfCountry(iso2)
@@ -450,7 +546,8 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
     netflix,
     wiki,
     access,
-    timeline: timeline(rows, range),
+    lists,
+    timeline: timeline([...rows, ...flixSeries], range),
     timelineRange: range,
   }
   setCached(cacheKey, out, CACHE_TTL_MS)
