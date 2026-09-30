@@ -67,7 +67,7 @@ public/map/             küre dokuları ve ülke sınırları (dış istek yok)
 
 ## Kurulum
 
-Gereksinimler: Node.js ≥ 22.13 (`.nvmrc` mevcut), Python ≥ 3.12 (yalnızca Python hattı için).
+Gereksinimler: Node.js ≥ 22.19 (`.nvmrc` 24'ü işaret eder; npm 11 lock dosyası), Python ≥ 3.12 (yalnızca Python hattı için).
 
 ```bash
 nvm use

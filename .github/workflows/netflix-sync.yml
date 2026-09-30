@@ -35,9 +35,9 @@ jobs:
       # İndirici toplam süre sınırı (varsayılan 900 sn); koşucuda daha sabırlı olunabilir.
       NETFLIX_DOWNLOAD_DEADLINE_S: '1800'
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: '3.12'
           cache: pip
@@ -72,7 +72,7 @@ jobs:
       # Tam dosya: yerelde netflix_import_artifact.py bunu data/ dizinine alır.
       - name: Tam dosyayı artifact olarak yükle
         if: success()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: netflix-all-weeks-countries
           path: |
@@ -86,7 +86,7 @@ jobs:
       # (netflix_import_artifact.py kesik dosyayı reddeder).
       - name: Kısmi indirmeyi teşhis için yükle
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: netflix-partial-download
           path: |
