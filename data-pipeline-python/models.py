@@ -81,6 +81,7 @@ class NetflixCountrySignal(BaseModel):
     peak_position: int
     latest_week: Optional[str] = None
     latest_rank: Optional[int] = None
+    first_week: Optional[str] = None
 
 
 class NetflixCountryRanking(BaseModel):
@@ -97,6 +98,7 @@ class NetflixCountryRanking(BaseModel):
     peak_rank: int
     rank_score: float
     last_week_date: Optional[str] = None
+    first_week_date: Optional[str] = None
     updated_at: datetime
 
 

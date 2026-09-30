@@ -2712,6 +2712,7 @@ body {
         skor rozetleri) KORUNUR: anlam taşıyorlar, yalnızca zemin ve metin açığa çevrilir. */
 @media print {
   @page {
+    size: A4;
     margin: 14mm;
   }
 
@@ -4176,4 +4177,660 @@ button.sidebar__big-card:hover {
   flex-wrap: wrap;
   align-items: center;
   gap: 0.5rem;
+}
+
+/* --- Ülke raporu (components/report/) ------------------------------------------------------
+   Ekranda koyu tema; baskıda ve "PDF olarak indir" hazırlığı sırasında (.report--printing) açık
+   tema. Bölüm kutuları .dashboard__section'ı paylaşır, böylece yukarıdaki @media print kuralları
+   (beyaz zemin, koyu metin, break-inside) burada da geçerlidir. */
+.panel__report-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #b8c0d1;
+  border-radius: 999px;
+  padding: 0.3rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 0 0 0.6rem;
+}
+
+.panel__report-btn:hover,
+.panel__report-btn:focus-visible {
+  border-color: #ee3135;
+  color: #f1f3f8;
+  outline: none;
+}
+
+.report {
+  max-width: 980px;
+  margin: 0 auto;
+}
+
+.report__toolbar {
+  display: flex;
+  align-items: flex-start;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.4rem;
+}
+
+.report__toolbar .report__print {
+  margin-left: auto;
+}
+
+.report__error {
+  color: #ff6b6b;
+  margin: 0 0 1rem;
+}
+
+.report__loading {
+  margin: 0 0 1rem;
+}
+
+.report__doc-wrap--stale {
+  opacity: 0.55;
+  transition: opacity 150ms ease;
+}
+
+.profile-picker {
+  display: flex;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+}
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 200px;
+  max-width: 260px;
+  text-align: left;
+  background: #0e1420;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 12px;
+  padding: 0.7rem 0.9rem;
+  color: #f1f3f8;
+  font: inherit;
+  cursor: pointer;
+}
+
+.profile-card:hover {
+  border-color: rgba(255, 255, 255, 0.3);
+}
+
+.profile-card--selected,
+.profile-card[aria-checked='true'] {
+  border-color: #ee3135;
+  box-shadow: 0 0 0 2px rgba(238, 49, 53, 0.3);
+}
+
+.profile-card:focus-visible {
+  outline: 2px solid #3987e5;
+  outline-offset: 2px;
+}
+
+.profile-card:disabled,
+.profile-card--locked {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.profile-card__title {
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+.profile-card__desc,
+.profile-card__access {
+  font-size: 0.74rem;
+  color: #8792a8;
+  line-height: 1.35;
+}
+
+.profile-card__access--locked {
+  color: #f2a65a;
+}
+
+.report__head {
+  border-bottom: 2px solid rgba(255, 255, 255, 0.12);
+  padding-bottom: 0.9rem;
+  margin-bottom: 1.25rem;
+}
+
+.report__kicker {
+  margin: 0;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.7rem;
+  color: #8792a8;
+}
+
+.report__head h1 {
+  margin: 0.2rem 0 0.4rem;
+  font-size: 1.6rem;
+  color: #f1f3f8;
+}
+
+.report__meta {
+  margin: 0;
+  color: #8792a8;
+  font-size: 0.8rem;
+  line-height: 1.5;
+}
+
+.report__section {
+  margin-bottom: 1.25rem;
+}
+
+.report__section--empty {
+  border-style: dashed;
+}
+
+.report__nodata {
+  margin: 0;
+  color: #f2a65a;
+  font-size: 0.88rem;
+}
+
+.report__caveat {
+  margin: 0.9rem 0 0;
+  padding-left: 0.65rem;
+  border-left: 3px solid #f2a65a;
+  color: #f2a65a;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.report__note {
+  margin: 0.8rem 0 0;
+  color: #6b7488;
+  font-size: 0.74rem;
+  line-height: 1.45;
+}
+
+.report__lead {
+  margin: 0 0 0.8rem;
+  font-size: 0.9rem;
+  color: #d5dae6;
+}
+
+.report__fine {
+  margin: 0.6rem 0 0;
+  font-size: 0.76rem;
+  color: #8792a8;
+}
+
+.report__subtitle {
+  margin: 0.9rem 0 0.5rem;
+  font-size: 0.85rem;
+  color: #d5dae6;
+}
+
+.report__subtitle:first-child {
+  margin-top: 0;
+}
+
+.report__kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
+  gap: 0.9rem 1.25rem;
+  margin: 0;
+}
+
+.report__kpi dt {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  color: #8792a8;
+}
+
+.report__kpi dd {
+  margin: 0.15rem 0 0;
+  font-size: 1.35rem;
+  font-weight: 700;
+  color: #f1f3f8;
+}
+
+.report__kpi dd.report__kpi--empty {
+  color: #6b7488;
+}
+
+.report__kpi small {
+  display: block;
+  margin-top: 0.15rem;
+  color: #8792a8;
+  font-size: 0.74rem;
+  line-height: 1.4;
+}
+
+.report__kpi-warn {
+  color: #f2a65a !important;
+}
+
+.report__kpis--tourism {
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.report__findings {
+  margin: 0;
+  padding-left: 1.2rem;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: #f1f3f8;
+}
+
+.report__findings li + li {
+  margin-top: 0.35rem;
+}
+
+.report__basis {
+  color: #8792a8;
+  font-size: 0.8em;
+}
+
+.report__badge {
+  display: inline-block;
+  margin-left: 0.4rem;
+  padding: 0.05rem 0.45rem;
+  border: 1px solid #f2a65a;
+  border-radius: 999px;
+  color: #f2a65a;
+  font-size: 0.62rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  vertical-align: middle;
+}
+
+.report__similar {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+}
+
+.report__table td,
+.report__table th {
+  font-size: 0.82rem;
+}
+
+.report__row--muted td {
+  color: #8792a8;
+}
+
+.report__confidence--verified {
+  color: #4ec27a;
+}
+
+.report__confidence--partial {
+  color: #f2a65a;
+}
+
+.report__confidence--weak {
+  color: #8792a8;
+}
+
+.report__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  list-style: none;
+  padding: 0;
+  margin: 0 0 0.8rem;
+}
+
+.report__chip {
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 999px;
+  padding: 0.15rem 0.6rem;
+  font-size: 0.74rem;
+  color: #d5dae6;
+}
+
+.report__bars .benchmark-card__row-label {
+  min-width: 120px;
+  text-transform: capitalize;
+}
+
+.report__bars .benchmark-card__row-bar {
+  background: #3987e5;
+}
+
+.report__chart {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 180px;
+}
+
+.report__chart rect {
+  fill: #3987e5;
+}
+
+.report__chart rect.report__bar--current {
+  fill: #7fb3f0;
+}
+
+.report__chart text {
+  fill: #8792a8;
+  font-size: 11px;
+}
+
+.report__chart .report__chart-value {
+  fill: #d5dae6;
+  font-size: 10px;
+}
+
+.report__sparkline {
+  width: 150px;
+  height: 34px;
+  display: block;
+}
+
+.report__sparkline path {
+  stroke: #3987e5;
+}
+
+.report__gaps {
+  background: rgba(242, 166, 90, 0.08);
+  border: 1px solid rgba(242, 166, 90, 0.35);
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+}
+
+.report__gaps h3 {
+  margin: 0 0 0.5rem;
+  font-size: 0.85rem;
+  color: #f2a65a;
+}
+
+.report__gaps p,
+.report__gaps ul {
+  margin: 0;
+  font-size: 0.85rem;
+  color: #d5dae6;
+  line-height: 1.5;
+}
+
+.report__gaps ul {
+  padding-left: 1.1rem;
+}
+
+.report__footer {
+  margin-top: 1.25rem;
+  color: #6b7488;
+  font-size: 0.74rem;
+}
+
+/* Açık tema: hem "PDF olarak indir" hazırlığında ekranda (önizleme) hem baskıda. Aynı bildirimler
+   iki seçici altında; baskı, sınıf eklenmeden Ctrl+P ile de doğru çıksın. */
+.report--printing,
+.report--printing .report__doc {
+  background: #ffffff;
+  color: #111418;
+}
+
+.report--printing .report__head {
+  border-bottom-color: #111418;
+}
+
+.report--printing .report__head h1,
+.report--printing .report__kpi dd,
+.report--printing .report__findings,
+.report--printing .report__lead,
+.report--printing .report__subtitle,
+.report--printing .report__similar,
+.report--printing .dashboard__section-title,
+.report--printing .dashboard__table td,
+.report--printing .dashboard__table th,
+.report--printing .report__gaps p,
+.report--printing .report__gaps ul,
+.report--printing .report__chip,
+.report--printing .benchmark-card__row-label,
+.report--printing .benchmark-card__row-value {
+  color: #111418;
+}
+
+.report--printing .report__kicker,
+.report--printing .report__meta,
+.report--printing .report__kpi dt,
+.report--printing .report__kpi small,
+.report--printing .report__fine,
+.report--printing .report__basis,
+.report--printing .report__footer,
+.report--printing .report__row--muted td,
+.report--printing .report__confidence--weak {
+  color: #444b57;
+}
+
+.report--printing .report__note {
+  color: #5a6373;
+}
+
+.report--printing .report__nodata,
+.report--printing .report__caveat,
+.report--printing .report__kpi-warn,
+.report--printing .report__badge,
+.report--printing .report__gaps h3 {
+  color: #9a5b12 !important;
+  border-color: #9a5b12;
+}
+
+.report--printing .dashboard__section {
+  background: #ffffff;
+  border: 1px solid #c7cdd8;
+  box-shadow: none;
+}
+
+.report--printing .dashboard__table th,
+.report--printing .dashboard__table td {
+  border-color: #c7cdd8;
+}
+
+.report--printing .report__chip {
+  background: #eef1f6;
+}
+
+.report--printing .benchmark-card__row-bar-track {
+  background: #e3e7ee;
+}
+
+.report--printing .report__chart text {
+  fill: #444b57;
+}
+
+.report--printing .report__chart .report__chart-value {
+  fill: #111418;
+}
+
+.report--printing .report__gaps {
+  background: #fbf4ea;
+  border-color: #e0c9a6;
+}
+
+.report--printing .report__toolbar {
+  visibility: hidden;
+}
+
+@media print {
+  .report__toolbar {
+    display: none !important;
+  }
+
+  .report {
+    max-width: none;
+    padding: 0 !important;
+    font-size: 10pt;
+  }
+
+  .report,
+  .report .report__doc {
+    background: #ffffff !important;
+    color: #111418 !important;
+  }
+
+  .report__head {
+    break-after: avoid;
+    border-bottom-color: #111418;
+    margin-bottom: 5mm;
+    padding-bottom: 3mm;
+  }
+
+  .report__head h1 {
+    font-size: 18pt;
+    color: #111418;
+  }
+
+  .report__kicker,
+  .report__meta,
+  .report__kpi dt,
+  .report__kpi small,
+  .report__fine,
+  .report__basis,
+  .report__footer,
+  .report__row--muted td,
+  .report__confidence--weak {
+    color: #444b57 !important;
+  }
+
+  .report__kpi dd,
+  .report__findings,
+  .report__lead,
+  .report__subtitle,
+  .report__similar,
+  .report__chip,
+  .report__gaps p,
+  .report__gaps ul {
+    color: #111418 !important;
+  }
+
+  .report__note {
+    color: #5a6373 !important;
+    font-size: 7.5pt;
+  }
+
+  .report__nodata,
+  .report__caveat,
+  .report__kpi-warn,
+  .report__badge,
+  .report__gaps h3 {
+    color: #9a5b12 !important;
+    border-color: #9a5b12 !important;
+  }
+
+  .report__section {
+    break-inside: avoid;
+    page-break-inside: avoid;
+    margin-bottom: 4mm;
+    padding: 4mm 5mm;
+    border-radius: 3mm;
+  }
+
+  .report__chip {
+    background: #eef1f6 !important;
+  }
+
+  .report__chart text {
+    fill: #444b57;
+  }
+
+  .report__chart .report__chart-value {
+    fill: #111418;
+  }
+
+  .report__gaps {
+    break-inside: avoid;
+    background: #fbf4ea !important;
+    border-color: #e0c9a6 !important;
+  }
+
+  .report__table td,
+  .report__table th {
+    font-size: 8.5pt;
+    padding: 1.4mm 2mm;
+  }
+
+  /* Uzun tablolar (yayın varlığı, boşluk analizi) sayfa sınırında bölünebilir; başlık satırı
+     her sayfada tekrar eder. Sayfadan uzun bir kutuda break-inside:avoid zaten tutulamaz. */
+  .report__doc--producer .report__section[data-section='availability'],
+  .report__doc--producer .report__section[data-section='gapAnalysis'] {
+    break-inside: auto;
+    page-break-inside: auto;
+  }
+
+  .report__table thead {
+    display: table-header-group;
+  }
+
+  .report__table tr {
+    break-inside: avoid;
+  }
+
+  /* Yönetici özeti tek sayfaya sığmalı: daha sıkı boşluklar, daha küçük grafik. */
+  .report__doc--executive {
+    font-size: 9pt;
+  }
+
+  .report__doc--executive .report__head {
+    margin-bottom: 2.5mm;
+    padding-bottom: 2mm;
+  }
+
+  .report__doc--executive .report__head h1 {
+    font-size: 16pt;
+  }
+
+  .report__doc--executive .report__section {
+    margin-bottom: 2.5mm;
+    padding: 2.5mm 4mm;
+  }
+
+  .report__doc--executive .report__lead {
+    margin-bottom: 1.5mm;
+  }
+
+  .report__doc--executive .report__kpi small,
+  .report__doc--executive .report__meta {
+    line-height: 1.3;
+  }
+
+  .report__doc--executive .report__fine {
+    margin-top: 1mm;
+  }
+
+  .report__doc--executive .dashboard__section-title {
+    margin-bottom: 2mm;
+    padding-bottom: 1.2mm;
+  }
+
+  .report__doc--executive .report__kpi dd {
+    font-size: 12pt;
+  }
+
+  .report__doc--executive .report__chart {
+    max-height: 28mm;
+  }
+
+  .report__doc--executive .report__note {
+    font-size: 6.8pt;
+    line-height: 1.3;
+    margin-top: 1.2mm;
+  }
+
+  .report__doc--executive .report__findings {
+    font-size: 9pt;
+  }
+
+  .report__doc--executive .report__gaps {
+    padding: 2mm 4mm;
+  }
+
+  .report__doc--executive .report__gaps h3 {
+    margin-bottom: 0.8mm;
+  }
+
+  .report__doc--executive .report__footer {
+    margin-top: 2mm;
+  }
 }

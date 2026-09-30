@@ -290,3 +290,14 @@ export async function submitMediaSentimentOverride(id, sentiment) {
 export async function clearMediaSentimentOverride(id) {
   return handle(await fetch(`/api/media-sentiment-audit/${id}/clear-override`, { method: 'POST' }))
 }
+
+/** Ülke raporu — üç profil (executive | marketing | producer); yetki sunucuda denetlenir (403). */
+export async function fetchCountryReport(iso2, profile, { fresh = false } = {}) {
+  const q = new URLSearchParams({ profile })
+  if (fresh) q.set('fresh', '1')
+  return handle(await fetch(`/api/report/country/${encodeURIComponent(iso2)}?${q}`))
+}
+
+export async function fetchReportProfiles() {
+  return handle(await fetch('/api/report/profiles'))
+}

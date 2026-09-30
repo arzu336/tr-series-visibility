@@ -88,7 +88,7 @@ function badgeFor(usedFactors) {
  * girmez (bkz. yukarıdaki WEIGHTS notu). Hiçbir gerçek veri yoksa (Share of Search bile
  * çekilemezse) boş entries + açık bir `error` alanıyla döner, uydurma bir sıralama üretilmez.
  */
-export async function calculateCountryCompositeScore(countryIso2) {
+export async function calculateCountryCompositeScore(countryIso2, { cachedOnly = false } = {}) {
   const iso2 = countryIso2.toUpperCase()
   const raw = getCached('raw-series-providers')
   if (!raw) {
@@ -113,11 +113,16 @@ export async function calculateCountryCompositeScore(countryIso2) {
   let shareOfSearchByTitle = new Map()
   let shareOfSearchMeta = null
   try {
-    const sos = await calculateShareOfSearch(iso2, titles)
+    const sos = await calculateShareOfSearch(iso2, titles, 'today 12-m', { cachedOnly })
     shareOfSearchByTitle = new Map(sos.items.map((it) => [it.title, it]))
     shareOfSearchMeta = { fromCache: sos.fromCache, stale: sos.stale }
   } catch (err) {
-    console.error(`[countryScoringEngine] ${iso2} Share of Search alınamadı:`, err.message)
+    if (err?.code === 'CACHE_MISS') {
+      // Rapor modu: ücretli sorgu yapılmadı, faktör dışlanır (ağırlık yeniden dağıtılır).
+      shareOfSearchMeta = { skipped: 'cache-miss' }
+    } else {
+      console.error(`[countryScoringEngine] ${iso2} Share of Search alınamadı:`, err.message)
+    }
   }
 
   const entries = candidates.map((s) => {

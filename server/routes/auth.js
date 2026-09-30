@@ -59,6 +59,33 @@ const generalApiLimiter = rateLimit({
   message: { error: 'Çok fazla istek yapıldı. Lütfen birkaç dakika sonra tekrar deneyin.' },
 })
 
+// Erişim düzeyleri sıralı: viewer < analyst < admin (users.ACCESS_LEVELS ile aynı küme).
+const ACCESS_ORDER = { viewer: 0, analyst: 1, admin: 2 }
+
+export function hasAccessLevel(user, minLevel) {
+  if (!user) return false
+  const level = user.isAdmin ? 'admin' : user.accessLevel || 'viewer'
+  return (ACCESS_ORDER[level] ?? -1) >= (ACCESS_ORDER[minLevel] ?? Number.POSITIVE_INFINITY)
+}
+
+/** Asgari erişim düzeyi kapısı — `router.get(path, requireAccessLevel('analyst'), …)`. */
+export function requireAccessLevel(minLevel) {
+  if (!(minLevel in ACCESS_ORDER)) throw new Error(`Bilinmeyen erişim düzeyi: ${minLevel}`)
+  return (req, res, next) => {
+    const user =
+      req.currentUser ||
+      (() => {
+        const userId = getSessionUserId(req.cookies?.[COOKIE_NAME])
+        return userId ? getUser(userId) : null
+      })()
+    if (!hasAccessLevel(user, minLevel)) {
+      return res.status(403).json({ error: `Bu işlem için en az ${minLevel} erişim düzeyi gerekir` })
+    }
+    req.currentUser = user
+    next()
+  }
+}
+
 /** Yönetici kapısı — route bazında (`router.post(path, requireAdmin, …)`) ya da prefix bazında kullanılır. */
 export function requireAdmin(req, res, next) {
   const userId = getSessionUserId(req.cookies?.[COOKIE_NAME])

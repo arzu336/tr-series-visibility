@@ -476,16 +476,19 @@ def _accumulate_row(accumulator: dict[str, dict], row: dict, turkish_titles: lis
             "peak_position": rank,
             "latest_week": week,
             "latest_rank": rank,
+            "first_week": week,
         }
     entry["weeks_in_top10"] += 1
     entry["peak_position"] = min(entry["peak_position"], rank)
     if week >= entry["latest_week"]:
         entry["latest_week"] = week
         entry["latest_rank"] = rank
+    if week < entry["first_week"]:
+        entry["first_week"] = week
 
 
 def scan_all_countries(
-    path: Path, is_complete: bool, turkish_titles: list[str]
+    path: Path, is_complete: bool, turkish_titles: list[str], stats: Optional[dict] = None
 ) -> tuple[dict[str, list[NetflixCountrySignal]], set[str], Optional[str]]:
     """TSV'yi TEK geçişte okuyup her ülke için sinyalleri toplar.
 
@@ -500,6 +503,9 @@ def scan_all_countries(
     """
     accumulators: dict[str, dict[str, dict]] = {}
     seen_order: list[str] = []
+    first_week: Optional[str] = None
+    last_week: Optional[str] = None
+    row_count = 0
     with open(path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
         for row in reader:
@@ -508,7 +514,16 @@ def scan_all_countries(
                 continue  # kesik/bozuk satır (kısmi dosyanın son satırı olabilir)
             if not seen_order or seen_order[-1] != iso2:
                 seen_order.append(iso2)
+            week = row.get("week") or ""
+            if week:
+                first_week = week if first_week is None or week < first_week else first_week
+                last_week = week if last_week is None or week > last_week else last_week
+            row_count += 1
             _accumulate_row(accumulators.setdefault(iso2, {}), row, turkish_titles)
+    # Kaynak dosyanın KENDİ kapsamı (Türk dizisi eşleşmesinden bağımsız): rapor, "ülkenin son
+    # kaydı" ile "dosyanın son haftası" arasındaki farkı ancak bununla dürüstçe gösterebilir.
+    if stats is not None:
+        stats.update({"first_week": first_week, "last_week": last_week, "rows": row_count})
 
     truncated = None if (is_complete or not seen_order) else seen_order[-1]
     complete = set(seen_order)
@@ -524,7 +539,11 @@ def scan_all_countries(
 
 
 def get_all_country_rankings(
-    turkish_titles: list[str], cache_dir: Path, force_download: bool = False, offline: bool = False
+    turkish_titles: list[str],
+    cache_dir: Path,
+    force_download: bool = False,
+    offline: bool = False,
+    stats: Optional[dict] = None,
 ) -> tuple[dict[str, list[NetflixCountrySignal]], set[str], Optional[str], bool]:
     """download_dataset (ya da offline=True ile resolve_local_dataset) + scan_all_countries.
     Son eleman: dosya tam mıydı."""
@@ -532,7 +551,7 @@ def get_all_country_rankings(
         path, is_complete = resolve_local_dataset(cache_dir)
     else:
         path, is_complete = download_dataset(cache_dir, force=force_download)
-    by_iso2, complete, truncated = scan_all_countries(path, is_complete, turkish_titles)
+    by_iso2, complete, truncated = scan_all_countries(path, is_complete, turkish_titles, stats=stats)
     return by_iso2, complete, truncated, is_complete
 
 

@@ -41,7 +41,7 @@ async function fetchGdpPerCapitaFresh() {
 }
 
 let countryMetaInFlight = null
-async function getCountryMeta() {
+export async function getCountryMeta() {
   const cached = getCached(META_CACHE_KEY)
   if (cached) return cached
   if (!countryMetaInFlight) {
@@ -58,7 +58,7 @@ async function getCountryMeta() {
 }
 
 let gdpInFlight = null
-async function getGdpPerCapita() {
+export async function getGdpPerCapita() {
   const cached = getCached(GDP_CACHE_KEY)
   if (cached) return cached
   if (!gdpInFlight) {

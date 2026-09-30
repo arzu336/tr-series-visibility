@@ -241,6 +241,7 @@ def _to_records(
                 peak_rank=signal.peak_position,
                 rank_score=nf.compute_rank_score(signal),
                 last_week_date=signal.latest_week,
+                first_week_date=signal.first_week,
                 updated_at=now,
             )
         )
@@ -326,9 +327,10 @@ def sync_all(
     tamamen başarısızsa `status: 'unavailable'` döner ve tablo olduğu gibi kalır.
     """
     titles = _candidate_titles(series_index)
+    source_stats: dict = {}
     try:
         by_iso2, complete, truncated, file_complete = nf.get_all_country_rankings(
-            titles, cache_dir, force_download=force_download, offline=offline
+            titles, cache_dir, force_download=force_download, offline=offline, stats=source_stats
         )
     except RuntimeError as exc:
         return {"status": "unavailable", "reason": str(exc)}
@@ -347,12 +349,19 @@ def sync_all(
             countries_with_matches.append(iso2)
             all_records.extend(records)
 
-    if all_records:
-        conn = db.get_connection(db_path)
-        try:
+    conn = db.get_connection(db_path)
+    try:
+        if all_records:
             db.save_netflix_country_rankings(conn, all_records)
-        finally:
-            conn.close()
+        # Kaynak dosyanın kapsamı — eşleşme olsun olmasın yazılır (rapor "dosya nereye kadar
+        # geliyor" sorusuna cevap verebilsin).
+        db.set_pipeline_meta(conn, "netflix_source_first_week", source_stats.get("first_week"))
+        db.set_pipeline_meta(conn, "netflix_source_last_week", source_stats.get("last_week"))
+        db.set_pipeline_meta(conn, "netflix_source_complete", "1" if file_complete else "0")
+        db.set_pipeline_meta(conn, "netflix_truncated_country", truncated)
+        db.set_pipeline_meta(conn, "netflix_synced_at", now.isoformat())
+    finally:
+        conn.close()
 
     if unresolved_all:
         log.info(f"TMDB'ye eşlenemeyen {len(unresolved_all)} Netflix başlığı: {sorted(unresolved_all)}")
@@ -371,6 +380,8 @@ def sync_all(
         "truncated_country": truncated,
         "records_written": len(all_records),
         "unresolved_titles": sorted(unresolved_all),
+        "source_first_week": source_stats.get("first_week"),
+        "source_last_week": source_stats.get("last_week"),
     }
 
 

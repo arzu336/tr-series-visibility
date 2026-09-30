@@ -56,3 +56,34 @@ export function sanitizeClaimsPayload(payload) {
   gez(payload)
   return { payload, removed }
 }
+
+/**
+ * Ülke raporu için kapı: iddia listelerini süzer (yukarıdaki kural) VE `text` alanı taşıyan
+ * metin öğelerinden (bulgular, açıklamalar) aksiyon önerisi içerenleri düşürür. Rapor üreticisi
+ * zaten öneri yazmamalı; bu, ikinci savunma hattıdır. Yerinde çalışır, sayaçları döner.
+ */
+export function sanitizeReportPayload(payload, { direktifIceriyorMu } = {}) {
+  const { removed: removedClaims } = sanitizeClaimsPayload(payload)
+  let removedDirectives = 0
+  if (typeof direktifIceriyorMu !== 'function' || !payload?.sections)
+    return { payload, removedClaims, removedDirectives }
+
+  const gez = (node) => {
+    if (Array.isArray(node)) {
+      for (let i = node.length - 1; i >= 0; i--) {
+        const el = node[i]
+        if (el && typeof el === 'object' && typeof el.text === 'string' && direktifIceriyorMu(el.text)) {
+          node.splice(i, 1)
+          removedDirectives++
+        } else {
+          gez(el)
+        }
+      }
+      return
+    }
+    if (!node || typeof node !== 'object') return
+    for (const deger of Object.values(node)) gez(deger)
+  }
+  gez(payload.sections)
+  return { payload, removedClaims, removedDirectives }
+}

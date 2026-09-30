@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
+import { usePrintWhenReady } from '../lib/usePrintWhenReady.js'
 import CulturalImpactTab from './CulturalImpactTab.jsx'
 import TourismImpactTab from './TourismImpactTab.jsx'
 import ExportImpactTab from './ExportImpactTab.jsx'
@@ -22,40 +23,14 @@ const PRINT_POLL_MS = 300
 
 export default function ImpactAnalysisTabs({ onSelectCountry }) {
   const [tab, setTab] = useState('cultural')
-  const [printMode, setPrintMode] = useState('off')
-  const printAreaRef = useRef(null)
-
-  useEffect(() => {
-    if (printMode !== 'hazirlaniyor') return
-    let cancelled = false
-    let timer = null
-    const basladi = Date.now()
-
-    const bittiMi = () => {
-      const bekleyen = printAreaRef.current?.querySelectorAll('.status')?.length ?? 0
-      return bekleyen === 0 || Date.now() - basladi > PRINT_READY_TIMEOUT_MS
-    }
-
-    const dene = () => {
-      if (cancelled) return
-      if (!bittiMi()) {
-        timer = setTimeout(dene, PRINT_POLL_MS)
-        return
-      }
-      const geriDon = () => setPrintMode('off')
-      window.addEventListener('afterprint', geriDon, { once: true })
-      window.print()
-      geriDon()
-    }
-
-    timer = setTimeout(dene, 200)
-    return () => {
-      cancelled = true
-      if (timer) clearTimeout(timer)
-    }
-  }, [printMode])
-
-  const yazdiriliyor = printMode === 'hazirlaniyor'
+  const {
+    printAreaRef,
+    printing: yazdiriliyor,
+    requestPrint,
+  } = usePrintWhenReady({
+    readyTimeoutMs: PRINT_READY_TIMEOUT_MS,
+    pollMs: PRINT_POLL_MS,
+  })
 
   return (
     <div className={`dashboard${yazdiriliyor ? ' dashboard--printing' : ''}`} ref={printAreaRef}>
@@ -64,7 +39,7 @@ export default function ImpactAnalysisTabs({ onSelectCountry }) {
         <div className="dashboard__export-actions">
           <button
             className="dashboard__export-btn dashboard__export-btn--ghost"
-            onClick={() => setPrintMode('hazirlaniyor')}
+            onClick={requestPrint}
             disabled={yazdiriliyor}
           >
             {yazdiriliyor ? 'Rapor hazırlanıyor…' : '🖨 PDF Olarak Yazdır'}

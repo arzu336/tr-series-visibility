@@ -1,0 +1,97 @@
+name: Netflix Top 10 kaynak dosyası
+
+# Netflix'in kamuya açık all-weeks-countries.tsv dosyası (~32 MB) yerel ağdan tam inmiyor
+# (CDN ~60 sn'de bağlantıyı düşürüyor, Range yok sayılıyor; bkz. netflix_country_ranker.py).
+# Bu iş akışı dosyayı GitHub koşucusundan indirir, tamlık kontrolünden geçirir ve artifact
+# olarak yükler. Yerelde: `gh run download <run-id> -n netflix-all-weeks-countries -D
+# data-pipeline-python/data` ardından `python netflix_import_artifact.py` (README: Netflix).
+#
+# Gizli bilgi yok: URL kamuya açık, robots.txt `/tudum`'a izin veriyor, bot atlatma yok.
+# Veritabanına yazılmaz; eşleştirme ve pipeline.db güncellemesi yerelde yapılır.
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Netflix haftalık listeyi salı günleri yayımlar; çarşamba 05:00 UTC en güncel haftayı alır.
+    - cron: '0 5 * * 3'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: netflix-sync
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    name: İndir ve doğrula
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    defaults:
+      run:
+        working-directory: data-pipeline-python
+    env:
+      PYTHONUTF8: '1'
+      # İndirici toplam süre sınırı (varsayılan 900 sn); koşucuda daha sabırlı olunabilir.
+      NETFLIX_DOWNLOAD_DEADLINE_S: '1800'
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: data-pipeline-python/requirements.txt
+
+      - run: pip install -r requirements.txt
+
+      # Yalnızca indirir ve doğrular; çıkış kodu 0 = tam dosya, 1 = kısmi/bozuk, 2 = ağ yok.
+      # Kısmi dosyada adım kırmızı olur, ama özet ve kısmi dosya teşhis için yine yüklenir.
+      - name: Kaynak dosyayı indir ve tamlığını doğrula
+        id: fetch
+        run: python netflix_fetch_source.py --cache-dir data --summary-json data/netflix-source-summary.json
+
+      - name: Özeti iş çıktısına yaz
+        if: always()
+        run: |
+          echo '## Netflix kaynak dosyası' >> "$GITHUB_STEP_SUMMARY"
+          if [ -f data/netflix-source-summary.json ]; then
+            python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import json
+          s = json.load(open("data/netflix-source-summary.json", encoding="utf-8"))
+          durum = "TAM ✅" if s.get("complete") else f"KISMİ/BOZUK ❌ — {s.get('reason')}"
+          print(f"- Durum: {durum}")
+          print(f"- Boyut: {s.get('size_bytes', 0):,} bayt · satır: {s.get('rows', 0):,} · ülke: {s.get('countries', 0)}")
+          print(f"- Ülkeler: {s.get('first_country')} → {s.get('last_country')} · haftalar: {s.get('first_week')} → {s.get('last_week')}")
+          print(f"- İndirme zamanı: {s.get('downloaded_at')}")
+          PY
+          else
+            echo '- Özet dosyası oluşmadı (indirme başlayamadı).' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      # Tam dosya: yerelde netflix_import_artifact.py bunu data/ dizinine alır.
+      - name: Tam dosyayı artifact olarak yükle
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: netflix-all-weeks-countries
+          path: |
+            data-pipeline-python/data/all-weeks-countries.tsv
+            data-pipeline-python/data/netflix-source-summary.json
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 6
+
+      # Başarısızlıkta teşhis: en uzun kısmi dosya + meta + özet. Bu artifact içe ALINMAZ
+      # (netflix_import_artifact.py kesik dosyayı reddeder).
+      - name: Kısmi indirmeyi teşhis için yükle
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: netflix-partial-download
+          path: |
+            data-pipeline-python/data/all-weeks-countries.tsv.partial
+            data-pipeline-python/data/all-weeks-countries.tsv.partial.json
+            data-pipeline-python/data/netflix-source-summary.json
+          if-no-files-found: ignore
+          retention-days: 7

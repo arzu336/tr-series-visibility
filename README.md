@@ -17,7 +17,8 @@ Tüm metrikler ne ölçtüklerini ve ne ölçmediklerini arayüzde belirtir; met
 
 ```
 server/                 Express API + SQLite (node:sqlite, WAL)
-  index.js              uygulama kurulumu (helmet, CORS, statik dosyalar) ve router'ların takılması
+  app.js                Express uygulaması (helmet, CORS, statik dosyalar, router'lar) — testler dinlemeden kullanır
+  index.js              app + zamanlayıcı + listen
   env.js                .env yükleme — ilk import, diğer modüller process.env'i okumadan önce
   routes/
     auth.js             çerez, hız sınırları, giriş/çıkış, /api oturum duvarı, requireAdmin
@@ -26,6 +27,7 @@ server/                 Express API + SQLite (node:sqlite, WAL)
     analyst.js          tema, destinasyon ve basın tonu listeleri + insan düzeltmeleri
     trends.js           arama ilgisi, sosyal dinleme, IMDb, kişi, bileşik ülke sıralaması, iş takibi
     impact.js           etki & ihracat analizi, ülke özeti (yalnızca yönetici)
+    report.js           ülke raporu (üç profil, profil bazlı yetki; veri: services/countryReport.js)
     shared.js           ortak hata sarmalayıcıları (upstream, badRequest)
   data-pipeline.js      TMDB çekme + arka plan LLM sınıflandırma
   aggregate.js          ülke skoru ve kişi başına normalizasyon
@@ -124,6 +126,13 @@ python batch_run.py                       # dizilah / IMDb zenginleştirme
 ```
 
 Netflix'in kaynak dosyası (~32 MB) sunucu tarafında kesintiye uğrayabilir; indirici yeniden dener, kaldığı yerden devam etmeyi destekler ve tam inmezse yalnızca bloğu tam olan ülkeleri yazar. Netflix başlıkları İngilizce yayın adıyla gelir; eşleştirme IMDb takma adları ve `NETFLIX_RELEASE_TITLES` listesiyle genişletilir. Ayrıntılar modül docstring'lerinde.
+
+Dosya yerel ağdan tam inmiyorsa `.github/workflows/netflix-sync.yml` (elle tetiklenebilir, haftalık) dosyayı GitHub koşucusundan indirir, tamlığını doğrular ve artifact olarak yükler; kısmi dosyada iş kırmızı olur. Yerelde almak için:
+
+```bash
+gh run download <run-id> -n netflix-all-weeks-countries -D data-pipeline-python/data
+python netflix_import_artifact.py        # doğrular, kısmi kalıntıları siler, --all --offline koşar
+```
 
 ## Bilinen sınırlar
 

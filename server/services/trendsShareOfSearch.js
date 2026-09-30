@@ -1,4 +1,4 @@
-import { cacheFirstSerpApi, serpapiGet, TRENDS_TTL_MS } from './serpApiCache.js'
+import { cacheFirstSerpApi, readCachedSerpApi, serpapiGet, TRENDS_TTL_MS } from './serpApiCache.js'
 
 const MAX_TERMS = 5
 
@@ -37,7 +37,15 @@ async function fetchShareOfSearchRaw(titles, iso2, timeframe) {
  * anlamsız, 5'ten fazlası SerpAPI'nin tek-sorgu sınırını aşar — ikisi de dürüstçe hata
  * fırlatır, sessizce kırpma/doldurma yapılmaz.
  */
-export async function calculateShareOfSearch(iso2, titles, timeframe = 'today 12-m') {
+export class CacheMissError extends Error {
+  constructor(key) {
+    super('Share of Search önbellekte yok; cachedOnly modunda ücretli sorgu yapılmaz')
+    this.code = 'CACHE_MISS'
+    this.key = key
+  }
+}
+
+export async function calculateShareOfSearch(iso2, titles, timeframe = 'today 12-m', { cachedOnly = false } = {}) {
   if (!Array.isArray(titles) || titles.length < 2) {
     throw new Error('Share of Search için en az 2 dizi adı gerekir')
   }
@@ -47,6 +55,11 @@ export async function calculateShareOfSearch(iso2, titles, timeframe = 'today 12
     )
   }
   const key = shareOfSearchCacheKey(iso2, titles)
+  if (cachedOnly) {
+    const cached = readCachedSerpApi(key)
+    if (!cached) throw new CacheMissError(key)
+    return cached
+  }
   return cacheFirstSerpApi(key, TRENDS_TTL_MS, () => fetchShareOfSearchRaw(titles, iso2, timeframe))
 }
 

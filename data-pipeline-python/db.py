@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import sqlite3
+from datetime import datetime, timezone
 from pathlib import Path
 
 from models import DizilahSeriesInfo, ImdbSeriesInfo, NetflixCountryRanking, ReytingTvDailyRank
@@ -92,8 +93,18 @@ CREATE TABLE IF NOT EXISTS netflix_country_rankings (
     peak_rank INTEGER,
     rank_score REAL,
     last_week_date TEXT,
+    first_week_date TEXT,
     updated_at TEXT,
     PRIMARY KEY (country_iso2, tmdb_id)
+);
+
+-- Hattın kendi üst verisi (Node salt okunur okur): kaynak dosyanın kapsadığı hafta aralığı,
+-- dosyanın tam mı kısmi mi olduğu, son senkron zamanı. Rapor bunlarla "ülkenin son kaydı" ile
+-- "dosyanın son haftası" farkını ayırt eder (yoksa 'veri yok' ile 'dizi girmedi' karışır).
+CREATE TABLE IF NOT EXISTS pipeline_meta (
+    key TEXT PRIMARY KEY,
+    value TEXT,
+    updated_at TEXT
 );
 
 CREATE TABLE IF NOT EXISTS reytingtv_daily_ranks (
@@ -163,7 +174,30 @@ def get_connection(db_path: Path) -> sqlite3.Connection:
     # birbirini bloklamadan aynı anda çalışmasına izin verir (server/db.js'teki aynı ayar).
     conn.execute("PRAGMA journal_mode = WAL")
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    """CREATE IF NOT EXISTS var olan tabloya sütun eklemez; sonradan eklenen sütunlar burada."""
+    cols = {r[1] for r in conn.execute("PRAGMA table_info(netflix_country_rankings)")}
+    if "first_week_date" not in cols:
+        conn.execute("ALTER TABLE netflix_country_rankings ADD COLUMN first_week_date TEXT")
+        conn.commit()
+
+
+def set_pipeline_meta(conn: sqlite3.Connection, key: str, value) -> None:
+    conn.execute(
+        "INSERT INTO pipeline_meta (key, value, updated_at) VALUES (?, ?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value, updated_at = excluded.updated_at",
+        (key, None if value is None else str(value), datetime.now(timezone.utc).isoformat()),
+    )
+    conn.commit()
+
+
+def get_pipeline_meta(conn: sqlite3.Connection, key: str):
+    row = conn.execute("SELECT value FROM pipeline_meta WHERE key = ?", (key,)).fetchone()
+    return row[0] if row else None
 
 
 def save_dizilah_series(conn: sqlite3.Connection, info: DizilahSeriesInfo) -> None:
@@ -282,8 +316,8 @@ def save_netflix_country_rankings(conn: sqlite3.Connection, rankings: list[Netfl
         """
         INSERT INTO netflix_country_rankings
             (country_iso2, tmdb_id, show_title, matched_title, weeks_in_top10, peak_rank,
-             rank_score, last_week_date, updated_at)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+             rank_score, last_week_date, first_week_date, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(country_iso2, tmdb_id) DO UPDATE SET
             show_title = excluded.show_title,
             matched_title = excluded.matched_title,
@@ -291,12 +325,13 @@ def save_netflix_country_rankings(conn: sqlite3.Connection, rankings: list[Netfl
             peak_rank = excluded.peak_rank,
             rank_score = excluded.rank_score,
             last_week_date = excluded.last_week_date,
+            first_week_date = excluded.first_week_date,
             updated_at = excluded.updated_at
         """,
         [
             (
                 r.country_iso2, r.tmdb_id, r.show_title, r.matched_title, r.weeks_in_top10,
-                r.peak_rank, r.rank_score, r.last_week_date, r.updated_at.isoformat(),
+                r.peak_rank, r.rank_score, r.last_week_date, r.first_week_date, r.updated_at.isoformat(),
             )
             for r in rankings
         ],

@@ -45,6 +45,13 @@ function readRaw(key) {
   }
 }
 
+/** Yalnızca TAZE önbellek: yoksa/süresi dolmuşsa null — hiçbir ağ çağrısı yapılmaz (rapor üretimi). */
+export function readCachedSerpApi(key) {
+  const cached = readRaw(key)
+  if (!cached || !cached.isFresh) return null
+  return { ...cached.value, fromCache: true, stale: false }
+}
+
 function writeRaw(key, value, ttlMs, now = Date.now()) {
   upsertStmt.run(key, JSON.stringify(value), now + ttlMs, now)
 }

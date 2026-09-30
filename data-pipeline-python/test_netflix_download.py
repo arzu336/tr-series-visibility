@@ -319,6 +319,14 @@ class TestScanAllCountries:
         assert ar["Kurulus Osman"].peak_position == 1
         assert ar["Kurulus Osman"].latest_week == "2026-09-13"
         assert ar["Kurulus Osman"].latest_rank == 1
+        assert ar["Kurulus Osman"].first_week == "2026-09-06"
+
+    def test_kaynak_dosya_hafta_araligi_istatistigi(self, tmp_path):
+        p = tmp_path / "a.tsv"
+        p.write_bytes(ORNEK_BYTES)
+        stats = {}
+        nf.scan_all_countries(p, True, TITLES, stats=stats)
+        assert stats == {"first_week": "2026-09-06", "last_week": "2026-09-13", "rows": 7}
 
     def test_kismi_dosyada_son_ulke_yarim_sayilir(self, tmp_path):
         p = tmp_path / "a.tsv"
@@ -375,6 +383,16 @@ class TestSyncAll:
         assert sonuc["countries_with_matches"] == ["AR", "BR", "DK"]
         assert sonuc["records_written"] == 3
         assert sonuc["unresolved_titles"] == []
+        assert sonuc["source_first_week"] == "2026-09-06"
+        assert sonuc["source_last_week"] == "2026-09-13"
+        conn = sqlite3.connect(db_path)
+        meta = dict(conn.execute("SELECT key, value FROM pipeline_meta").fetchall())
+        assert meta["netflix_source_last_week"] == "2026-09-13"
+        assert meta["netflix_source_complete"] == "1"
+        assert meta["netflix_truncated_country"] is None
+        ilk = conn.execute("SELECT first_week_date, last_week_date FROM netflix_country_rankings WHERE country_iso2='AR'").fetchone()
+        conn.close()
+        assert ilk == ("2026-09-06", "2026-09-13")
 
         conn = sqlite3.connect(db_path)
         rows = conn.execute(

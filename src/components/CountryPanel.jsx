@@ -239,6 +239,7 @@ export default function CountryPanel({
   onCloseSeriesGlobal,
   onShowSeriesOnMap,
   onGoToSeriesAnalysis,
+  onOpenReport,
 }) {
   const [expandedId, setExpandedId] = useState(null)
   const [periodRange, setPeriodRange] = useState('monthly')
@@ -342,6 +343,16 @@ export default function CountryPanel({
                 ×
               </button>
               <h2>{country.name}</h2>
+              {onOpenReport && (
+                <button
+                  type="button"
+                  className="panel__report-btn"
+                  onClick={() => onOpenReport(country.iso2)}
+                  aria-label={`${country.name} için ülke raporunu aç`}
+                >
+                  📄 Rapor
+                </button>
+              )}
               {/* "✓ Resmi Veri" rozeti daha önce kaldırılmıştı; proxy (tahmini) veri rozeti de
                   kullanıcı talebiyle kaldırıldı — veri kaynağı dökümü artık hiçbir yerde
                   gösterilmiyor. Alt başlık ("Arama hacmi endeksi: X/100") ayrı bir gerçek

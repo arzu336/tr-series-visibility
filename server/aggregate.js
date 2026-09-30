@@ -90,6 +90,9 @@ export function buildVisibility(rawData, themeStore, destinationStore = {}) {
       dominantTheme,
       themeConfidence,
       isThemeUncertain: themeConfidence < UNCERTAIN_THRESHOLD,
+      // Tema dağılımı (tema → popülerlik toplamı): ülke raporunun tema bölümü ve benzer-ülke
+      // kosinüs benzerliği bunu okur; yalnızca dominantTheme yetmez.
+      themeScores: c.themeScores,
       destinationSummary,
       dataSource: 'tmdb',
     }

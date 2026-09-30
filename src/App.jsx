@@ -18,6 +18,7 @@ const AnalystDashboard = lazy(() => import('./components/AnalystDashboard.jsx'))
 const TrendsExplorer = lazy(() => import('./components/TrendsExplorer.jsx'))
 const ImpactAnalysisTabs = lazy(() => import('./components/ImpactAnalysisTabs.jsx'))
 const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
+const CountryReportView = lazy(() => import('./components/report/CountryReportView.jsx'))
 const PENDING_APPROVALS_POLL_MS = 60000
 const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
 import { fetchVisibility, logout, fetchAdminUsers, fetchImdbData } from './lib/api.js'
@@ -50,6 +51,7 @@ export default function App() {
   const [activeSeriesId, setActiveSeriesId] = useState(null)
   const [searchedSeriesId, setSearchedSeriesId] = useState(null)
   const [view, setView] = useState('map')
+  const [reportIso2, setReportIso2] = useState(null)
   const [mapView, setMapView] = usePersistedState(MAP_VIEW_STORAGE_KEY, '2d', {
     parse: (s) => (s === '3d' ? '3d' : '2d'),
   })
@@ -187,6 +189,11 @@ export default function App() {
   )
 
   const handleSelectCountryGlobal = handleSelectCountryFromReport
+
+  const handleOpenReport = useCallback((iso2) => {
+    setReportIso2(iso2)
+    setView('report')
+  }, [])
 
   const handleFocusContinent = useCallback((continentStats) => {
     const target = continentCentroid(continentStats.countries)
@@ -353,6 +360,15 @@ export default function App() {
                 )}
               </button>
             )}
+            {reportIso2 && (
+              <button
+                className={view === 'report' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
+                onClick={() => setView('report')}
+                title={`${countryNames[reportIso2]?.name || reportIso2} ülke raporu`}
+              >
+                Ülke Raporu
+              </button>
+            )}
             <button className="app__nav-btn app__nav-btn--logout" onClick={handleLogout}>
               Çıkış Yap
             </button>
@@ -397,6 +413,13 @@ export default function App() {
               <ImpactAnalysisTabs onSelectCountry={handleSelectCountryFromReport} />
             )}
             {view === 'admin' && user?.isAdmin && <AdminUsersPanel currentUserId={user.id} />}
+            {view === 'report' && reportIso2 && (
+              <CountryReportView
+                iso2={reportIso2}
+                countryName={countryNames[reportIso2]?.name || reportIso2}
+                onBack={() => setView('map')}
+              />
+            )}
             {view === 'map' && (
               <>
                 {status === 'loading' && <div className="status">Veri yükleniyor…</div>}
@@ -497,6 +520,7 @@ export default function App() {
                         onCloseSeriesGlobal={() => setSearchedSeriesId(null)}
                         onShowSeriesOnMap={handleShowSeriesAvailability}
                         onGoToSeriesAnalysis={handleGoToSeriesAnalysis}
+                        onOpenReport={handleOpenReport}
                       />
                     </div>
                   </div>
