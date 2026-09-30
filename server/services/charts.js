@@ -277,13 +277,31 @@ export function buildCountryLists({
 
 // ---------------------------------------------------------------- okuyucular
 
+/**
+ * Aynı dönemde aynı dizinin birden çok satırını tek satıra indirir, en iyi sıra kalır. Netflix her sezonu
+ * ayrı listeler (ör. "Graveyard" aynı hafta 3. ve 10.): ayrı tutulunca dizi listede iki kez görünüyor ve
+ * "kaç haftadır listede" sayıları şişiyordu. Özet yayını (Türkiye TV) ayrı anahtar olduğu için, farklı
+ * platformlar da segment farklı olduğu için ayrı kalır.
+ */
+export function collapseSeasons(rows) {
+  const best = new Map()
+  for (const r of rows) {
+    const k = `${r.provider}|${r.country_iso2}|${r.period_date}|${r.segment}|${keyOf(r)}`
+    const cur = best.get(k)
+    if (!cur || r.rank < cur.rank) best.set(k, r)
+  }
+  return best.size === rows.length ? rows : [...best.values()]
+}
+
 function readRows(conn, where, params) {
   try {
-    return conn
-      .prepare(
-        `SELECT provider, country_iso2, period_type, period_date, segment, rank, series_id, title_raw, program_kind, fetched_at FROM chart_entries WHERE ${where}`
-      )
-      .all(...params)
+    return collapseSeasons(
+      conn
+        .prepare(
+          `SELECT provider, country_iso2, period_type, period_date, segment, rank, series_id, title_raw, program_kind, fetched_at FROM chart_entries WHERE ${where}`
+        )
+        .all(...params)
+    )
   } catch {
     return []
   }
@@ -392,7 +410,7 @@ export async function getTurkeyTv({ date, segment = 'Total', onlySeries = true }
 
 /** Ülke paneli: kaynak sırasına göre gerçekler + liste + 1 yıl önce + zaman çizelgesi. */
 export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
-  const cacheKey = `charts:country:v3:${iso2}:${week ?? 'latest'}:${range}`
+  const cacheKey = `charts:country:v4:${iso2}:${week ?? 'latest'}:${range}`
   const cached = getCached(cacheKey)
   if (cached) return cached
   const conn = getPipelineDb()

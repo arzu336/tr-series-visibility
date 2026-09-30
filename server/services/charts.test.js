@@ -9,6 +9,7 @@ import {
   isRecap,
   buildCountryLists,
   weekEndOf,
+  collapseSeasons,
 } from './charts.js'
 
 const row = (period_date, rank, series_id, title_raw, extra = {}) => ({
@@ -197,5 +198,42 @@ describe('buildCountryLists — tüm platformlar birlikte', () => {
   it('weekEndOf haftanın Pazar gününü verir', () => {
     expect(weekEndOf('2026-09-30')).toBe('2026-10-04') // Çarşamba
     expect(weekEndOf('2026-09-27')).toBe('2026-09-27') // Pazar
+  })
+})
+
+describe('collapseSeasons — aynı dönemde aynı dizinin sezonları tek satır', () => {
+  const sezonlar = [
+    row('2026-09-27', 3, 3, 'Graveyard'),
+    row('2026-09-27', 10, 3, 'Graveyard'),
+    row('2026-09-20', 5, 3, 'Graveyard'),
+    row('2026-09-20', 8, 3, 'Graveyard'),
+    row('2026-09-27', 6, 1, 'My Name Is Farah'),
+  ]
+
+  it('en iyi sıra kalır; farklı dönemler ve farklı diziler korunur', () => {
+    const tek = collapseSeasons(sezonlar)
+    expect(tek.map((r) => [r.period_date, r.series_id, r.rank])).toEqual([
+      ['2026-09-27', 3, 3],
+      ['2026-09-20', 3, 5],
+      ['2026-09-27', 1, 6],
+    ])
+  })
+
+  it('şu an listesi diziyi bir kez gösterir ve hafta sayısı sezonlarla şişmez', () => {
+    const liste = chartForPeriod(collapseSeasons(sezonlar), '2026-09-27', { prevPeriodDate: '2026-09-20', nameOf })
+    expect(liste.map((i) => [i.rank, i.name, i.weeksInList, i.trend])).toEqual([
+      [3, 'Seni Tanıyorum', 2, '↑2'],
+      [6, 'Adım Farah', 1, 'yeni'],
+    ])
+  })
+
+  it('özet yayını ve farklı platform ayrı kalır; tekrar yoksa aynı dizi döner', () => {
+    const ozet = [
+      row('2026-08-23', 1, 5, 'DAHA 17', { provider: 'reytingtv', segment: 'Total' }),
+      row('2026-08-23', 2, 5, 'DAHA 17 (ÖZET)', { provider: 'reytingtv', segment: 'Total' }),
+      row('2026-09-30', 4, 5, 'Torn Apart', { provider: 'flixpatrol', segment: 'shahid' }),
+      row('2026-09-30', 9, 5, 'Torn Apart', { provider: 'flixpatrol', segment: 'disney' }),
+    ]
+    expect(collapseSeasons(ozet)).toBe(ozet)
   })
 })
