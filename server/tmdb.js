@@ -93,8 +93,57 @@ export async function getExternalIds(seriesId) {
 
 const FETCH_CONCURRENCY = 8
 
+const NETFLIX_NETWORK_ID = 213
+const NETFLIX_DISCOVERY_PAGES = 3
+
+/**
+ * Netflix ağında yayımlanan Türk yapımları (with_networks=213 + origin TR). Popülerlik sıralı
+ * ilk N listesinin dışında kalan Netflix orijinalleri (Kübra, Yakamoz S-245, Asaf…) Netflix Top 10
+ * eşleştirmesinde en çok hafta toplayan başlıklardı; keşif sorgusu onları kataloğa katar.
+ */
+async function getNetflixSeriesByOrigin(originCountry, pages = NETFLIX_DISCOVERY_PAGES) {
+  const results = await Promise.all(
+    Array.from({ length: pages }, (_, i) =>
+      tmdbGet('/discover/tv', {
+        with_networks: String(NETFLIX_NETWORK_ID),
+        with_origin_country: originCountry,
+        sort_by: 'popularity.desc',
+        language: 'tr-TR',
+        page: i + 1,
+      }).catch(() => ({ results: [] }))
+    )
+  )
+  return results
+    .flatMap((p) => p.results || [])
+    .map((show) => ({
+      id: show.id,
+      name: show.original_name || show.name,
+      popularity: show.popularity,
+      posterPath: show.poster_path,
+      firstAirDate: show.first_air_date || null,
+      overview: show.overview || '',
+      netflixOriginal: true,
+    }))
+}
+
+/** İki keşif listesini id'ye göre birleştirir; ilk listenin sırası korunur, yeni Netflix yapımları sona eklenir. */
+export function mergeSeriesLists(primary, extra) {
+  const seen = new Set(primary.map((s) => s.id))
+  const out = [...primary]
+  for (const s of extra) {
+    if (seen.has(s.id)) continue
+    seen.add(s.id)
+    out.push(s)
+  }
+  return out
+}
+
 export async function getRawSeriesDataForOrigin(originCountry, originalLanguage, n = TOP_N_SERIES) {
-  const series = await getTopSeriesByOrigin(originCountry, originalLanguage, n)
+  const [top, netflix] = await Promise.all([
+    getTopSeriesByOrigin(originCountry, originalLanguage, n),
+    originCountry === 'TR' ? getNetflixSeriesByOrigin(originCountry) : Promise.resolve([]),
+  ])
+  const series = mergeSeriesLists(top, netflix)
 
   const [providerResults, castResults] = await Promise.all([
     mapWithConcurrency(series, FETCH_CONCURRENCY, (s) => getWatchProviders(s.id).catch(() => ({}))),

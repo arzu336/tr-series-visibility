@@ -2,8 +2,11 @@ import db from '../db.js'
 import { getCached, setCached } from '../cache.js'
 import { getPipelineDb } from './pipelineDb.js'
 import { getVisitorSeries, pickBeforeAfterPair } from './tourismData.js'
-import { getTourismLeadingSignalSummary } from './tourismTrendsCollector.js'
-import { differenceInDifferences } from './tourismCorrelation.js'
+import { getTourismLeadingSignalSummary, LEADING_SIGNAL_SCOPE } from './tourismTrendsCollector.js'
+import { differenceInDifferences, pearsonCorrelation } from './tourismCorrelation.js'
+import { getMonthlyPeriods } from '../period-history.js'
+import { TOP_COUNTRY_COUNT, TOP_SERIES_COUNT } from './enrichmentTargets.js'
+import { CORRELATION_MIN_MONTHS, EMPTY } from '../../src/lib/emptyStates.js'
 import { suggestControlCountry } from '../control-matching.js'
 
 /**
@@ -69,17 +72,33 @@ const mediaByCountryStmt = db.prepare(`
  * KARIŞTIRILMAZ; ayrı bir alanda, `geoKind: 'language'` etiketiyle taşınır. Aksi halde rapor
  * "Farsça'da arttı" verisini "İran'da arttı" diye sunardı.
  */
+/** "Hiç taranmamış" ile "taranmış ama yeterli haber yok" ayrı nedenlerdir; ikisi de hesaplanamaz. */
+export function basinTonu(
+  iso2,
+  taramalar,
+  analizli = taramalar.filter((t) => t.dominant_sentiment !== 'yetersiz-veri' && t.positive_score != null)
+) {
+  if (analizli.length > 0) {
+    return OK(Math.round((analizli.reduce((s, t) => s + t.positive_score, 0) / analizli.length) * 1000) / 10, {
+      sampleSize: analizli.length,
+      unit: 'yuzde-olumlu',
+    })
+  }
+  if (taramalar.length === 0) {
+    return {
+      ...yetersiz(EMPTY.pressNotScanned(iso2, TOP_COUNTRY_COUNT, TOP_SERIES_COUNT)),
+      scanned: false,
+      scanCount: 0,
+    }
+  }
+  return { ...yetersiz(EMPTY.pressScannedNoNews(iso2, taramalar.length)), scanned: true, scanCount: taramalar.length }
+}
+
 function buildCulturalDimension(iso2, countryRow, kanonik) {
   const taramalar = mediaByCountryStmt.all(iso2)
   const analizli = taramalar.filter((t) => t.dominant_sentiment !== 'yetersiz-veri' && t.positive_score != null)
 
-  const mediaTone =
-    analizli.length === 0
-      ? yetersiz(`${iso2} için analiz edilmiş basın taraması yok (${taramalar.length} tarama denendi)`)
-      : OK(Math.round((analizli.reduce((s, t) => s + t.positive_score, 0) / analizli.length) * 1000) / 10, {
-          sampleSize: analizli.length,
-          unit: 'yuzde-olumlu',
-        })
+  const mediaTone = basinTonu(iso2, taramalar, analizli)
 
   const diziler = analizli.slice(0, 10).map((t) => {
     const k = kanonik.get(t.series_id) || {}
@@ -136,15 +155,16 @@ export async function buildTourismDimension(iso2, countryRow, deps = {}) {
     suggestControlCountry: kontrolOner = suggestControlCountry,
     differenceInDifferences: didHesapla = differenceInDifferences,
     leadingSignalFor: onculSinyal = leadingSignalFor,
+    getMonthlyPeriods: aylikGorunurluk = getMonthlyPeriods,
   } = deps
   const sources = [{ source: 'yigm', trust: trustOf('yigm'), note: 'turist giriş istatistikleri' }]
 
   const seri = seriAl(iso2)
   if (!seri || seri.length === 0) {
     return {
-      arrivals: yetersiz(`${iso2} YİGM bülteninde izlenen ülkeler arasında değil`),
-      correlation: yetersiz('turist girişi serisi yok — korelasyon hesaplanamaz'),
-      didEstimate: yetersiz('turist girişi serisi yok — DiD hesaplanamaz'),
+      arrivals: yetersiz(EMPTY.tourismNotInBulletin(iso2)),
+      correlation: yetersiz(EMPTY.correlationNoTourism),
+      didEstimate: yetersiz(EMPTY.didNoTourism),
       leadingSignal: onculSinyal(iso2),
       sources,
     }
@@ -153,16 +173,7 @@ export async function buildTourismDimension(iso2, countryRow, deps = {}) {
   const ciftler = ciftSec(seri)
   const gorunurluk = countryRow?.score ?? null
 
-  const aylikDegerler = seri.map((s) => s.visitorCount).filter(sayiMi)
-  const correlation =
-    aylikDegerler.length < 3
-      ? yetersiz(`örneklem çok küçük (n=${aylikDegerler.length}, en az 3 gerekli)`)
-      : gorunurluk == null
-        ? yetersiz('bu ülke için görünürlük skoru yok')
-        : yetersiz(
-            'görünürlük zaman serisi turist serisiyle aynı aylara henüz ulaşmadı ' +
-              `(turist: ${aylikDegerler.length} ay)`
-          )
+  const correlation = gorunurlukTuristKorelasyonu(iso2, seri, gorunurluk, aylikGorunurluk)
 
   let didEstimate = yetersiz('kontrol ülkesi eşleştirilemedi')
   if (ciftler && sayiMi(ciftler.before) && sayiMi(ciftler.after)) {
@@ -218,13 +229,39 @@ export async function buildTourismDimension(iso2, countryRow, deps = {}) {
   }
 }
 
-function leadingSignalFor(iso2) {
-  const ozet = getTourismLeadingSignalSummary()
+/**
+ * Görünürlük aylık ortalaması × aynı ayların turist girişi (Pearson). Yalnızca tamamlanmış aylar
+ * (isCurrent=false) sayılır; ortak ay sayısı CORRELATION_MIN_MONTHS'un altındaysa "X/3 ay" ile
+ * hesaplanamaz döner — böylece arayüz ne kadar beklendiğini gerçek sayıdan gösterir.
+ */
+export function gorunurlukTuristKorelasyonu(iso2, seri, gorunurluk, aylikGorunurluk = getMonthlyPeriods) {
+  if (gorunurluk == null) return yetersiz(EMPTY.correlationNoVisibility)
+  const turist = new Map(
+    seri.filter((s) => sayiMi(s.visitorCount)).map((s) => [`${s.year}-${ay2(s.month)}`, s.visitorCount])
+  )
+  const aylar = (aylikGorunurluk(iso2) || []).filter((p) => !p.isCurrent && sayiMi(p.avgScore) && turist.has(p.period))
+  const n = aylar.length
+  if (n < CORRELATION_MIN_MONTHS) {
+    return {
+      ...yetersiz(EMPTY.correlationAccumulating(n, CORRELATION_MIN_MONTHS)),
+      monthsAvailable: n,
+      monthsRequired: CORRELATION_MIN_MONTHS,
+    }
+  }
+  const r = pearsonCorrelation(
+    aylar.map((p) => p.avgScore),
+    aylar.map((p) => turist.get(p.period))
+  )
+  if (!sayiMi(r)) return yetersiz('korelasyon sayısal değil (seride varyans yok)')
+  return OK(Math.round(r * 100) / 100, { sampleSize: n, months: aylar.map((p) => p.period), unit: 'pearson-r' })
+}
+
+export function leadingSignalFor(iso2, ozet = getTourismLeadingSignalSummary()) {
   if (ozet.status !== 'gerçek-veri-mevcut') {
-    return yetersiz('öncü turizm sinyali taraması henüz sonuç üretmedi')
+    return yetersiz(EMPTY.leadingSignalNotRunYet)
   }
   const bu = (ozet.signals || []).filter((s) => s.iso2 === iso2)
-  if (bu.length === 0) return yetersiz(`${iso2} öncü sinyal taramasının kapsamında değil`)
+  if (bu.length === 0) return yetersiz(EMPTY.leadingSignalOutOfScope(ozet.scope ?? LEADING_SIGNAL_SCOPE))
   const enGuclu = bu.reduce((a, b) => (Math.abs(b.correlation) > Math.abs(a.correlation) ? b : a))
   return OK(enGuclu.correlation, {
     travelQuery: enGuclu.travelQuery,
@@ -266,14 +303,14 @@ function buildExportDimension(iso2, countryRow, countries) {
   return {
     hasOfficialPlatformData: platformKaydi.status === 'hesaplandi',
     visibilityScore:
-      countryRow?.score != null ? OK(Math.round(countryRow.score * 10) / 10) : yetersiz('görünürlük skoru yok'),
+      countryRow?.score != null ? OK(Math.round(countryRow.score * 10) / 10) : yetersiz('yayın varlığı ölçümü yok'),
     globalRank: sira >= 0 ? OK(sira + 1, { outOf: sirali.length }) : yetersiz('ülke sıralamada yok'),
     seriesCount: countryRow?.seriesCount != null ? OK(countryRow.seriesCount) : yetersiz('dizi sayısı bilinmiyor'),
     dataSource: countryRow?.dataSource ?? null,
     officialPlatformRecords: platformKaydi,
     licensingRevenue: yetersiz('ülke bazlı dizi lisans bedelleri kamuya açık değildir'),
     sources: [
-      { source: 'tmdb', trust: trustOf('tmdb'), note: 'görünürlük skoru' },
+      { source: 'tmdb', trust: trustOf('tmdb'), note: 'yayın varlığı (katalog ağırlığı)' },
       { source: 'justwatch', trust: trustOf('justwatch'), note: 'yayın sağlayıcı kapsamı' },
     ],
   }

@@ -14,6 +14,7 @@ import { buildBenchmark } from '../benchmark.js'
 import { getTurkishLearningIndex } from '../turkish-learning-interest.js'
 import { getDuolingoTurkishStats } from '../duolingo.js'
 import { upstream } from './shared.js'
+import { getWatchSignals } from '../services/watchSignal.js'
 
 // Harita ve genel panellerin okuduğu, oturum isteyen ama yönetici gerektirmeyen veri uçları.
 export const dataRouter = express.Router()
@@ -21,8 +22,21 @@ export const dataRouter = express.Router()
 dataRouter.get(
   '/api/visibility',
   upstream('visibility', async (req, res) => {
-    const { data } = await getEnrichedVisibility()
-    res.json(data)
+    // İzlenme sinyali ülke nesnesine eklenir (watchSignal); hesaplanamazsa görünürlük yine döner.
+    const [{ data }, signals] = await Promise.all([
+      getEnrichedVisibility(),
+      getWatchSignals().catch((err) => {
+        console.error('[visibility] izlenme sinyali hesaplanamadı:', err.message)
+        return null
+      }),
+    ])
+    res.json({
+      ...data,
+      countries: data.countries.map((c) => ({ ...c, watchSignal: signals?.byIso2?.[c.iso2] ?? null })),
+      watchSignalMeta: signals
+        ? { ...signals.meta, generatedAt: signals.generatedAt, netflixWindow: signals.netflixWindow }
+        : null,
+    })
   })
 )
 

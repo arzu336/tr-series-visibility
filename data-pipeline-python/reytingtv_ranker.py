@@ -231,13 +231,105 @@ def _parse_numbered_paragraph_format(html: str) -> dict[str, list[tuple[int, str
     return {label: lists[i] for i, label in enumerate(POSITIONAL_CATEGORY_ORDER)}
 
 
+_ORDINALS = {
+    "zirve": 1, "birinci": 1, "ilk sıra": 1, "lider": 1,
+    "ikinci": 2, "üçüncü": 3, "dördüncü": 4, "beşinci": 5, "altıncı": 6, "yedinci": 7,
+    "sekizinci": 8, "dokuzuncu": 9, "onuncu": 10,
+}
+_PROSE_CATEGORY = re.compile(r"(Total|AB|ABC1?|20\+ABC1)\s+kategorisin", re.I)
+_QUOTED = re.compile(r'[“"„«]([^”"»]{2,120})[”"»]')
+
+
+def _parse_prose_format(html: str) -> dict[str, list[tuple[int, str]]]:
+    """2026 ortasından itibaren makaleler tablo yerine düz yazı: "Total kategorisinde zirvede “X” yer alırken,
+    ikinci sırayı “Y” aldı. Üçüncü sırada ise “Z” bulundu." Her kategori paragrafındaki sıra sözcüğü + tırnaklı
+    başlık çiftleri okunur. Genellikle yalnızca ilk 3 sıra yazılır — liste KISMİ döner, uydurulmaz."""
+    text = html_module.unescape(re.sub(r"<[^>]+>", " ", html))
+    text = re.sub(r"\s+", " ", text)
+    marks = list(_PROSE_CATEGORY.finditer(text))
+    if not marks:
+        return {}
+    result: dict[str, list[tuple[int, str]]] = {}
+    for i, m in enumerate(marks):
+        seg = text[m.end() : marks[i + 1].start() if i + 1 < len(marks) else m.end() + 1200]
+        raw_cat = m.group(1).upper()
+        category = "Total" if raw_cat == "TOTAL" else "AB" if raw_cat == "AB" else "20+ABC1"
+        rows: list[tuple[int, str]] = []
+        seen_titles: set[str] = set()
+        for sentence in re.split(r"(?<=[.!?])\s+", seg):
+            # Türkçe İ → i: str.lower() 'İ'yi noktalı 'i̇'ye çevirir, "İkinci" yakalanmaz.
+            low = sentence.replace("İ", "i").replace("I", "ı").lower()
+            rank = None
+            for word, r in _ORDINALS.items():
+                if word in low:
+                    rank = r
+                    break
+            titles = _QUOTED.findall(sentence)
+            if rank is None or not titles:
+                continue
+            # aynı cümlede birden çok başlık varsa sıra sözcükleri de birden çoktur; sırayla eşle
+            ordinals_in_order = [r for w, r in sorted(((low.find(w), r) for w, r in _ORDINALS.items() if w in low))]
+            for j, title in enumerate(titles):
+                rr = ordinals_in_order[j] if j < len(ordinals_in_order) else None
+                if rr is None:
+                    continue
+                t = title.strip()
+                if t in seen_titles or any(x[0] == rr for x in rows):
+                    continue
+                seen_titles.add(t)
+                rows.append((rr, t))
+        if rows:
+            result[category] = sorted(rows)
+    return result
+
+
+_INLINE_HEADING = re.compile(r"(?:\d{1,2}\s+\w+\s+\w+\s+)?(Total|AB|20\+ABC1|ABC1)\s+Reyting\s+İlk\s+10", re.I)
+_INLINE_ROW = re.compile(
+    r"(\d{1,2})\.\s+(.+?)\s+[—–-]\s+([A-ZÇĞİÖŞÜ0-9][A-ZÇĞİÖŞÜ0-9 &+.]*?)(?=\s+\d{1,2}\.\s|\s+(?=[a-zçğıöşü])|\s*$)"
+)
+
+
+def _parse_inline_numbered_format(html: str) -> dict[str, list[tuple[int, str]]]:
+    """2026 Ağustos makaleleri: "23 Ağustos Pazar Total Reyting İlk 10 1. DAHA 17 — KANAL D 2. … " tek satırda,
+    kategori başlığından sonra `N. PROGRAM — KANAL` çiftleri. Kanal adı atılır, program adı saklanır."""
+    text = html_module.unescape(re.sub(r"<script.*?</script>", " ", html, flags=re.S))
+    text = re.sub(r"\s+", " ", re.sub(r"<[^>]+>", " ", text))
+    marks = list(_INLINE_HEADING.finditer(text))
+    if not marks:
+        return {}
+    result: dict[str, list[tuple[int, str]]] = {}
+    for i, m in enumerate(marks):
+        seg = text[m.end() : marks[i + 1].start() if i + 1 < len(marks) else m.end() + 1500]
+        raw_cat = m.group(1).upper()
+        category = "Total" if raw_cat == "TOTAL" else "AB" if raw_cat == "AB" else "20+ABC1"
+        rows = [(int(r), prog.strip()) for r, prog, _ch in _INLINE_ROW.findall(seg) if 1 <= int(r) <= 15]
+        # Aynı sıra iki kez görünürse (sonraki kategorinin taşması) ilkini tut
+        seen = set()
+        temiz = []
+        for r, prog in rows:
+            if r in seen:
+                break
+            seen.add(r)
+            temiz.append((r, prog))
+        if len(temiz) >= 3:
+            result[category] = temiz
+    return result
+
+
 def parse_article(html: str) -> dict[str, list[tuple[int, str]]]:
     """category -> [(rank, program_raw), ...]. Hiçbir biçim tanınmazsa boş dict döner —
-    çağıran taraf bu günü dürüstçe atlar, uydurma veri üretilmez."""
+    çağıran taraf bu günü dürüstçe atlar, uydurma veri üretilmez. Biçim sırası: tablo → numaralı
+    paragraf → düz yazı (2026)."""
     by_table = _parse_table_format(html)
     if by_table:
         return by_table
-    return _parse_numbered_paragraph_format(html)
+    by_para = _parse_numbered_paragraph_format(html)
+    if by_para:
+        return by_para
+    by_inline = _parse_inline_numbered_format(html)
+    if by_inline:
+        return by_inline
+    return _parse_prose_format(html)
 
 
 def scrape_daily_ranks(

@@ -13,9 +13,13 @@ DOĞRULANMIŞ İKİ ÖNEMLİ SINIR (2026-08-20, gerçek dosyayla test edildi):
    sayısı DEĞİL, sıraya dayalı türetilmiş bir puan üretir — bunu uydurma bir saat rakamıyla
    karıştırmıyoruz.
 
-2. **Dosya (~32 MB) uzun süre BİR KEZ BİLE tam inmedi.** Her denemede content-length doğru
-   raporlanıyor ama akış rastgele bir noktada `IncompleteRead` ile kopuyor. 2026-09-23'te
-   curl ile yeniden ölçüldü ve sunucu davranışı netleşti:
+2. **Dosya (~32 MB) YEREL ağlardan tam inmiyor; GitHub Actions koşucusundan tam iniyor.**
+   Yerelde her denemede content-length doğru raporlanıyor ama akış rastgele bir noktada
+   `IncompleteRead` ile kopuyor. 2026-09-30'da `.github/workflows/netflix-sync.yml` koşucusundan
+   tek denemede TAM indi: 32.444.801 bayt, 94 ülke (AR→VN), 510.340 satır, son hafta 2026-09-27.
+   Gerçek dosya son satırdan sonra `\\n` KOYMUYOR — tamlık kuralı buna göre: content-length
+   eşleşiyorsa son satırın 8 alanlı olması yeter (bkz. _looks_complete). Yerel ölçümler
+   (2026-09-23, curl) ve sunucu davranışı:
      - HEAD → 403. GET her zaman 200 + gerçek veri (bot engeli değil, robots.txt `Allow: /tudum`).
      - `Range: bytes=N-` YOK SAYILIYOR: 200 + tam gövde dönüyor, `Accept-Ranges` başlığı yok.
      - `Accept-Encoding: gzip` YOK SAYILIYOR: content-length hâlâ 32 MB, `Content-Encoding` yok.
@@ -27,8 +31,9 @@ DOĞRULANMIŞ İKİ ÖNEMLİ SINIR (2026-08-20, gerçek dosyayla test edildi):
    her yeniden denemede `Range` + `If-Range` gönderir; 206 gelirse mevcut `.tsv.part`'a EKLER,
    200 gelirse (bugünkü durum) sunucunun yok saydığını anlar ve baştan yazar. Böylece CDN bir
    gün Range açarsa kod değişikliği gerekmez; açmazsa dürüstçe aynı "en uzun kısmi indirme"
-   stratejisine düşer. Tamlık yalnızca content-length ile değil, dosyanın `\\n` ile bitmesi ve
-   son satırın 8 alanlı olmasıyla da doğrulanır (kesik son satır 'tam' sayılmaz).
+   stratejisine düşer. Tamlık content-length eşleşmesi + son satırın 8 alanlı olmasıyla
+   doğrulanır; content-length yoksa dosyanın `\\n` ile bitmesi de aranır (kesik son satır 'tam'
+   sayılmaz). Yerelde tam inmezse: Actions artifact'ı `netflix_import_artifact.py` ile alınır.
    Dosya alfabetik ülke sıralı olduğu için (doğrulandı), istenen ülkenin satır bloğu kısmi
    dosyada TAMAMEN varsa (bloktan hemen sonra başka bir ülke görülüyorsa) kullanılır — YARIM
    KALMIŞ bir ülke bloğu ASLA kullanılmaz; `scan_all_countries` kesilen son ülkeyi açıkça
@@ -98,10 +103,15 @@ _COZULMUS_DATASET: Optional[tuple[Path, bool]] = None
 
 
 def _looks_complete(path: Path, expected: int) -> bool:
-    """Dosya gerçekten tam mı? content-length eşleşmesi tek başına yetmez: content-length
-    başlığı yoksa (-1) ya da sunucu yanlış raporlarsa kesik bir dosya 'tam' sayılabilir.
-    TSV'nin yapısal bir garantisi var — her satır `\\n` ile biter ve 8 alanlıdır — o da kontrol
-    edilir. Kesik son satır = yarım ülke bloğu riski, bkz. modül docstring'i."""
+    """Dosya gerçekten tam mı?
+
+    - content-length biliniyorsa (expected != -1): boyut eşleşmeli VE son satır 8 alanlı olmalı.
+      Sondaki satır sonu ŞART DEĞİL — gerçek dosya son satırdan sonra `\\n` koymuyor (2026-09-30,
+      GitHub Actions'tan tam inen 32.444.801 baytlık dosyada doğrulandı; eski kural bu dosyayı
+      yanlışlıkla "kesik" saymıştı).
+    - content-length bilinmiyorsa (-1): kesik son satırı boyutla ayırt edemeyiz, sıkı kural kalır:
+      dosya `\\n` ile bitmeli ve son satır 8 alanlı olmalı.
+    Kesik son satır = yarım ülke bloğu riski, bkz. modül docstring'i."""
     if not path.exists():
         return False
     size = path.stat().st_size
@@ -112,7 +122,7 @@ def _looks_complete(path: Path, expected: int) -> bool:
     with open(path, "rb") as f:
         f.seek(max(0, size - 4096))
         tail = f.read()
-    if not tail.endswith(b"\n"):
+    if expected == -1 and not tail.endswith(b"\n"):
         return False
     last_line = tail.rstrip(b"\r\n").split(b"\n")[-1]
     return last_line.count(b"\t") == EXPECTED_FIELD_COUNT - 1
@@ -477,7 +487,9 @@ def _accumulate_row(accumulator: dict[str, dict], row: dict, turkish_titles: lis
             "latest_week": week,
             "latest_rank": rank,
             "first_week": week,
+            "weekly": [],
         }
+    entry["weekly"].append((week, rank))
     entry["weeks_in_top10"] += 1
     entry["peak_position"] = min(entry["peak_position"], rank)
     if week >= entry["latest_week"]:
@@ -506,6 +518,7 @@ def scan_all_countries(
     first_week: Optional[str] = None
     last_week: Optional[str] = None
     row_count = 0
+    country_last_week: dict[str, str] = {}
     with open(path, "r", encoding="utf-8", newline="") as f:
         reader = csv.DictReader(f, delimiter="\t")
         for row in reader:
@@ -518,12 +531,18 @@ def scan_all_countries(
             if week:
                 first_week = week if first_week is None or week < first_week else first_week
                 last_week = week if last_week is None or week > last_week else last_week
+                # Ülkenin dosyadaki son haftası (herhangi bir başlık): Netflix'in çekildiği pazarlar
+                # (Rusya 2022-02-27) buradan türetilir — elle liste yok.
+                if week > country_last_week.get(iso2, ""):
+                    country_last_week[iso2] = week
             row_count += 1
             _accumulate_row(accumulators.setdefault(iso2, {}), row, turkish_titles)
     # Kaynak dosyanın KENDİ kapsamı (Türk dizisi eşleşmesinden bağımsız): rapor, "ülkenin son
     # kaydı" ile "dosyanın son haftası" arasındaki farkı ancak bununla dürüstçe gösterebilir.
     if stats is not None:
-        stats.update({"first_week": first_week, "last_week": last_week, "rows": row_count})
+        stats.update(
+            {"first_week": first_week, "last_week": last_week, "rows": row_count, "country_last_week": country_last_week}
+        )
 
     truncated = None if (is_complete or not seen_order) else seen_order[-1]
     complete = set(seen_order)
@@ -536,6 +555,18 @@ def scan_all_countries(
         if iso2 in complete and acc
     }
     return by_iso2, complete, truncated
+
+
+def active_countries(country_last_week: dict[str, str], file_last_week: Optional[str], window_days: int = 364) -> list[str]:
+    """Dosyanın son haftasından geriye `window_days` içinde en az bir satırı olan ülkeler (Netflix'in hâlâ
+    Top 10 yayımladığı pazarlar). Rusya gibi çekilmiş pazarlar pencere dışına düşer."""
+    if not file_last_week:
+        return []
+    from datetime import date, timedelta
+
+    y, m, d = (int(x) for x in file_last_week.split("-"))
+    cutoff = (date(y, m, d) - timedelta(days=window_days)).isoformat()
+    return sorted(iso for iso, last in country_last_week.items() if last >= cutoff)
 
 
 def get_all_country_rankings(

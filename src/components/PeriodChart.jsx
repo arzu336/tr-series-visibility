@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { EMPTY } from '../lib/emptyStates.js'
 
 const WIDTH = 480
 const HEIGHT = 160
@@ -24,7 +25,7 @@ export default function PeriodChart({ periods, valueKey, range, onRangeChange, u
     return (
       <div>
         <RangeToggle range={range} onRangeChange={onRangeChange} />
-        <p className="dashboard__empty">Veri birikiyor — henüz bir periyot tamamlanmadı.</p>
+        <p className="dashboard__empty">{EMPTY.periodsAccumulating}</p>
       </div>
     )
   }
@@ -81,7 +82,7 @@ export default function PeriodChart({ periods, valueKey, range, onRangeChange, u
         className="period-chart"
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         role="img"
-        aria-label="Periyoda göre görünürlük eğilimi"
+        aria-label="Periyoda göre eğilim"
         onMouseMove={handleMove}
         onMouseLeave={() => setHoverIdx(null)}
       >

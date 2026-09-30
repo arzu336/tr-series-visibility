@@ -6,7 +6,7 @@ const ok = (data) => ({ status: 'hesaplandi', data })
 const yok = { status: 'hesaplanamaz', reason: 'x' }
 
 const TAM = {
-  ranking: ok({ perCapitaRank: 3, perCapitaOf: 111, totalRank: 7, totalOf: 137 }),
+  ranking: ok({ rank: 3, of: 111, index: 97, level: 'çok yüksek', confidence: 'yüksek' }),
   trend: ok({ shortTerm: { direction: 'yükseliyor', changePct: 12.4, windowDays: 7 } }),
   netflix: ok({
     rows: [
@@ -44,12 +44,10 @@ describe('generateFindings — kural tabanlı, deterministik', () => {
     for (const f of candidateFindings(TAM)) expect(direktifIceriyorMu(f.text)).toBeNull()
   })
 
-  it('kişi başına sıralanamayan ülke için toplam sırayı ve gerekçeyi yazar', () => {
-    const { items } = generateFindings({
-      ranking: ok({ perCapitaRank: null, perCapitaOf: 111, totalRank: 40, totalOf: 137 }),
-    })
-    expect(items[0].text).toMatch(/137 ülke arasında 40\. sırada/)
-    expect(items[0].text).toMatch(/küçük payda/)
+  it('sıralama bulgusu düzeyi ve sırayı yazar; skor/puan kelimesi geçmez', () => {
+    const { items } = generateFindings({ ranking: ok({ rank: 40, of: 137, level: 'orta' }) })
+    expect(items[0].text).toMatch(/"orta".*137 ülke arasında 40\. sırada/)
+    expect(items[0].text).not.toMatch(/skor|puan|görünürlük/i)
   })
 
   it('trend yetersiz-veri ise trend bulgusu üretmez; sabit ise "sabit kaldı" der', () => {

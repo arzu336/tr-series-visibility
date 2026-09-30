@@ -1,16 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath } from 'd3-geo'
-import {
-  scoreToColor,
-  proxyScoreToColor,
-  buildMapScale,
-  SOURCE_COUNTRY_COLOR,
-  SMALL_SAMPLE_COLOR,
-  MAP_METRICS,
-} from '../lib/scale.js'
+import { scoreToColor, buildWatchMap } from '../lib/scale.js'
 import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
+import { EMPTY } from '../lib/emptyStates.js'
 
 function displayName(feat) {
   return featureDisplayName(feat, turkishNames)
@@ -33,7 +27,6 @@ export default function Map2D({
   highlightFilter,
   continentHighlight,
   onResetView,
-  metric = MAP_METRICS.PER_CAPITA,
 }) {
   const [geoFeatures, setGeoFeatures] = useState(null)
   const [hovered, setHovered] = useState(null)
@@ -54,8 +47,8 @@ export default function Map2D({
 
   const byIso2 = useMemo(() => {
     if (!countries || countries.length === 0) return new Map()
-    return buildMapScale(countries, metric).byIso2
-  }, [countries, metric])
+    return buildWatchMap(countries).byIso2
+  }, [countries])
 
   // Projeksiyon ve her ülkenin SVG path dizgisi yalnızca GeoJSON değişince hesaplanır — bunlar
   // pahalı ve hover/zoom/seçimden bağımsız.
@@ -101,7 +94,7 @@ export default function Map2D({
     if (!highlightFilter) return null
     const entries = Array.from(highlightFilter.byIso2 instanceof Map ? highlightFilter.byIso2.entries() : [])
     const map = new Map()
-    entries.forEach(([iso2, score]) => map.set(iso2, { score }))
+    entries.forEach(([iso2, info]) => map.set(iso2, typeof info === 'object' && info ? info : { weeks: null }))
     return map
   }, [highlightFilter])
 
@@ -152,7 +145,7 @@ export default function Map2D({
         viewBox={`0 0 ${VIEWBOX_WIDTH} ${VIEWBOX_HEIGHT}`}
         className="map2d__svg"
         role="img"
-        aria-label="Ülke bazlı görünürlük haritası. Bir ülke seçmek için sağ paneldeki arama kutusunu kullanabilirsiniz."
+        aria-label="Ülke bazlı izlenme haritası. Bir ülke seçmek için sağ paneldeki arama kutusunu kullanabilirsiniz."
         onClick={() => popup?.onClose?.()}
       >
         <g
@@ -183,15 +176,7 @@ export default function Map2D({
                   ? scoreToColor(seriesValue / 100)
                   : NO_DATA_COLOR
                 : c
-                  ? c.isSourceCountry
-                    ? SOURCE_COUNTRY_COLOR
-                    : c.dataSource === 'proxy'
-                      ? proxyScoreToColor((c.searchInterestScore ?? 0) / 100)
-                      : c.isSmallSample
-                        ? SMALL_SAMPLE_COLOR
-                        : c.t == null
-                          ? NO_DATA_COLOR
-                          : scoreToColor(c.t)
+                  ? c.color
                   : NO_DATA_COLOR
             return (
               <path
@@ -222,7 +207,11 @@ export default function Map2D({
                 <>
                   <strong>{name}</strong>
                   <br />
-                  {entry ? `Görünürlük skoru: ${entry.score.toFixed(1)}` : 'Veri yok'}
+                  {entry
+                    ? entry.weeks
+                      ? `Netflix Top 10'da ${entry.weeks} hafta`
+                      : 'Bu ülkede yayında'
+                    : EMPTY.mapNotAvailableHere}
                 </>
               )
             }
@@ -232,7 +221,7 @@ export default function Map2D({
                 <>
                   <strong>{name}</strong>
                   <br />
-                  {value != null ? `Arama ilgisi: ${value}` : 'Veri yok'}
+                  {value != null ? `Arama ilgisi: ${value}` : EMPTY.mapNoInterest}
                 </>
               )
             }
@@ -242,23 +231,19 @@ export default function Map2D({
                 <>
                   <strong>{name}</strong>
                   <br />
-                  Veri yok
+                  {EMPTY.mapNoSignal}
                 </>
               )
             }
-            if (c.dataSource === 'proxy') {
-              return (
-                <>
-                  <strong>{name}</strong>
-                  <br />⚡ Arama hacmi tahmini: {c.searchInterestScore} (yayın verisi yok)
-                </>
-              )
-            }
+            const w = c.watchSignal
+            const nf = w?.components?.netflix
             return (
               <>
                 <strong>{name}</strong>
                 <br />
-                Görünürlük skoru: {c.score.toFixed(1)}
+                {w?.level ? `İzlenme düzeyi: ${w.level}` : 'İzlenme düzeyi: sinyal yetersiz'}
+                {nf?.present && nf.weeks > 0 ? ` · Netflix Top 10'da ${nf.series} dizi / ${nf.weeks} hafta` : ''}
+                {c.dataSource === 'proxy' ? ' · yayın verisi yok' : ''}
               </>
             )
           })()}

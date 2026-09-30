@@ -76,6 +76,48 @@ class TestInspectVerify:
         assert s["complete"] is False and "çok düşük" in s["reason"]
 
 
+class TestSatirSonuOlmayanTamDosya:
+    """GitHub Actions'tan inen gerçek dosya \\n ile bitmiyor; content-length biliniyorsa tam sayılmalı."""
+
+    def test_content_length_bilinirken_tam(self, tmp_path):
+        govde = TAM_TSV.rstrip("\n")
+        p = yaz(tmp_path / "a.tsv", govde)
+        s = fs.verify_source(p, downloader_says_complete=True, expected=len(govde.encode("utf-8")))
+        assert s["complete"] is True and s["structural_ok"] is True
+        assert s["content_length"] == len(govde.encode("utf-8"))
+        assert s["last_country"] == "DK" and s["rows"] == 4
+
+    def test_content_length_bilinmiyorsa_siki_kural(self, tmp_path):
+        p = yaz(tmp_path / "a.tsv", TAM_TSV.rstrip("\n"))
+        s = fs.verify_source(p, downloader_says_complete=True)  # expected=-1
+        assert s["complete"] is False
+        assert "content-length bilinmiyor" in s["reason"]
+
+    def test_known_content_length_yandaki_meta_ve_ozetten(self, tmp_path):
+        govde = TAM_TSV.rstrip("\n").encode("utf-8")
+        p = tmp_path / nf.FILENAME
+        p.write_bytes(govde)
+        assert fs.known_content_length(p) == -1
+        (tmp_path / (nf.FILENAME + ".json")).write_text(json.dumps({"content_length": len(govde) + 5}))
+        assert fs.known_content_length(p) == -1  # boyutla eşleşmeyen değer bilinmiyor sayılır
+        (tmp_path / (nf.FILENAME + ".json")).write_text(json.dumps({"content_length": len(govde)}))
+        assert fs.known_content_length(p) == len(govde)
+        (tmp_path / (nf.FILENAME + ".json")).unlink()
+        (tmp_path / fs.SUMMARY_FILENAME).write_text(json.dumps({"content_length": len(govde)}))
+        assert fs.known_content_length(p) == len(govde)
+
+    def test_fetch_kismi_dosyada_meta_content_length_i_gecirir(self, tmp_path, monkeypatch):
+        govde = TAM_TSV.rstrip("\n").encode("utf-8")
+        p = tmp_path / (nf.FILENAME + ".partial")
+        p.write_bytes(govde)
+        (tmp_path / (nf.FILENAME + ".partial.json")).write_text(json.dumps({"content_length": len(govde)}))
+        monkeypatch.setattr(nf, "download_dataset", lambda cache_dir, force=False: (p, False))
+        s = fs.fetch(tmp_path)
+        # yapısal kontrol geçer ama indirici "eksik" dediği için tam sayılmaz — karar indiricinin
+        assert s["structural_ok"] is True and s["content_length"] == len(govde)
+        assert s["complete"] is False and "indirici" in s["reason"]
+
+
 class TestFetchMain:
     def test_tam_indirme_cikis_0_ve_ozet_json(self, tmp_path, monkeypatch):
         p = yaz(tmp_path / nf.FILENAME, TAM_TSV)
@@ -142,6 +184,18 @@ class TestImportArtifact:
         once = dest.stat().st_mtime_ns
         assert ia.import_source(dest, tmp_path) == dest
         assert dest.stat().st_mtime_ns == once
+
+    def test_satir_sonsuz_tam_dosya_meta_ile_ice_alinir_metasiz_reddedilir(self, tmp_path):
+        govde = TAM_TSV.rstrip("\n").encode("utf-8")
+        src = tmp_path / "indir" / (nf.FILENAME + ".partial")
+        src.parent.mkdir()
+        src.write_bytes(govde)
+        cache = tmp_path / "data"
+        with pytest.raises(ValueError, match="content-length bilinmiyor"):
+            ia.import_source(src, cache)
+        (tmp_path / "indir" / (nf.FILENAME + ".partial.json")).write_text(json.dumps({"content_length": len(govde)}))
+        dest = ia.import_source(src, cache)
+        assert dest.read_bytes() == govde
 
     def test_kesik_dosya_ice_alinmaz(self, tmp_path):
         src = yaz(tmp_path / "x.tsv", TAM_TSV[:-5])

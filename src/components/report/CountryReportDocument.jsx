@@ -13,8 +13,8 @@ export default function CountryReportDocument({ report, countryName }) {
         <p className="report__kicker">Ülke raporu · {report.profileTitle}</p>
         <h1>{countryName}</h1>
         <p className="report__meta">
-          Üretim: {fmtDateTime(report.generatedAt)} · Görünürlük verisi: {fmtDateTime(cut.visibilityUpdatedAt)} ·
-          Netflix Top 10 son hafta: {cut.netflixLastWeek ? fmtWeek(cut.netflixLastWeek) : 'kayıt yok'} · Demografi:{' '}
+          Üretim: {fmtDateTime(report.generatedAt)} · Yayın verisi: {fmtDateTime(cut.visibilityUpdatedAt)} · Netflix Top
+          10 son hafta: {cut.netflixLastWeek ? fmtWeek(cut.netflixLastWeek) : 'kayıt yok'} · Demografi:{' '}
           {cut.demographicsYear ?? '—'}
         </p>
       </header>

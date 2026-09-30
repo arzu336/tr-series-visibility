@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchMediaSentiment, fetchRegionalInterest } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
+import { EMPTY } from '../lib/emptyStates.js'
 
 const SENTIMENT_LABELS = {
   positive: 'Olumlu Basın Algısı',
@@ -63,9 +64,7 @@ export default function MediaSentimentCard({ seriesId, iso2 }) {
     return (
       <div className="media-sentiment media-sentiment--empty">
         <p className="dashboard__empty">
-          {state.status === 'error'
-            ? `Basın taraması başarısız oldu (${state.error}).`
-            : 'Bu ülke için basın taraması henüz yeterli haber bulamadı.'}
+          {state.status === 'error' ? `Basın taraması başarısız oldu (${state.error}).` : EMPTY.pressCardNoNews}
         </p>
         <button type="button" className="media-sentiment__scan-btn" onClick={load}>
           Şimdi Tara
@@ -165,7 +164,7 @@ export function HybridScoreTag({ seriesName, iso2 }) {
         <span className="hybrid-score__value">{multiplier}x</span>
       </span>
       <span className="hybrid-score__row">
-        <span className="hybrid-score__label">Nihai Yerel Görünürlük Skoru</span>
+        <span className="hybrid-score__label">Nihai Yerel Basın Skoru</span>
         <span className="hybrid-score__value hybrid-score__value--final">{score.toFixed(1)}</span>
       </span>
       {isLow && (

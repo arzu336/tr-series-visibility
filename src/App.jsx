@@ -5,7 +5,7 @@ import Login from './components/Login.jsx'
 import ChangePasswordModal from './components/ChangePasswordModal.jsx'
 import ContinentSidebar from './components/ContinentSidebar.jsx'
 import MapViewToggle from './components/MapViewToggle.jsx'
-import { MAP_METRICS } from './lib/scale.js'
+import ChartsStrip from './components/ChartsStrip.jsx'
 
 import ErrorBoundary from './components/ErrorBoundary.jsx'
 import { useAsync } from './lib/useAsync.js'
@@ -55,8 +55,6 @@ export default function App() {
   const [mapView, setMapView] = usePersistedState(MAP_VIEW_STORAGE_KEY, '2d', {
     parse: (s) => (s === '3d' ? '3d' : '2d'),
   })
-  // Harita tek metrikle boyanır (kişi başına — bkz. lib/scale.js); kullanıcı seçicisi kaldırıldı.
-  const mapMetric = MAP_METRICS.PER_CAPITA
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const [showProfileMenu, setShowProfileMenu] = useState(false)
   const [pendingApprovals, setPendingApprovals] = useState(0)
@@ -226,8 +224,9 @@ export default function App() {
     setSeriesFilter(null)
   }, [])
 
-  const handleShowSeriesAvailability = useCallback((seriesName, countryScores) => {
-    const byIso2 = new Map((countryScores || []).map((c) => [c.iso2, c.score]))
+  const handleShowSeriesAvailability = useCallback((seriesName, countryEntries) => {
+    // Vurgu bilgisi: { weeks } (Netflix Top 10 hafta sayısı; liste kaydı yoksa null → "yayında")
+    const byIso2 = new Map((countryEntries || []).map((c) => [c.iso2, { weeks: c.weeks ?? null }]))
     setHighlightFilter({ kind: 'series', label: seriesName, byIso2 })
     setActorHighlight(null)
     setSeriesFilter(null)
@@ -302,7 +301,8 @@ export default function App() {
             <img src="/ib-logo.png" alt="T.C. Cumhurbaşkanlığı İletişim Başkanlığı" className="app__brand-logo" />
             <div className="app__brand-divider" />
             <div>
-              <h1 title="Türk Dizileri — Kültürel Görünürlük Haritası">Türk Dizileri — Kültürel Görünürlük Haritası</h1>
+              <h1 title="Türk Dizileri — İzlenme Haritası">Türk Dizileri — İzlenme Haritası</h1>
+              <p className="app__brand-sub">Nerede, ne izleniyor · Netflix Top 10, Türkiye TV, ilgi sinyalleri</p>
               {meta && (
                 <p className="app__meta">
                   {meta.seriesCount} dizi · {countries.length} ülke · güncelleme:{' '}
@@ -429,6 +429,7 @@ export default function App() {
                     <ContinentSidebar
                       countries={countries}
                       onSelectCountry={handleSelectCountryFromReport}
+                      onSelectSeries={handleSelectSeriesGlobal}
                       onFocusContinent={handleFocusContinent}
                       collapsed={sidebarCollapsed}
                       onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
@@ -437,6 +438,7 @@ export default function App() {
                       <div className="app__map-controls">
                         <MapViewToggle value={mapView} onChange={setMapView} />
                       </div>
+                      <ChartsStrip onSelectSeries={handleSelectSeriesGlobal} />
                       {seriesFilter && (
                         <div className="series-filter-badge">
                           <span>
@@ -464,7 +466,6 @@ export default function App() {
                       {mapView === '3d' ? (
                         <Globe3D
                           countries={countries}
-                          metric={mapMetric}
                           onSelect={handleSelect}
                           popup={popup}
                           focusTarget={focusTarget}
@@ -478,7 +479,6 @@ export default function App() {
                       ) : (
                         <Map2D
                           countries={countries}
-                          metric={mapMetric}
                           onSelect={handleSelect}
                           popup={popup}
                           focusTarget={focusTarget}
@@ -500,7 +500,6 @@ export default function App() {
                                 : `"${highlightFilter.label}" dizisinin gerçekten yayınlandığı ülkeler işaretlenir.`
                               : undefined
                         }
-                        metric={mapMetric}
                       />
                       <CountryPanel
                         country={selected}

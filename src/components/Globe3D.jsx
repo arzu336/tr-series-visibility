@@ -1,18 +1,11 @@
 import { useEffect, useRef, useState } from 'react'
 import Globe from 'globe.gl'
 import * as THREE from 'three'
-import {
-  scoreToColor,
-  proxyScoreToColor,
-  brightenRgb,
-  buildMapScale,
-  SOURCE_COUNTRY_COLOR,
-  SMALL_SAMPLE_COLOR,
-  MAP_METRICS,
-} from '../lib/scale.js'
+import { scoreToColor, brightenRgb, buildWatchMap } from '../lib/scale.js'
 import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
+import { EMPTY } from '../lib/emptyStates.js'
 
 function displayName(feat) {
   return featureDisplayName(feat, turkishNames)
@@ -41,7 +34,6 @@ export default function Globe3D({
   highlightFilter,
   continentHighlight,
   onResetView,
-  metric = MAP_METRICS.PER_CAPITA,
 }) {
   const containerRef = useRef(null)
   const globeRef = useRef(null)
@@ -142,7 +134,7 @@ export default function Globe3D({
     const world = globeRef.current
     if (!world || !geoFeatures || !countries || countries.length === 0) return
 
-    const { byIso2 } = buildMapScale(countries, metric)
+    const { byIso2 } = buildWatchMap(countries)
 
     const matched = geoFeatures.filter((f) => byIso2.has(featureIso2(f))).length
     if (matched === 0) {
@@ -161,7 +153,7 @@ export default function Globe3D({
     const highlightByIso2 = highlightFilter
       ? new Map(
           Array.from(highlightFilter.byIso2 instanceof Map ? highlightFilter.byIso2.entries() : []).map(
-            ([iso2, score]) => [iso2, { score }]
+            ([iso2, info]) => [iso2, typeof info === 'object' && info ? info : { weeks: null }]
           )
         )
       : null
@@ -180,15 +172,7 @@ export default function Globe3D({
         }
         const c = byIso2.get(iso2)
         if (!c) return NO_DATA_COLOR
-        const base = c.isSourceCountry
-          ? SOURCE_COUNTRY_COLOR
-          : c.dataSource === 'proxy'
-            ? proxyScoreToColor((c.searchInterestScore ?? 0) / 100)
-            : c.isSmallSample
-              ? SMALL_SAMPLE_COLOR
-              : c.t == null
-                ? NO_DATA_COLOR
-                : scoreToColor(c.t)
+        const base = c.color
         return f === hoveredRef.current ? brightenRgb(base, 0.22) : base
       })
       .polygonSideColor(() => 'rgba(20, 24, 38, 0.35)')
@@ -203,34 +187,34 @@ export default function Globe3D({
       .polygonAltitude((f) => {
         const c = byIso2.get(featureIso2(f))
         if (!c) return 0.003
-        if (c.dataSource === 'proxy') return MIN_ALTITUDE
-        if (c.t == null) return MIN_ALTITUDE
-        return MIN_ALTITUDE + c.t * (MAX_ALTITUDE - MIN_ALTITUDE)
+        if (c.index == null) return MIN_ALTITUDE
+        return MIN_ALTITUDE + (c.index / 100) * (MAX_ALTITUDE - MIN_ALTITUDE)
       })
       .polygonLabel((f) => {
         const name = displayName(f)
         const iso2 = featureIso2(f)
         if (highlightByIso2) {
           const entry = highlightByIso2.get(iso2)
-          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${entry ? `Görünürlük skoru: ${entry.score.toFixed(1)}` : 'Veri yok'}</div>`
+          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${entry ? (entry.weeks ? `Netflix Top 10'da ${entry.weeks} hafta` : 'Bu ülkede yayında') : EMPTY.mapNotAvailableHere}</div>`
         }
         if (seriesByIso2) {
           const value = seriesByIso2.get(iso2)
-          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${value != null ? `Arama ilgisi: ${value}` : 'Veri yok'}</div>`
+          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${value != null ? `Arama ilgisi: ${value}` : EMPTY.mapNoInterest}</div>`
         }
         const c = byIso2.get(iso2)
         if (!c) {
-          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>Veri yok</div>`
+          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${EMPTY.mapNoSignal}</div>`
         }
-        if (c.dataSource === 'proxy') {
-          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>⚡ Arama hacmi tahmini: ${c.searchInterestScore} (yayın verisi yok)</div>`
-        }
-        return `
-          <div style="font: 13px system-ui; padding: 4px 2px;">
-            <strong>${name}</strong><br/>
-            Görünürlük skoru: ${c.score.toFixed(1)}
-          </div>
-        `
+        const w = c.watchSignal
+        const nf = w?.components?.netflix
+        const satir = [
+          w?.level ? `İzlenme düzeyi: ${w.level}` : 'İzlenme düzeyi: sinyal yetersiz',
+          nf?.present && nf.weeks > 0 ? `Netflix Top 10'da ${nf.series} dizi / ${nf.weeks} hafta` : null,
+          c.dataSource === 'proxy' ? 'yayın verisi yok' : null,
+        ]
+          .filter(Boolean)
+          .join(' · ')
+        return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${satir}</div>`
       })
       .onPolygonClick((f) => {
         const c = byIso2.get(featureIso2(f))
@@ -250,7 +234,6 @@ export default function Globe3D({
     seriesFilter,
     highlightFilter,
     continentHighlight,
-    metric,
   ])
 
   useEffect(() => {

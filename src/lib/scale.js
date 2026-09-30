@@ -136,3 +136,42 @@ export function buildMapScale(countries, metric = MAP_METRICS.PER_CAPITA) {
 
   return { byIso2, scale }
 }
+
+// ---------------------------------------------------------------------------------------------
+// İzlenme düzeyi haritası (varsayılan renk). Ülke rengi watchSignal.level'dan gelir: beş seviye
+// (yüzdelik beşlikleri), sinyal yetersiz olan ülke ayrı gri, kaynak ülke ölçek dışı mor.
+export const WATCH_LEVELS = ['Çok düşük', 'Düşük', 'Orta', 'Yüksek', 'Çok yüksek']
+export const WATCH_LEVEL_COLORS = {
+  'Çok düşük': STOPS[0],
+  Düşük: STOPS[1],
+  Orta: STOPS[2],
+  Yüksek: STOPS[3],
+  'Çok yüksek': STOPS[4],
+}
+export const NO_SIGNAL_COLOR = '#131c31'
+
+export function watchLevelColor(level) {
+  return WATCH_LEVEL_COLORS[level] ?? NO_SIGNAL_COLOR
+}
+
+/**
+ * Harita bileşenlerinin giriş noktası: ülke → { color, level, index, isSourceCountry, hasSignal }.
+ * Sinyali olmayan ülke gri kalır (0 değil "yok"); proxy (yayın verisi olmayan) ülkeler de sinyalleri
+ * varsa seviyelerine göre boyanır — etiket "yayın verisi yok" panelde yazılır.
+ */
+export function buildWatchMap(countries) {
+  const byIso2 = new Map()
+  for (const c of countries || []) {
+    const isSource = c.iso2 === SOURCE_COUNTRY_ISO2
+    const level = c.watchSignal?.level ?? null
+    byIso2.set(c.iso2, {
+      ...c,
+      isSourceCountry: isSource,
+      level,
+      index: c.watchSignal?.index ?? null,
+      hasSignal: level != null,
+      color: isSource ? SOURCE_COUNTRY_COLOR : watchLevelColor(level),
+    })
+  }
+  return { byIso2 }
+}

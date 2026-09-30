@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatTrendsDate } from '../lib/formatDate.js'
+import { EMPTY } from '../lib/emptyStates.js'
 
 const WIDTH = 680
 const HEIGHT = 220
@@ -12,7 +13,7 @@ export default function MultiSeriesTrendChart({ series }) {
 
   const withData = series.filter((s) => s.timeline?.length > 1)
   if (withData.length === 0) {
-    return <p className="dashboard__empty">Seçilen diziler için küresel zaman serisi verisi bulunamadı.</p>
+    return <p className="dashboard__empty">{EMPTY.multiSeriesNoTimeSeries}</p>
   }
 
   const allTimestamps = withData.flatMap((s) => s.timeline.map((p) => p.timestamp))

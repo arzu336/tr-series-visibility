@@ -8,6 +8,12 @@ import CountryPanel from './CountryPanel.jsx'
 import CountryReportDocument from './report/CountryReportDocument.jsx'
 import CountryReportView from './report/CountryReportView.jsx'
 import ProfilePicker from './report/ProfilePicker.jsx'
+import { TourismCorrelation, LeadingSignalSection } from './TourismImpactTab.jsx'
+import { EMPTY } from '../lib/emptyStates.js'
+import * as NOTES from '../lib/methodologyNotes.js'
+import Legend from './Legend.jsx'
+import ChartsStrip from './ChartsStrip.jsx'
+import ContinentSidebar from './ContinentSidebar.jsx'
 
 // jsdom/testing-library kurulu değil; sunucu tarafı render, useAsync'e geçirilen bileşenlerin
 // ilk render'da (status: loading/idle) patlamadığını ve doğru iskeleti bastığını doğrular.
@@ -48,23 +54,12 @@ describe('useAsync tabanlı bileşenler ilk render', () => {
     expect(renderToString(<CountryPanel country={null} allCountries={[]} />)).toContain('bir ülkeye tıklayın')
   })
 
-  it('CountryPanel skor kartını ve kişi başına paydayı basar', () => {
-    const country = {
-      iso2: 'DE',
-      name: 'Almanya',
-      score: 500,
-      seriesCount: 30,
-      seriesList: [],
-      dataSource: 'tmdb',
-      scorePerCapita: 6.4,
-      perCapitaBasis: 'internet-kullanicisi',
-      perCapitaYear: 2024,
-      perCapitaReliable: true,
-    }
+  it('CountryPanel ilk render: izlenme gerçekleri iskeleti ve yayın varlığı başlığı; skor etiketi yok', () => {
+    const country = { iso2: 'DE', name: 'Almanya', score: 500, seriesCount: 30, seriesList: [], dataSource: 'tmdb' }
     const html = renderToString(<CountryPanel country={country} allCountries={[country]} />)
-    expect(html).toContain('Kişi başına erişilebilirlik skoru')
-    expect(html).toContain('6,40')
-    expect(html).toContain('milyon internet kullanıcısı')
+    expect(html).toContain('İzlenme gerçekleri yükleniyor')
+    expect(html).toMatch(/Yayındaki diziler — (<!-- -->)?30(<!-- -->)? dizi/)
+    expect(html).not.toMatch(/skor/i)
   })
 })
 
@@ -115,24 +110,27 @@ function rapor(profile, sections) {
   }
 }
 
-const scores = ok('scores', 'Görünürlük skoru', {
-  score: 665.03,
-  seriesCount: 50,
-  scorePerCapita: 8.52,
-  perCapitaBasis: 'internet-kullanicisi',
-  perCapitaYear: 2024,
-  perCapitaReliable: true,
+const scores = ok('scores', 'İzlenme düzeyi ve yayın varlığı', {
+  level: 'yüksek',
+  index: 78,
+  confidence: 'orta',
+  netflix: { series: 3, weeks: 21, bestRank: 1 },
+  netflixReason: null,
+  access: { seriesCount: 50, platformCount: 7 },
   dominantTheme: 'aşk',
+  warnings: [
+    { code: 'linear-tv', text: "Bu ülkede 41 Türk dizisi yerel adla dağıtılmış ama Netflix Top 10'da zayıf." },
+  ],
 })
 
 const executive = rapor('executive', {
   scores,
-  ranking: ok('ranking', 'Ülkeler arası konum', {
-    totalRank: 23,
-    totalOf: 136,
-    perCapitaRank: 92,
-    perCapitaOf: 111,
-    perCapitaExcludedReason: null,
+  ranking: ok('ranking', 'Ülkeler arası izlenme sırası', {
+    rank: 23,
+    of: 111,
+    index: 78,
+    level: 'yüksek',
+    confidence: 'orta',
   }),
   trend: ok('trend', 'Trend', {
     shortTerm: { direction: 'yükseliyor', changePct: 31.7, windowDays: 8 },
@@ -143,7 +141,7 @@ const executive = rapor('executive', {
     ],
   }),
   findings: ok('findings', 'Öne çıkan bulgular', {
-    items: [{ text: 'Görünürlük skoru son 8 günde %32 arttı.', basis: 'trend' }],
+    items: [{ text: 'Yayın varlığı (katalog ağırlığı) son 8 günde %32 arttı.', basis: 'trend' }],
     dropped: 1,
   }),
 })
@@ -274,10 +272,12 @@ describe('Ülke raporu — üç profil SSR', () => {
     const html = renderToString(<CountryReportDocument report={executive} countryName="Almanya" />)
     expect(html).toContain('Almanya')
     expect(html).toContain('Yönetici özeti')
-    for (const t of ['Görünürlük skoru', 'Ülkeler arası konum', 'Trend', 'Öne çıkan bulgular'])
+    for (const t of ['İzlenme düzeyi ve yayın varlığı', 'Ülkeler arası izlenme sırası', 'Trend', 'Öne çıkan bulgular'])
       expect(html).toContain(t)
     expect(html).toContain('Netflix')
-    expect(html).toContain('2024')
+    expect(html).toContain('3 dizi · 21 hafta')
+    expect(html).toContain('23. / 111')
+    expect(html).toContain('yerel adla dağıtılmış') // linear-tv uyarısı raporda da görünür
     expect(html).toContain('yükseliyor')
     expect(html).toContain('Bu profildeki tüm bölümler hesaplandı')
     expect(html).toContain('report__doc--executive')
@@ -306,8 +306,8 @@ describe('Ülke raporu — üç profil SSR', () => {
   it('yapımcı: bölümler sectionOrder sırasıyla; benzer ülkeler ad + gerekçe + deneysel, benzerlik sayısı yok', () => {
     const html = renderToString(<CountryReportDocument report={producer} countryName="Almanya" />)
     const idx = [
-      'Görünürlük skoru',
-      'Yayın varlığı',
+      'İzlenme düzeyi ve yayın varlığı',
+      'Yayın varlığı (dizi × platform)',
       'Netflix Top 10 geçmişi',
       'Boşluk analizi',
       'Turizm / etki sinyali',
@@ -331,8 +331,8 @@ describe('Ülke raporu — üç profil SSR', () => {
       sections: { ...executive.sections, bilinmeyen: ok('bilinmeyen', 'Yeni bölüm', {}) },
     }
     const html = renderToString(<CountryReportDocument report={r} countryName="Almanya" />)
-    expect(html.indexOf('Öne çıkan bulgular')).toBeLessThan(html.indexOf('Görünürlük skoru'))
-    expect(html).not.toContain('Ülkeler arası konum')
+    expect(html.indexOf('Öne çıkan bulgular')).toBeLessThan(html.indexOf('İzlenme düzeyi ve yayın varlığı'))
+    expect(html).not.toContain('Ülkeler arası izlenme sırası')
     expect(html).toContain('Bu bölüm için görünüm tanımlı değil')
   })
 
@@ -358,5 +358,155 @@ describe('Ülke raporu — üç profil SSR', () => {
     expect(html).toContain('aria-label="Haritaya geri dön"')
     expect(html).toContain('aria-label="Raporu PDF olarak indir')
     expect(html).toContain('report__loading')
+  })
+})
+
+describe('Boş durum metinleri — neden söyleyen sabitler (emptyStates.js)', () => {
+  it('rapor: boşluk analizi boşken hesaplandi ve "Boşluk yok" cümlesini basar, tablo yok', () => {
+    const r = rapor('producer', {
+      gapAnalysis: ok('gapAnalysis', 'Boşluk analizi', {
+        similarCountries: [{ iso2: 'AT', reasons: ['aynı bölge'] }],
+        pool: 'bolge',
+        items: [],
+        totalGaps: 0,
+        noGap: true,
+        message: EMPTY.gapNone,
+      }),
+    })
+    const html = renderToString(<CountryReportDocument report={r} countryName="Almanya" />)
+    expect(html).toContain('Boşluk yok: benzer ülkelerde yayında olan diziler bu ülkede de yayında')
+    expect(html).toContain('Avusturya')
+    expect(html).not.toContain('Boşluk puanı')
+    expect(html).not.toContain('Veri yok.')
+  })
+
+  it('rapor: Netflix 0 kayıt durumu hesaplandi olarak kapsanan dönemi basar', () => {
+    const r = rapor('producer', {
+      netflixHistory: ok('netflixHistory', 'Netflix Top 10 geçmişi', {
+        rows: [],
+        zeroRecords: true,
+        message: EMPTY.netflixZeroRecords('2021-07-04', '2026-08-16'),
+        coverage: null,
+        sourceCoverage: { firstWeek: '2021-07-04', lastWeek: '2026-08-16', complete: false, source: 'pipeline_meta' },
+        weeksBehindSource: null,
+        lastWeek: null,
+      }),
+    })
+    const html = renderToString(<CountryReportDocument report={r} countryName="Japonya" />)
+    expect(html).toContain('0 kayıt: kapsanan dönemde (2021-07-04 – 2026-08-16)')
+    expect(html).toContain('Kaynak dosyanın kapsadığı dönem')
+    expect(html).not.toContain('Veri yok.')
+  })
+
+  it('rapor: Netflix "yayımlamıyor" ve "kısmi indirme" nedenleri Veri yok ile ayrı ayrı basılır', () => {
+    const r = rapor('producer', {
+      netflixHistory: yok('netflixHistory', 'Netflix Top 10 geçmişi', EMPTY.netflixNotPublished),
+    })
+    const html = renderToString(<CountryReportDocument report={r} countryName="Andorra" />)
+    expect(html).toContain('Veri yok.')
+    expect(html).toContain('Netflix bu ülke için Top 10 listesi yayımlamıyor; yayın varlığı bölümüne bakın')
+    const r2 = rapor('producer', {
+      netflixHistory: yok('netflixHistory', 'Netflix Top 10 geçmişi', EMPTY.netflixPartialDownload('PL', 'PH')),
+    })
+    expect(renderToString(<CountryReportDocument report={r2} countryName="Polonya" />)).toContain(
+      'dosya PH ülkesinde kesildi'
+    )
+  })
+
+  it('rapor: turizm korelasyonu "Aylık seri birikiyor: 2/3 ay" nedenini gösterir', () => {
+    const r = rapor('producer', {
+      tourismSignal: ok('tourismSignal', 'Turizm / etki sinyali', {
+        arrivals: { status: 'hesaplandi', value: 1000, monthCount: 9, latest: '2026-08' },
+        correlation: {
+          status: 'hesaplanamaz',
+          reason: EMPTY.correlationAccumulating(2, 3),
+          monthsAvailable: 2,
+          monthsRequired: 3,
+        },
+        didEstimate: { status: 'hesaplanamaz', reason: 'kontrol ülkesi eşleştirilemedi' },
+        leadingSignal: { status: 'hesaplanamaz', reason: EMPTY.leadingSignalOutOfScope(15) },
+      }),
+    })
+    const html = renderToString(<CountryReportDocument report={r} countryName="Almanya" />)
+    expect(html).toContain('Aylık seri birikiyor: 2/3 ay')
+    expect(html).toContain('Kapsam: görünürlükte ilk 15 ülke; bu ülke tarama kapsamında değil')
+  })
+
+  it('etki analizi: bekleyen korelasyon rozeti ölçülebilir, "Gerçek Veri Bekleniyor" yok', () => {
+    const html = renderToString(
+      <TourismCorrelation
+        pendingAnalysis={{
+          status: 'gerçek-veri-bekleniyor',
+          description: 'açıklama',
+          requiredSources: ['YİGM'],
+          monthsAvailable: 2,
+          monthsRequired: 3,
+          accumulatingLabel: EMPTY.correlationAccumulating(2, 3),
+        }}
+      />
+    )
+    expect(html).toContain('Aylık seri birikiyor: <!-- -->2<!-- -->/<!-- -->3<!-- --> ay')
+    expect(html).not.toContain('Gerçek Veri Bekleniyor')
+    expect(html).not.toContain('Model Hesaplamaya Hazır')
+  })
+
+  it('etki analizi: öncü sinyal boşken kapsamı yazar (N sunucudan), eski "henüz veri toplanmadı" yok', () => {
+    const html = renderToString(
+      <LeadingSignalSection leadingSignal={{ status: 'gerçek-veri-bekleniyor', scope: 15, signals: [] }} />
+    )
+    expect(html).toContain('görünürlükte ilk 15 ülke')
+    expect(html).not.toContain('henüz veri toplanmadı')
+    expect(renderToString(<LeadingSignalSection leadingSignal={null} />)).toContain('henüz sonuç üretmedi')
+  })
+
+  it('ülke paneli: proxy ülkede yayın geçmişi nedeni yazılır', () => {
+    const country = { iso2: 'XX', name: 'Deneme', dataSource: 'proxy', searchInterestScore: 40, seriesList: [] }
+    const html = renderToString(<CountryPanel country={country} allCountries={[country]} />)
+    expect(html).toContain('görünürlük geçmişi yalnızca yayın verisi olan ülkeler için tutulur')
+    expect(html).not.toContain('Görünürlük geçmişi tutulmuyor.')
+  })
+})
+
+// ---------- Kilit: görünürlük skoru / kişi başına / popülerlik toplamı hiçbir çıktıda geçmez ----------
+const YASAKLI = /görünürlük skoru|kişi başına|popülerlik toplamı/i
+
+describe('Kilit test — kaldırılan gösterge adları', () => {
+  const sabitler = { ...NOTES, ...EMPTY }
+
+  it('metodoloji notları ve boş durum sabitleri yasaklı ifade içermez', () => {
+    for (const [k, v] of Object.entries(sabitler)) {
+      const metin = typeof v === 'function' ? v(15, 30, 3, 'DE') : String(v)
+      expect(metin, k).not.toMatch(YASAKLI)
+    }
+    expect(NOTES.VISIBILITY_SCORE_NOTE).toBeUndefined()
+    expect(NOTES.PER_CAPITA_SCORE_NOTE).toBeUndefined()
+    expect(NOTES.TOTAL_SCORE_NOTE).toBeUndefined()
+  })
+
+  it('ana ekran bileşenleri (lejant, şerit, kıta paneli, ülke paneli, dizi paneli) yasaklı ifade basmaz', () => {
+    const de = {
+      iso2: 'DE',
+      name: 'Almanya',
+      score: 500,
+      seriesCount: 30,
+      dataSource: 'tmdb',
+      seriesList: [{ id: 1, name: 'Terzi', cast: [] }],
+    }
+    const xx = { iso2: 'XX', name: 'Deneme', dataSource: 'proxy', searchInterestScore: 40, seriesList: [] }
+    const ciktilar = [
+      renderToString(<Legend />),
+      renderToString(<ChartsStrip onSelectSeries={() => {}} />),
+      renderToString(<ContinentSidebar countries={[de, xx]} onSelectCountry={() => {}} onSelectSeries={() => {}} />),
+      renderToString(<CountryPanel country={de} allCountries={[de, xx]} />),
+      renderToString(<CountryPanel country={xx} allCountries={[de, xx]} />),
+      renderToString(<SeriesPanel seriesId={1} allCountries={[de]} />),
+    ]
+    for (const html of ciktilar) expect(html).not.toMatch(YASAKLI)
+  })
+
+  it('ülke raporu üç profilde de yasaklı ifade basmaz', () => {
+    for (const r of [executive, marketing, producer]) {
+      expect(renderToString(<CountryReportDocument report={r} countryName="Almanya" />)).not.toMatch(YASAKLI)
+    }
   })
 })

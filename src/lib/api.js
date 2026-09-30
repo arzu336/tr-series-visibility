@@ -301,3 +301,33 @@ export async function fetchCountryReport(iso2, profile, { fresh = false } = {}) 
 export async function fetchReportProfiles() {
   return handle(await fetch('/api/report/profiles'))
 }
+
+/** Liste uçları (chart_entries): kaynak etiketiyle döner. */
+export async function fetchChartsMeta() {
+  return handle(await fetch('/api/charts/meta'))
+}
+
+export async function fetchGlobalTop(week) {
+  const q = week ? `?week=${encodeURIComponent(week)}` : ''
+  return handle(await fetch(`/api/charts/global${q}`))
+}
+
+export async function fetchTurkeyTv({ date, segment = 'Total', onlySeries = true } = {}) {
+  const q = new URLSearchParams({ segment, onlySeries: onlySeries ? '1' : '0' })
+  if (date) q.set('date', date)
+  return handle(await fetch(`/api/charts/turkey-tv?${q}`))
+}
+
+export async function fetchCountryCharts(iso2, { week, range = 'monthly' } = {}) {
+  const q = new URLSearchParams({ range })
+  if (week) q.set('week', week)
+  return handle(await fetch(`/api/charts/country/${encodeURIComponent(iso2)}?${q}`))
+}
+
+export async function fetchContinentCharts() {
+  return handle(await fetch('/api/charts/continents'))
+}
+
+export async function fetchSeriesCharts(tmdbId) {
+  return handle(await fetch(`/api/charts/series/${encodeURIComponent(tmdbId)}`))
+}

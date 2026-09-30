@@ -20,7 +20,7 @@ from pathlib import Path
 from typing import Optional
 
 import netflix_country_ranker as nf
-from netflix_fetch_source import verify_source
+from netflix_fetch_source import known_content_length, verify_source
 from logsetup import get_logger
 
 log = get_logger(__name__)
@@ -33,7 +33,8 @@ def import_source(src: Path, cache_dir: Path) -> Path:
     """Doğrula + kopyala + kısmi kalıntıları temizle. Kesik/bozuk dosyada ValueError."""
     if not src.exists():
         raise FileNotFoundError(f"Kaynak dosya yok: {src}")
-    summary = verify_source(src, downloader_says_complete=True)
+    # content-length yanındaki meta/özetten okunur; bilinmiyorsa sıkı kural (satır sonu şart) geçerlidir.
+    summary = verify_source(src, downloader_says_complete=True, expected=known_content_length(src))
     if not summary["complete"]:
         raise ValueError(f"Dosya tam değil, içe alınmadı: {summary['reason']}")
 

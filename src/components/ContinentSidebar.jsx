@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
-import { CONTINENTS, groupByContinent, resolveIso2FromLabel, topSeriesInContinent } from '../lib/continents.js'
-import { computeSharePct, totalScoreOf } from '../lib/scoreShare.js'
-import { fetchTurkishLearningIndex, fetchDuolingoStats, fetchTourismSummary } from '../lib/api.js'
+import { CONTINENTS, groupByContinent, resolveIso2FromLabel } from '../lib/continents.js'
+import { fetchTurkishLearningIndex, fetchDuolingoStats, fetchTourismSummary, fetchContinentCharts } from '../lib/api.js'
+import { useAsync } from '../lib/useAsync.js'
 import countryNames from '../data/country-centroids.json'
-import { CONTINENT_SCORE_NOTE } from '../lib/methodologyNotes.js'
+import { WATCH_LEVELS, WATCH_LEVEL_COLORS } from '../lib/scale.js'
+import { EMPTY } from '../lib/emptyStates.js'
+import { ChartSource, fmtDateTr } from './ChartList.jsx'
+
+// Kıtasal analiz — düzen aynı; içerik izlenmeye göre: lider = en yüksek izlenme düzeyi, en çok izlenen dizi =
+// kıtada son 52 haftada en çok ülke-hafta toplayan Netflix Top 10 dizisi. Skor/ortalama yok.
 
 function nameOf(iso2) {
   return countryNames[iso2]?.name || iso2
-}
-
-function round1(n) {
-  return Math.round(n * 10) / 10
 }
 
 const MONTH_NAMES_TR = [
@@ -40,7 +41,7 @@ function ExportTourismStats({ tourismItems, continentCountries }) {
         🧳 Turizm Rakamları ⓘ
       </div>
       {matched.length === 0 ? (
-        <p className="sidebar__stat-note">Bu kıtada henüz turist verisi yok.</p>
+        <p className="sidebar__stat-note">{EMPTY.continentNoTourism}</p>
       ) : (
         <ol className="sidebar__top-list">
           {matched.slice(0, 3).map((item) => (
@@ -67,9 +68,31 @@ function findTopLearningCountry(byCountry, continentCountries) {
     .sort((a, b) => b.value - a.value)[0]
 }
 
+function LevelBar({ levels, total }) {
+  const n = WATCH_LEVELS.reduce((s, l) => s + (levels?.[l] || 0), 0)
+  if (!n) return <p className="sidebar__stat-note">Bu kıtada izlenme düzeyi hesaplanan ülke yok.</p>
+  return (
+    <div className="sidebar__levels" role="list" aria-label="İzlenme düzeyi dağılımı">
+      {[...WATCH_LEVELS].reverse().map((l) => {
+        const c = levels?.[l] || 0
+        if (!c) return null
+        return (
+          <div key={l} className="sidebar__level-row" role="listitem">
+            <span className="legend__swatch" style={{ background: WATCH_LEVEL_COLORS[l] }} />
+            <span className="sidebar__level-label">{l}</span>
+            <span className="sidebar__level-count">{c} ülke</span>
+          </div>
+        )
+      })}
+      {total > n && <p className="sidebar__stat-note">{total - n} ülkede sinyal yetersiz.</p>}
+    </div>
+  )
+}
+
 export default function ContinentSidebar({
   countries,
   onSelectCountry,
+  onSelectSeries,
   onFocusContinent,
   collapsed,
   onToggleCollapsed,
@@ -82,6 +105,7 @@ export default function ContinentSidebar({
   const [duolingo, setDuolingo] = useState(null)
   const [showDetails, setShowDetails] = useState(false)
   const [tourismItems, setTourismItems] = useState([])
+  const chartsReq = useAsync(fetchContinentCharts, [])
 
   useEffect(() => {
     fetchTurkishLearningIndex()
@@ -108,11 +132,7 @@ export default function ContinentSidebar({
   }, [])
 
   const selected = continentStats.find((c) => c.id === selectedId) || continentStats[0]
-  const globalTotal = useMemo(() => totalScoreOf(countries), [countries])
-  const topSeries = useMemo(
-    () => (selected?.countryCount > 0 ? topSeriesInContinent(selected.countries) : null),
-    [selected]
-  )
+  const chart = chartsReq.data?.continents?.find((c) => c.id === selectedId) || null
   const topLearningCountry = useMemo(
     () =>
       learningStatus === 'ready' && learningIndex?.byCountry?.length > 0 && selected
@@ -154,28 +174,57 @@ export default function ContinentSidebar({
 
         {selected && selected.countryCount > 0 ? (
           <div className="sidebar__body">
-            {/* Kıta Lideri */}
+            {/* Kıta Lideri — izlenme düzeyi */}
             <button
               className="sidebar__big-card"
-              onClick={() => selected.topCountry && onSelectCountry?.(selected.topCountry.iso2)}
+              onClick={() => chart?.leader && onSelectCountry?.(chart.leader.iso2)}
               title="Haritada göster"
+              disabled={!chart?.leader}
             >
               <div className="sidebar__big-card-label">🏆 Kıta Lideri</div>
-              <div className="sidebar__big-card-value">{nameOf(selected.topCountry.iso2)}</div>
-              <div className="sidebar__big-card-meta">Görünürlük skoru: {round1(selected.topCountry.score)}</div>
-            </button>
-
-            {/* En Çok İzlenen Dizi */}
-            <div className="sidebar__big-card">
-              <div className="sidebar__big-card-label">📺 En Çok İzlenen Dizi</div>
-              {topSeries ? (
+              {chartsReq.status === 'loading' ? (
+                <div className="sidebar__big-card-value sidebar__big-card-value--muted">Yükleniyor…</div>
+              ) : chart?.leader ? (
                 <>
-                  <div className="sidebar__big-card-value">{topSeries.name}</div>
-                  <div className="sidebar__big-card-meta">{topSeries.countryCount} ülkede yayında</div>
+                  <div className="sidebar__big-card-value">{nameOf(chart.leader.iso2)}</div>
+                  <div className="sidebar__big-card-meta">
+                    İzlenme düzeyi: {chart.leader.level} · yüzdelik konum {chart.leader.index}/100
+                  </div>
                 </>
               ) : (
-                <div className="sidebar__big-card-value sidebar__big-card-value--muted">Veri yok</div>
+                <div className="sidebar__big-card-value sidebar__big-card-value--muted">Sinyal yetersiz</div>
               )}
+            </button>
+
+            {/* En Çok İzlenen Dizi — Netflix Top 10, son 52 hafta */}
+            <div className="sidebar__big-card">
+              <div className="sidebar__big-card-label">📺 En Çok İzlenen Dizi</div>
+              {chartsReq.status === 'loading' && (
+                <div className="sidebar__big-card-value sidebar__big-card-value--muted">Yükleniyor…</div>
+              )}
+              {chartsReq.status !== 'loading' && chart?.topSeries ? (
+                <>
+                  <button
+                    type="button"
+                    className="sidebar__big-card-value sidebar__big-card-value--link"
+                    onClick={() => onSelectSeries?.(chart.topSeries.seriesId)}
+                  >
+                    {chart.topSeries.name}
+                  </button>
+                  <div className="sidebar__big-card-meta">
+                    Netflix Top 10: {chart.topSeries.countryWeeks} ülke-hafta (son 52 hafta) · en iyi #
+                    {chart.topSeries.bestRank}
+                    {chart.thisWeekSeriesCount ? ` · bu hafta listede ${chart.thisWeekSeriesCount} Türk dizisi` : ''}
+                  </div>
+                </>
+              ) : chartsReq.status !== 'loading' ? (
+                <div
+                  className="sidebar__big-card-value sidebar__big-card-value--muted"
+                  title={EMPTY.continentNoNetflix}
+                >
+                  Netflix Top 10 verisi yok
+                </div>
+              ) : null}
             </div>
 
             {/* Türkçe Dil Öğrenim İlgisi */}
@@ -207,43 +256,61 @@ export default function ContinentSidebar({
             {showDetails && (
               <div className="sidebar__details">
                 <div className="sidebar__stat">
-                  <div className="sidebar__stat-label">En Çok Türk Dizisi İzleyen İlk 5 Ülke</div>
-                  <ol className="sidebar__top-list">
-                    {selected.topCountries.map((country) => (
-                      <li key={country.iso2}>
-                        <button
-                          className="sidebar__top-country"
-                          onClick={() => onSelectCountry?.(country.iso2)}
-                          title="Haritada göster"
-                        >
-                          <span className="sidebar__top-country-name">{nameOf(country.iso2)}</span>
-                          <span className="sidebar__top-country-meta">
-                            Skor: {round1(country.score)} · Kıta payı %
-                            {computeSharePct(country.score, selected.totalScore)}
-                          </span>
-                        </button>
-                      </li>
-                    ))}
-                  </ol>
+                  <div className="sidebar__stat-label">En Çok İzlenen İlk 5 Ülke</div>
+                  {chart?.topCountries?.length ? (
+                    <ol className="sidebar__top-list">
+                      {chart.topCountries.map((country) => (
+                        <li key={country.iso2}>
+                          <button
+                            className="sidebar__top-country"
+                            onClick={() => onSelectCountry?.(country.iso2)}
+                            title="Haritada göster"
+                          >
+                            <span className="sidebar__top-country-name">{nameOf(country.iso2)}</span>
+                            <span className="sidebar__top-country-meta">
+                              {country.level}
+                              {country.weeks ? ` · Netflix Top 10'da ${country.weeks} hafta` : ''}
+                            </span>
+                          </button>
+                        </li>
+                      ))}
+                    </ol>
+                  ) : (
+                    <p className="sidebar__stat-note">Bu kıtada izlenme düzeyi hesaplanan ülke yok.</p>
+                  )}
                 </div>
 
                 <div className="sidebar__stat">
-                  <div className="sidebar__stat-label" title={CONTINENT_SCORE_NOTE}>
-                    Kıtasal Kültürel Erişim Skoru ⓘ
-                  </div>
-                  <div className="sidebar__stat-value">{round1(selected.averageScore)}</div>
-                  <p className="sidebar__stat-note">
-                    {selected.countryCount} ülkenin ortalama görünürlük skoru · Küresel toplamın %
-                    {computeSharePct(selected.totalScore, globalTotal)}'i bu kıtada.
-                  </p>
+                  <div className="sidebar__stat-label">İzlenme Düzeyi Dağılımı</div>
+                  <LevelBar levels={chart?.levels} total={chart?.countryCount ?? selected.countryCount} />
                 </div>
+
+                {chart?.topSeriesList?.length > 1 && (
+                  <div className="sidebar__stat">
+                    <div className="sidebar__stat-label">Kıtada En Çok İzlenen 3 Dizi (Netflix, 52 hafta)</div>
+                    <ol className="sidebar__top-list">
+                      {chart.topSeriesList.map((s) => (
+                        <li key={s.seriesId ?? s.name}>
+                          <span className="sidebar__top-country-name">{s.name}</span>
+                          <span className="sidebar__top-country-meta">
+                            {s.periods} ülke-hafta · en iyi #{s.bestRank} · son {fmtDateTr(s.lastDate)}
+                          </span>
+                        </li>
+                      ))}
+                    </ol>
+                    <ChartSource
+                      source={{ label: 'Netflix Top 10', platform: 'Netflix' }}
+                      periodLabel={`son hafta ${fmtDateTr(chart.latestWeek)}`}
+                    />
+                  </div>
+                )}
 
                 <ExportTourismStats tourismItems={tourismItems} continentCountries={selected.countries} />
               </div>
             )}
           </div>
         ) : (
-          <p className="dashboard__empty">Bu kıtada henüz görünürlük verisi yok.</p>
+          <p className="dashboard__empty">{EMPTY.continentNoVisibility}</p>
         )}
       </aside>
 

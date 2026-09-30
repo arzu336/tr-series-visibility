@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { fetchTourismImpact } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
+import { CORRELATION_MIN_MONTHS, EMPTY } from '../lib/emptyStates.js'
 
 function nameOf(iso2) {
   return countryNames[iso2]?.name || iso2
@@ -94,14 +95,19 @@ function DidTable({ countries }) {
   )
 }
 
-function TourismCorrelation({ pendingAnalysis }) {
+export function TourismCorrelation({ pendingAnalysis }) {
   if (pendingAnalysis.status !== 'gerçek-veri-mevcut') {
+    // Ölçülebilir ifade: X gerçek veriden (görünürlük aylık serisi ∩ turist ayları), eşik sunucudan.
+    const have = pendingAnalysis.monthsAvailable ?? 0
+    const need = pendingAnalysis.monthsRequired ?? CORRELATION_MIN_MONTHS
     return (
       <>
         <div className="impact__pending-badges">
-          <span className="badge badge--uncertain">Gerçek Veri Bekleniyor</span>
-          <span className="badge badge--info" title="Yöntem hazır, gerçek veri bekleniyor.">
-            Model Hesaplamaya Hazır
+          <span
+            className="badge badge--info"
+            title={pendingAnalysis.accumulatingLabel || EMPTY.correlationAccumulating(have, need)}
+          >
+            Aylık seri birikiyor: {have}/{need} ay
           </span>
         </div>
         <div className="impact__pending">
@@ -120,11 +126,11 @@ function TourismCorrelation({ pendingAnalysis }) {
   return <DidTable countries={pendingAnalysis.countries} />
 }
 
-function LeadingSignalSection({ leadingSignal }) {
+export function LeadingSignalSection({ leadingSignal }) {
   if (!leadingSignal || leadingSignal.status !== 'gerçek-veri-mevcut') {
     return (
       <p className="dashboard__empty">
-        Öncü seyahat sinyali için henüz veri toplanmadı. Haftalık tarama çalıştığında burada görünecek.
+        {leadingSignal?.scope ? EMPTY.leadingSignalTabEmpty(leadingSignal.scope) : EMPTY.leadingSignalNotRunYet}
       </p>
     )
   }

@@ -8,8 +8,10 @@ import { calculateCountryCompositeScore } from './countryScoringEngine.js'
 import { getPipelineDb } from './pipelineDb.js'
 import { readCachedSerpApi, timeSeriesCacheKey } from './serpApiCache.js'
 import { findSimilarCountries } from './similarCountries.js'
+import { getWatchSignals } from './watchSignal.js'
 import { generateFindings } from './reportFindings.js'
 import * as notes from '../../src/lib/methodologyNotes.js'
+import { EMPTY } from '../../src/lib/emptyStates.js'
 
 // Ülke raporu — tek veri toplama noktası. Her çağrı TÜM bölümleri hesaplar; profil yalnızca
 // hangi bölümlerin döneceğini seçer (selectProfile). Böylece üç profil aynı sayıları gösterir.
@@ -41,8 +43,8 @@ export const SECTION_KEYS = [
 ]
 
 export const SECTION_TITLES = {
-  scores: 'Görünürlük skoru',
-  ranking: 'Ülkeler arası konum',
+  scores: 'İzlenme düzeyi ve yayın varlığı',
+  ranking: 'Ülkeler arası izlenme sırası',
   trend: 'Trend',
   findings: 'Öne çıkan bulgular',
   topSeries: 'Ülkede en çok ilgi gören diziler',
@@ -57,12 +59,12 @@ export const SECTION_TITLES = {
 }
 
 export const SECTION_NOTES = {
-  scores: `${notes.TOTAL_SCORE_NOTE} ${notes.PER_CAPITA_SCORE_NOTE}`,
+  scores: `${notes.WATCH_LEVEL_NOTE} ${notes.AVAILABILITY_NOTE}`,
   ranking: notes.RANKING_NOTE,
   trend: notes.TREND_NOTE,
   findings: notes.FINDINGS_NOTE,
   topSeries: notes.COMPOSITE_SCORE_NOTE,
-  themes: notes.VISIBILITY_SCORE_NOTE,
+  themes: notes.THEME_SHARE_NOTE,
   searchTrend: notes.SEARCH_INTEREST_NOTE,
   pressTone: notes.MEDIA_TONE_NOTE,
   highlightedSeries: notes.HIGHLIGHTED_SERIES_NOTE,
@@ -105,45 +107,59 @@ const isStreamable = (entry) => STREAMABLE_KEYS.some((k) => Array.isArray(entry?
 
 // ---- bölümler ---------------------------------------------------------------------------
 
-function buildScores(countryRow) {
+/**
+ * İzlenme düzeyi (watchSignal: Netflix Top 10 + Wikipedia + arama) ve yayın varlığının sayılabilir gerçekleri.
+ * Skor/puan yok: düzey, yüzdelik konum, Netflix hafta sayıları ve "N dizi yayında, M platformda".
+ */
+function buildScores(countryRow, raw, iso2, signal) {
   if (!countryRow) {
     return yetersiz('ülke yayın verisi takip listesinde değil (bu ülke için TMDB/JustWatch sağlayıcı kaydı yok)')
   }
-  if (countryRow.dataSource === 'proxy') {
-    return yetersiz('yalnızca arama hacmi tahmini var; görünürlük skoru hesaplanmıyor')
+  if (countryRow.dataSource === 'proxy' && !signal?.level) {
+    return yetersiz('yalnızca arama hacmi tahmini var; yayın sağlayıcı verisi ve izlenme düzeyi yok')
   }
-  return OK({
-    score: countryRow.score,
-    seriesCount: countryRow.seriesCount,
-    scorePerCapita: countryRow.scorePerCapita ?? null,
-    perCapitaBasis: countryRow.perCapitaBasis ?? null,
-    perCapitaYear: countryRow.perCapitaYear ?? null,
-    perCapitaReliable: countryRow.perCapitaReliable === true,
-    dominantTheme: countryRow.dominantTheme ?? null,
-  })
+  const platforms = new Set()
+  if (raw && countryRow.dataSource !== 'proxy') {
+    for (const s of raw.series) {
+      const e = raw.providersById[s.id]?.[iso2]
+      if (!e) continue
+      for (const k of PROVIDER_CATEGORIES)
+        for (const p of e[k] || []) platforms.add(p.provider_name || String(p.provider_id))
+    }
+  }
+  const nf = signal?.components?.netflix
+  return OK(
+    {
+      level: signal?.level ?? null,
+      index: signal?.index ?? null,
+      confidence: signal?.confidence ?? null,
+      netflix: nf?.present ? { series: nf.series, weeks: nf.weeks, bestRank: nf.bestRank } : null,
+      netflixReason: nf && !nf.present ? nf.reason : null,
+      access:
+        countryRow.dataSource === 'proxy'
+          ? null
+          : { seriesCount: countryRow.seriesCount, platformCount: platforms.size },
+      dominantTheme: countryRow.dominantTheme ?? null,
+      warnings: signal?.warnings ?? [],
+    },
+    { caveat: signal ? null : 'izlenme düzeyi hesaplanamadı (sinyal servisi yok)' }
+  )
 }
 
-export function buildRanking(iso2, countries) {
+export function buildRanking(iso2, countries, signals) {
   if (iso2 === SOURCE_COUNTRY) return yetersiz('kaynak ülke sıralamaya dahil edilmez')
-  const tracked = countries.filter((c) => c.dataSource !== 'proxy' && c.iso2 !== SOURCE_COUNTRY)
-  const me = tracked.find((c) => c.iso2 === iso2)
-  if (!me) return yetersiz('ülke yayın verisi takip listesinde değil')
-
-  const byTotal = [...tracked].sort((a, b) => b.score - a.score)
-  const totalRank = byTotal.findIndex((c) => c.iso2 === iso2) + 1
-
-  const reliable = tracked.filter((c) => c.perCapitaReliable && c.scorePerCapita != null)
-  const byPerCapita = [...reliable].sort((a, b) => b.scorePerCapita - a.scorePerCapita)
-  const pcIndex = byPerCapita.findIndex((c) => c.iso2 === iso2)
-
-  return OK({
-    totalRank,
-    totalOf: byTotal.length,
-    perCapitaRank: pcIndex >= 0 ? pcIndex + 1 : null,
-    perCapitaOf: byPerCapita.length,
-    perCapitaExcludedReason:
-      pcIndex >= 0 ? null : 'payda 1 milyon internet kullanıcısının altında ya da demografi verisi yok',
-  })
+  const byIso2 = signals?.byIso2 || {}
+  const indexed = Object.entries(byIso2).filter(([, s]) => s.index != null)
+  const me = byIso2[iso2]
+  if (!me || me.index == null) {
+    return yetersiz(
+      me?.componentCount === 1
+        ? 'izlenme düzeyi için tek kaynak var (en az 2 gerekir)'
+        : 'izlenme düzeyi hesaplanamadı (sinyal yok)'
+    )
+  }
+  const rank = 1 + indexed.filter(([, s]) => s.index > me.index).length
+  return OK({ rank, of: indexed.length, index: me.index, level: me.level, confidence: me.confidence })
 }
 
 function buildTrend(countryRow, monthly) {
@@ -289,16 +305,34 @@ function netflixRowsFor(conn, iso2) {
     .all(iso2)
 }
 
-/** Kaynak dosyanın kendi son haftası: pipeline_meta (Python yazar) → yoksa tablodaki en geç kayıt. */
+function parseIsoList(value) {
+  if (!value) return null
+  try {
+    const list = JSON.parse(value)
+    return Array.isArray(list) ? new Set(list.map((x) => String(x).toUpperCase())) : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Kaynak dosyanın kendi kapsamı: pipeline_meta (Python yazar) → yoksa tablodaki en geç kayıt.
+ * sourceCountries: bu koşuda bloğu TAM okunan ülkeler (kısmi dosyada alfabetik olarak kesime kadar).
+ * marketCountries: Netflix'in Top 10 yayımladığı ülkeler — yalnızca TAM dosyadan türetilir, elle liste yok;
+ * tam dosya hiç işlenmemişse null (bilinmiyor).
+ */
 function netflixSourceCoverage(conn) {
   let firstWeek = null
   let lastWeek = null
   let complete = null
   let source = 'tablo'
+  let sourceCountries = null
+  let marketCountries = null
+  let truncated = null
   try {
     const rows = conn
       .prepare(
-        "SELECT key, value FROM pipeline_meta WHERE key IN ('netflix_source_first_week','netflix_source_last_week','netflix_source_complete')"
+        "SELECT key, value FROM pipeline_meta WHERE key IN ('netflix_source_first_week','netflix_source_last_week','netflix_source_complete','netflix_source_countries','netflix_market_countries','netflix_truncated_country')"
       )
       .all()
     const meta = Object.fromEntries(rows.map((r) => [r.key, r.value]))
@@ -308,6 +342,9 @@ function netflixSourceCoverage(conn) {
       complete = meta.netflix_source_complete == null ? null : meta.netflix_source_complete === '1'
       source = 'pipeline_meta'
     }
+    sourceCountries = parseIsoList(meta.netflix_source_countries)
+    marketCountries = parseIsoList(meta.netflix_market_countries)
+    truncated = meta.netflix_truncated_country || null
   } catch {
     /* pipeline_meta tablosu yok (eski hat) — tabloya düş */
   }
@@ -320,7 +357,7 @@ function netflixSourceCoverage(conn) {
       /* tablo yok */
     }
   }
-  return { firstWeek, lastWeek, complete, source }
+  return { firstWeek, lastWeek, complete, source, sourceCountries, marketCountries, truncated }
 }
 
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000
@@ -340,30 +377,56 @@ export function netflixStaleness(countryLastWeek, sourceLastWeek) {
   }
 }
 
+/**
+ * Kayıt yokken üç durum ayrılır (hepsi kaynak dosyadan türetilir):
+ *   a) ülke bloğu tam okunmuş, Türk dizisi hiç girmemiş → hesaplandi, 0 kayıt + kapsanan dönem
+ *   b) tam dosyada Netflix'in yayımladığı ülkeler arasında değil → hesaplanamaz, "yayımlamıyor"
+ *   c) dosya kısmi ve ülke indirilen kısımda yok → hesaplanamaz, "kısmi indirme" (yalnızca bu durumda)
+ */
+function netflixKayitYok(iso2, kapsam, readSyncError) {
+  const { sourceCountries, marketCountries, complete, truncated, firstWeek, lastWeek } = kapsam
+  if (sourceCountries?.has(iso2)) {
+    return OK({
+      rows: [],
+      zeroRecords: true,
+      message: EMPTY.netflixZeroRecords(firstWeek ?? '?', lastWeek ?? '?'),
+      coverage: null,
+      sourceCoverage: { firstWeek, lastWeek, complete, source: kapsam.source },
+      weeksBehindSource: null,
+      lastWeek: null,
+    })
+  }
+  if (marketCountries && !marketCountries.has(iso2)) return yetersiz(EMPTY.netflixNotPublished)
+  if (complete === true && sourceCountries && !sourceCountries.has(iso2)) return yetersiz(EMPTY.netflixNotPublished)
+  let sebep =
+    complete === false || sourceCountries
+      ? EMPTY.netflixPartialDownload(iso2, truncated)
+      : EMPTY.netflixNoRecordUnknown(iso2)
+  if (!sourceCountries) {
+    // Eski hat: ülke listesi yok; tabloda başka ülke varsa kısmi indirme en olası açıklama.
+    sebep = EMPTY.netflixPartialDownload(iso2, truncated)
+  }
+  const sonHata = readSyncError()
+  if (sonHata) sebep += `; son senkron hatası: ${sonHata}`
+  return yetersiz(sebep)
+}
+
 function buildNetflixHistory(iso2, raw, pipelineConn, readSyncError) {
-  if (!pipelineConn) return yetersiz('pipeline.db açılamadı — Netflix hattı henüz çalışmamış olabilir')
+  if (!pipelineConn) return yetersiz(EMPTY.netflixDbMissing)
   let rows
   try {
     rows = netflixRowsFor(pipelineConn, iso2)
   } catch {
-    return yetersiz('netflix_country_rankings tablosu yok (netflix_pipeline.py --all çalıştırılmalı)')
+    return yetersiz(EMPTY.netflixTableMissing)
   }
-  if (rows.length === 0) {
-    let sebep = `${iso2} için Netflix Top 10 kaydı yok`
-    let toplam = 0
-    try {
-      toplam = pipelineConn.prepare('SELECT COUNT(*) n FROM netflix_country_rankings').get().n
-    } catch {
-      /* tablo yok — yukarıda yakalandı */
-    }
-    if (toplam > 0) {
-      sebep +=
-        ' — kaynak dosya kısmen indirildiği için bu ülke kapsam dışında kalmış olabilir (alfabetik olarak geç gelen ülkeler eksik)'
-    }
-    const sonHata = readSyncError()
-    if (sonHata) sebep += `; son senkron hatası: ${sonHata}`
-    return yetersiz(sebep)
+  const kapsam = netflixSourceCoverage(pipelineConn)
+  const sourceCoverage = {
+    firstWeek: kapsam.firstWeek,
+    lastWeek: kapsam.lastWeek,
+    complete: kapsam.complete,
+    source: kapsam.source,
   }
+  if (rows.length === 0) return netflixKayitYok(iso2, kapsam, readSyncError)
   const nameById = new Map(raw.series.map((s) => [s.id, s.name]))
   const haftalar = rows
     .map((r) => r.last_week_date)
@@ -374,7 +437,6 @@ function buildNetflixHistory(iso2, raw, pipelineConn, readSyncError) {
     .filter(Boolean)
     .sort()
   const lastWeek = haftalar.at(-1) ?? null
-  const sourceCoverage = netflixSourceCoverage(pipelineConn)
   const staleness = netflixStaleness(lastWeek, sourceCoverage.lastWeek)
   return OK(
     {
@@ -401,7 +463,7 @@ function buildNetflixHistory(iso2, raw, pipelineConn, readSyncError) {
 
 async function buildGapAnalysis(iso2, raw, countries, pipelineConn, similarFn, similarOpts) {
   const similar = await similarFn(iso2, countries, similarOpts)
-  if (similar.candidates.length === 0) return yetersiz(`benzer ülke bulunamadı (${similar.note})`)
+  if (similar.candidates.length === 0) return yetersiz(EMPTY.gapNoSimilar(similar.note))
 
   const netflixBest = new Map()
   if (pipelineConn) {
@@ -438,13 +500,15 @@ async function buildGapAnalysis(iso2, raw, countries, pipelineConn, similarFn, s
         10,
     })
   }
-  if (items.length === 0) return yetersiz('benzer ülkelerde yayında olup bu ülkede olmayan dizi yok')
   items.sort((a, b) => b.gapScore - a.gapScore)
+  // Boşluk bulunmaması veri eksikliği değil, gerçek bir sonuçtur: hesaplandi + açık mesaj.
   return OK({
     similarCountries: similar.candidates,
     pool: similar.pool,
     items: items.slice(0, GAP_ITEMS),
     totalGaps: items.length,
+    noGap: items.length === 0,
+    message: items.length === 0 ? EMPTY.gapNone : null,
   })
 }
 
@@ -500,6 +564,7 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
   const countryRow = countries.find((c) => c.iso2 === iso2) || null
   const tracked = Boolean(countryRow) && countryRow.dataSource !== 'proxy'
 
+  const signals = await (deps.getWatchSignals || getWatchSignals)().catch(() => null)
   const [convergence, composite] = await Promise.all([
     Promise.resolve()
       .then(() => convergenceFn(iso2, countries))
@@ -511,8 +576,8 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
       : Promise.resolve({ error: 'ülke yayın verisi yok' }),
   ])
 
-  const scores = section('scores', buildScores(countryRow))
-  const ranking = section('ranking', buildRanking(iso2, countries))
+  const scores = section('scores', buildScores(countryRow, raw, iso2, signals?.byIso2?.[iso2] ?? null))
+  const ranking = section('ranking', buildRanking(iso2, countries, signals))
   const trend = await guarded('trend', () => buildTrend(countryRow, tracked ? monthlyFn(iso2) : []))
   const themes = section('themes', buildThemes(countryRow))
   const topSeries = section('topSeries', buildTopSeries(composite))

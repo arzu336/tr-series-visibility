@@ -120,6 +120,30 @@ const compositeOk = {
   shareOfSearchMeta: { skipped: 'cache-miss' },
 }
 
+// İzlenme sinyali (watchSignal) — rapor bunu sadece okur: düzey, yüzdelik, Netflix bileşeni.
+const sinyal = (index, level, netflix, extra = {}) => ({
+  index,
+  level,
+  confidence: 'orta',
+  componentCount: 2,
+  components: { netflix },
+  warnings: [],
+  ...extra,
+})
+const SIGNALS = {
+  byIso2: {
+    DE: sinyal(80, 'yüksek', { present: true, series: 3, weeks: 21, bestRank: 1 }),
+    FR: sinyal(90, 'çok yüksek', { present: true, series: 4, weeks: 30, bestRank: 1 }),
+    SM: sinyal(
+      null,
+      null,
+      { present: false, reason: 'Netflix bu ülke için Top 10 yayımlamıyor' },
+      { componentCount: 1 }
+    ),
+    RU: sinyal(40, 'orta', { present: false, reason: 'Netflix bu ülke için Top 10 yayımlamıyor' }),
+  },
+}
+
 function deps(over = {}) {
   const cacheStore = new Map()
   return {
@@ -143,6 +167,7 @@ function deps(over = {}) {
       note: '',
     }),
     readNetflixSyncError: () => null,
+    getWatchSignals: async () => SIGNALS,
     cache: { get: (k) => cacheStore.get(k) ?? null, set: (k, v) => cacheStore.set(k, v), store: cacheStore },
     now: () => new Date('2026-09-30T12:00:00.000Z'),
     ...over,
@@ -171,9 +196,16 @@ describe('buildCountryReport — sözleşme', () => {
   it('DE için hesaplanan bölümler doğru içerik taşır', async () => {
     const r = await buildCountryReport('DE', { deps: deps() })
     const s = r.sections
-    expect(s.scores.data).toMatchObject({ score: 500, scorePerCapita: 6.4, perCapitaReliable: true })
-    // TR ve proxy hariç: DE, FR, SM → toplamda DE 1.; kişi başına yalnızca güvenilirler (DE, FR) → DE 2.
-    expect(s.ranking.data).toMatchObject({ totalRank: 1, totalOf: 3, perCapitaRank: 2, perCapitaOf: 2 })
+    // Skor yok: düzey + Netflix gerçekleri + "N dizi, M platformda"
+    expect(s.scores.data).toMatchObject({
+      level: 'yüksek',
+      index: 80,
+      netflix: { series: 3, weeks: 21, bestRank: 1 },
+      access: { seriesCount: 25, platformCount: 2 }, // DE: Netflix (Terzi) + Apple TV (Atiye)
+    })
+    expect(JSON.stringify(s.scores)).not.toMatch(/scorePerCapita|"score"/)
+    // İzlenme sırası: endeksi olanlar DE (80), FR (90), RU (40) → DE 2./3; SM tek bileşenli, sıralanmaz
+    expect(s.ranking.data).toMatchObject({ rank: 2, of: 3, level: 'yüksek' })
     expect(s.trend.data.shortTerm.direction).toBe('yükseliyor')
     expect(s.trend.data.monthly).toHaveLength(2)
     expect(s.themes.data.items[0]).toMatchObject({ theme: 'aile', sharePct: 60 })
@@ -264,6 +296,131 @@ describe('buildCountryReport — eksik veri gizlenmez', () => {
     expect(kayitYok.sections.netflixHistory.reason).toMatch(/FR için Netflix Top 10 kaydı yok/)
     expect(kayitYok.sections.netflixHistory.reason).toMatch(/kısmen indirildiği/)
     expect(kayitYok.sections.netflixHistory.reason).toMatch(/son senkron hatası/)
+  })
+
+  describe('Netflix: kayıt yokken üç durum (kaynak dosyadan türetilir)', () => {
+    const digerUlke = [{ iso2: 'DE', tmdbId: 1, title: 'x', weeks: 1, peak: 5, score: 50, week: '2026-01-04' }]
+    const donem = { netflix_source_first_week: '2021-07-04', netflix_source_last_week: '2026-08-16' }
+
+    it('a) bloğu tam, Türk dizisi girmemiş → hesaplandi, 0 kayıt + kapsanan dönem', async () => {
+      const r = await buildCountryReport('FR', {
+        deps: deps({
+          pipelineDb: pipelineDb({
+            rows: digerUlke,
+            meta: {
+              ...donem,
+              netflix_source_complete: '0',
+              netflix_source_countries: '["DE","FR"]',
+              netflix_truncated_country: 'PH',
+            },
+          }),
+        }),
+      })
+      const s = r.sections.netflixHistory
+      expect(s.status).toBe('hesaplandi')
+      expect(s.data.rows).toEqual([])
+      expect(s.data.zeroRecords).toBe(true)
+      expect(s.data.message).toMatch(/^0 kayıt: kapsanan dönemde \(2021-07-04 – 2026-08-16\)/)
+      expect(s.data.sourceCoverage).toMatchObject({ firstWeek: '2021-07-04', lastWeek: '2026-08-16', complete: false })
+      expect(r.dataGaps.map((g) => g.section)).not.toContain('netflixHistory')
+    })
+
+    it('b) tam dosyada Netflix pazarı değil → hesaplanamaz, "yayımlamıyor"', async () => {
+      const r = await buildCountryReport('FR', {
+        deps: deps({
+          pipelineDb: pipelineDb({
+            rows: digerUlke,
+            meta: {
+              ...donem,
+              netflix_source_complete: '1',
+              netflix_source_countries: '["DE"]',
+              netflix_market_countries: '["DE"]',
+            },
+          }),
+        }),
+      })
+      expect(r.sections.netflixHistory.status).toBe('hesaplanamaz')
+      expect(r.sections.netflixHistory.reason).toBe(
+        'Netflix bu ülke için Top 10 listesi yayımlamıyor; yayın varlığı bölümüne bakın'
+      )
+    })
+
+    it('b2) pazar listesi eski tam koşudan kalmış, bu koşu kısmi → yine "yayımlamıyor"', async () => {
+      const r = await buildCountryReport('FR', {
+        deps: deps({
+          pipelineDb: pipelineDb({
+            rows: digerUlke,
+            meta: {
+              ...donem,
+              netflix_source_complete: '0',
+              netflix_source_countries: '["DE"]',
+              netflix_market_countries: '["DE","PL"]',
+              netflix_truncated_country: 'PH',
+            },
+          }),
+        }),
+      })
+      expect(r.sections.netflixHistory.reason).toMatch(/yayımlamıyor/)
+    })
+
+    it('c) dosya kısmi, ülke indirilen kısımda yok, pazar listesi bilinmiyor → kısmi indirme + kesilen ülke', async () => {
+      const r = await buildCountryReport('PL', {
+        deps: deps({
+          pipelineDb: pipelineDb({
+            rows: digerUlke,
+            meta: {
+              ...donem,
+              netflix_source_complete: '0',
+              netflix_source_countries: '["DE","FR"]',
+              netflix_truncated_country: 'PH',
+            },
+          }),
+          readNetflixSyncError: () => null,
+        }),
+      })
+      const s = r.sections.netflixHistory
+      expect(s.status).toBe('hesaplanamaz')
+      expect(s.reason).toMatch(/PL için Netflix Top 10 kaydı yok — kaynak dosya kısmen indirildiği/)
+      expect(s.reason).toMatch(/dosya PH ülkesinde kesildi/)
+      expect(s.reason).not.toMatch(/yayımlamıyor/)
+    })
+
+    it('c2) pazar listesi var ve ülke pazar ama bu koşuda okunmamış (kısmi) → kısmi indirme', async () => {
+      const r = await buildCountryReport('PL', {
+        deps: deps({
+          pipelineDb: pipelineDb({
+            rows: digerUlke,
+            meta: {
+              ...donem,
+              netflix_source_complete: '0',
+              netflix_source_countries: '["DE"]',
+              netflix_market_countries: '["DE","PL"]',
+              netflix_truncated_country: 'PH',
+            },
+          }),
+        }),
+      })
+      expect(r.sections.netflixHistory.reason).toMatch(/kısmen indirildiği/)
+    })
+  })
+
+  it('boşluk analizi: benzer ülkelerde olan her dizi burada da varsa hesaplandi + "Boşluk yok"', async () => {
+    // FR: 1 (Netflix), 2 (Netflix), 3 (Arte) hepsi yayında; benzer ülke DE'de olup FR'de olmayan dizi yok.
+    const r = await buildCountryReport('FR', {
+      deps: deps({
+        findSimilarCountries: async () => ({
+          candidates: [{ iso2: 'DE', similarity: 0.9, reasons: ['aynı bölge'] }],
+          pool: 'bolge',
+          note: 'test',
+        }),
+      }),
+    })
+    const g = r.sections.gapAnalysis
+    expect(g.status).toBe('hesaplandi')
+    expect(g.data).toMatchObject({ items: [], totalGaps: 0, noGap: true })
+    expect(g.data.message).toBe('Boşluk yok: benzer ülkelerde yayında olan diziler bu ülkede de yayında')
+    expect(g.data.similarCountries[0].iso2).toBe('DE')
+    expect(r.dataGaps.map((x) => x.section)).not.toContain('gapAnalysis')
   })
 
   describe('Netflix: kapsam dönemi ve kaynak dosyanın son haftası', () => {
@@ -399,11 +556,17 @@ describe('buildCountryReport — eksik veri gizlenmez', () => {
 })
 
 describe('buildRanking', () => {
-  it('güvenilmez paydalı ülke kişi başına sıralamaya girmez ama toplamda sıralanır', () => {
-    const r = buildRanking('SM', COUNTRIES)
-    expect(r.data.totalRank).toBe(3)
-    expect(r.data.perCapitaRank).toBeNull()
-    expect(r.data.perCapitaExcludedReason).toMatch(/1 milyon/)
+  it('tek bileşenli ülke sıralanmaz ve nedeni "en az 2" der; Netflix\'siz ama endeksli ülke sıralanır', () => {
+    const sm = buildRanking('SM', COUNTRIES, SIGNALS)
+    expect(sm.status).toBe('hesaplanamaz')
+    expect(sm.reason).toMatch(/en az 2/)
+    const ru = buildRanking('RU', COUNTRIES, SIGNALS)
+    expect(ru.data).toMatchObject({ rank: 3, of: 3, level: 'orta' })
+  })
+
+  it('sinyal servisi yoksa hesaplanamaz, kaynak ülke sıralamaya girmez', () => {
+    expect(buildRanking('DE', COUNTRIES, null).status).toBe('hesaplanamaz')
+    expect(buildRanking('TR', COUNTRIES, SIGNALS).reason).toMatch(/kaynak ülke/)
   })
 })
 

@@ -1,17 +1,16 @@
 """Modül A — netflix_country_ranker.py'nin ürettiği sinyalleri TMDB kimliğiyle eşleyip
 data/pipeline.db'deki netflix_country_rankings tablosuna kalıcı olarak yazan orkestrasyon
 katmanı. İndirme/ayrıştırma mantığının KENDİSİ burada TEKRARLANMIYOR — netflix_country_ranker.py
-zaten bu oturumda (2026-08-20, tekrar 2026-08-25'te doğrulandı) Netflix'in CDN'inin ~30 MB'lık
-dosyayı GÜVENİLİR şekilde tam indiremediğini kanıtlayan, en-uzun-kısmi-indirme + "yarım ülke
-bloğu asla kullanma" stratejisiyle donatılmış — bu modül sadece SONUÇLARI tmdb_id'ye bağlayıp
-saklıyor.
+en-uzun-kısmi-indirme + "yarım ülke bloğu asla kullanma" stratejisiyle donatılmış (yerel ağdan
+~32 MB'lık dosya tam inmediği için; tam dosya GitHub Actions üzerinden gelir) — bu modül sadece
+SONUÇLARI tmdb_id'ye bağlayıp saklıyor.
 
-ÖNEMLİ, DÜRÜST NOT: Bu ortamda 2026-08-25 ve 2026-09-23'te yeniden test edildi — dosya tam
-inmedi; sunucu Range ve gzip'i yok sayıyor, bağlantı rastgele kopuyor (ayrıntı: netflix_country_
-ranker.py docstring'i, madde 2). Bu bir kod hatası değil, kalıcı bir CDN/ağ kararsızlığı.
-Pratik sonucu: dosya alfabetik ülke sıralı olduğu için (doğrulandı), alfabetik olarak ERKEN gelen
-ülkeler (örn. Almanya, Arjantin) kısmi indirmelerde tam bloğa sahip olma ihtimali daha yüksek;
-alfabetik GEÇ gelen ülkeler (örn. Türkiye, İspanya, Polonya) çoğu zaman hiç kapsanamaz.
+DURUM (2026-09-30): Yerel ağdan dosya tam inmiyor (sunucu Range ve gzip'i yok sayıyor, bağlantı
+~60 sn'de kopuyor; ayrıntı: netflix_country_ranker.py docstring'i, madde 2). GitHub Actions
+koşucusundan ise tam iniyor: `.github/workflows/netflix-sync.yml` indirir ve artifact yükler,
+`netflix_import_artifact.py` yerelde data/ dizinine alır ve `--all --offline` koşar. Kısmi dosya
+yalnızca yedek yoldur: alfabetik olarak ERKEN gelen ülkeler (Almanya, Arjantin) kısmi indirmede
+tam bloğa sahip olur, GEÇ gelenler (Türkiye, İspanya, Polonya) ancak tam dosyayla kapsanır.
 `sync_country` bu durumda çökmez, `status: 'unavailable'` ile dürüstçe döner — çağıran taraf
 (batch_run veya countryScoringEngine.js'in okuduğu tablo) bu ülke için Netflix faktörünü basitçe
 DIŞLAR, sıfır sayılmaz (bkz. server/services/countryScoringEngine.js ağırlık yeniden dağıtımı).
@@ -38,6 +37,7 @@ from pathlib import Path
 import db
 import netflix_country_ranker as nf
 from models import NetflixCountryRanking
+from providers.netflix_tudum import weekly_rows_to_entries
 from reytingtv_ranker import SeriesIndexEntry, load_tmdb_series_index, match_series, normalize_title
 from logsetup import get_logger
 
@@ -115,6 +115,39 @@ NETFLIX_RELEASE_TITLES: dict[str, str] = {
     "Kübra": "Kübra",
     "Fatma": "Fatma",
     "50M2": "50M2",
+    # 2026-09-30 denetimi: TR Top 10'a girmiş, katalogda olan ama takma adı eksik Netflix yapımları
+    # (TMDB origin_country=TR ile doğrulandı). "Not a Stranger" tek başına son 12 ayda 142 hafta.
+    "Seni Tanıyorum": "Not a Stranger",
+    "Geleceğe Mektuplar": "Letters From The Past",
+    "Masumiyet Müzesi": "The Museum of Innocence",
+    "Erşan Kuneri": "The Life and Movies of Erşan Kuneri",
+    "Adsız Aşıklar": "Lovers Anonymous",
+    # Katalog genişletmesiyle (TMDB with_networks=213) gelen Netflix yapımları — uluslararası yayın adları.
+    "Asaf": "Asaf",
+    "Gupi": "Gupi",
+    "Ayrılık da Sevdaya Dahil": "To Love, To Lose",
+    "İstanbul Ansiklopedisi": "Istanbul Encyclopedia",
+    "Andropoz": "Man on Pause",
+    "Kuvvetli Bir Alkış": "A Round of Applause",
+    "Börü 2039": "Wolf 2039",
+    "Kördüğüm": "Intersection",
+    "Türk Malı": "Türk Malı",
+    "Terim": "Terim",
+    "Kaçak Gelinler": "Kaçak Gelinler",
+}
+
+
+def _ad_anahtari(ad: str) -> str:
+    """TMDB adları kıvrık kesme işareti (’) taşıyabilir; elle liste düz kesme ile yazılır."""
+    return (ad or "").replace("’", "'").replace("‘", "'").strip()
+
+# Netflix başlığı bir Türk dizisinin takma adıyla birebir aynı olsa da BAŞKA bir yapım olduğu
+# kanıtlanan başlıklar. Kanıt her satırda; bu başlıklar hem takma ad üretiminde hem eşleştirmede atlanır.
+NETFLIX_TITLE_EXCLUSIONS: dict[str, str] = {
+    # Tudum PH sayfası (2021-09-12): videoId 81437458, releaseYear 2015, özet "Two young lovers … the
+    # complicated past between their families" = Pangako Sa 'Yo (ABS-CBN, 2015). Yemin (2019) DEĞİL;
+    # IMDb'nin GB/AU "The Promise" AKA'sı yüzünden 36 hafta PH kaydı yanlış yazılmıştı.
+    "The Promise": "Pangako Sa 'Yo (ABS-CBN, 2015) — Netflix videoId 81437458; Yemin değil",
 }
 
 
@@ -138,13 +171,13 @@ def load_title_aliases(series_index: list[SeriesIndexEntry], db_path: Path = DB_
     normalize hâliyle var olan adlar tekrar eklenmez; IMDb AKA'ları yalnızca TRUSTED_AKA_REGIONS
     içinden geliyorsa kabul edilir (XWW-only çeviri varyantları yanlış eşleşme üretti, bkz. not).
     """
-    by_name = {e.name: e.tmdb_id for e in series_index}
+    by_name = {_ad_anahtari(e.name): e.tmdb_id for e in series_index}
     known_ids = set(by_name.values())
     alias_to_ids: dict[str, set[int]] = defaultdict(set)
 
     for tr_name, release_title in NETFLIX_RELEASE_TITLES.items():
-        tmdb_id = by_name.get(tr_name)
-        if tmdb_id is not None:
+        tmdb_id = by_name.get(_ad_anahtari(tr_name))
+        if tmdb_id is not None and release_title.strip() not in NETFLIX_TITLE_EXCLUSIONS:
             alias_to_ids[release_title.strip()].add(tmdb_id)
 
     if db_path.exists():
@@ -170,6 +203,8 @@ def load_title_aliases(series_index: list[SeriesIndexEntry], db_path: Path = DB_
     aliases: list[SeriesIndexEntry] = []
     ambiguous: list[str] = []
     for title, ids in alias_to_ids.items():
+        if title in NETFLIX_TITLE_EXCLUSIONS:
+            continue  # kanıtlı yanlış-pozitif (bkz. NETFLIX_TITLE_EXCLUSIONS)
         if len(ids) != 1:
             ambiguous.append(title)
             continue
@@ -197,6 +232,8 @@ def resolve_netflix_title(show_title: str, series_index):
     indekste "Osman" adlı kısa bir dizi önce gelirse ona bağlanırdı. Burada EN UZUN eşleşme
     seçiliyor — en spesifik aday doğru adaydır.
     """
+    if show_title.strip() in NETFLIX_TITLE_EXCLUSIONS:
+        return None
     baslik = nf._normalize_for_match(show_title)
     if not baslik:
         return None
@@ -221,16 +258,20 @@ def _to_records(
     signals,
     series_index: list[SeriesIndexEntry],
     now: datetime,
-) -> tuple[list[NetflixCountryRanking], list[str]]:
+) -> tuple[list[NetflixCountryRanking], list[str], list[tuple]]:
     """Netflix sinyallerini TMDB kimliğine bağlayıp DB satırlarına çevirir. Eşlenemeyen
-    başlıklar ayrı döner (uydurma kimlik verilmez). sync_country ve sync_all ortak kullanır."""
+    başlıklar ayrı döner (uydurma kimlik verilmez). Üçüncü öğe haftalık satırlar:
+    (iso2, hafta, tmdb_id, show_title, sıra). sync_country ve sync_all ortak kullanır."""
     records: list[NetflixCountryRanking] = []
     unresolved: list[str] = []
+    weekly: list[tuple] = []
     for signal in signals:
         entry = resolve_netflix_title(signal.show_title, series_index)
         if entry is None:
             unresolved.append(signal.show_title)
             continue
+        for week, rank in signal.weekly or []:
+            weekly.append((country_iso2, week, entry.tmdb_id, signal.show_title, rank))
         records.append(
             NetflixCountryRanking(
                 country_iso2=country_iso2,
@@ -245,7 +286,7 @@ def _to_records(
                 updated_at=now,
             )
         )
-    return records, unresolved
+    return records, unresolved, weekly
 
 
 def sync_country(
@@ -291,7 +332,7 @@ def sync_country(
             }
 
     now = datetime.now(timezone.utc)
-    records, unresolved = _to_records(country_iso2, signals, series_index, now)
+    records, unresolved, weekly_rows = _to_records(country_iso2, signals, series_index, now)
 
     if unresolved:
         log.info(f"{country_iso2}: TMDB'ye eşlenemeyen {len(unresolved)} Netflix başlığı: {unresolved}")
@@ -299,6 +340,8 @@ def sync_country(
     conn = db.get_connection(db_path)
     try:
         db.save_netflix_country_rankings(conn, records)
+        if weekly_rows:
+            db.save_netflix_weekly_ranks(conn, weekly_rows, now.isoformat())
     finally:
         conn.close()
 
@@ -337,28 +380,48 @@ def sync_all(
 
     now = datetime.now(timezone.utc)
     all_records: list[NetflixCountryRanking] = []
+    all_weekly: list[tuple] = []
     unresolved_all: set[str] = set()
     countries_with_matches: list[str] = []
     for iso2 in sorted(complete):
         signals = by_iso2.get(iso2, [])
         if not signals:
             continue
-        records, unresolved = _to_records(iso2, signals, series_index, now)
+        records, unresolved, weekly_rows = _to_records(iso2, signals, series_index, now)
         unresolved_all.update(unresolved)
         if records:
             countries_with_matches.append(iso2)
             all_records.extend(records)
+            all_weekly.extend(weekly_rows)
 
     conn = db.get_connection(db_path)
     try:
         if all_records:
             db.save_netflix_country_rankings(conn, all_records)
+        if all_weekly:
+            db.save_netflix_weekly_ranks(conn, all_weekly, now.isoformat())
+            db.save_chart_entries(conn, weekly_rows_to_entries(all_weekly, now.isoformat()))
+        # Temizlik: bloğu bu koşuda TAM okunan ülkelerde, bu koşuda yenilenmeyen satırlar silinir
+        # (katalogdan düşen ya da artık eşleşmeyen diziler). Kesilen ülke ve dosyada olmayanlar korunur.
+        records_deleted = db.delete_stale_netflix_rows(conn, sorted(complete), now.isoformat())
+        if records_deleted:
+            log.info(f"{records_deleted} eski satır silindi (bu koşuda eşleşmeyen kayıtlar).")
         # Kaynak dosyanın kapsamı — eşleşme olsun olmasın yazılır (rapor "dosya nereye kadar
         # geliyor" sorusuna cevap verebilsin).
         db.set_pipeline_meta(conn, "netflix_source_first_week", source_stats.get("first_week"))
         db.set_pipeline_meta(conn, "netflix_source_last_week", source_stats.get("last_week"))
         db.set_pipeline_meta(conn, "netflix_source_complete", "1" if file_complete else "0")
         db.set_pipeline_meta(conn, "netflix_truncated_country", truncated)
+        # Bu koşuda bloğu TAM okunan ülkeler (eşleşme olsun olmasın). Rapor "0 kayıt" ile "kapsam dışı"
+        # ayrımını buradan yapar. Netflix'in Top 10 yayımladığı pazar listesi yalnızca TAM dosyadan
+        # türetilir ve kısmi koşularda üzerine yazılmaz (elle liste yok).
+        db.set_pipeline_meta(conn, "netflix_source_countries", json.dumps(sorted(complete)))
+        if file_complete:
+            db.set_pipeline_meta(conn, "netflix_market_countries", json.dumps(sorted(complete)))
+            # Son 52 haftada satırı olan pazarlar: Netflix'in çekildiği ülkeler (RU 2022) burada yok → o pencere
+            # için "pazar değil" sayılır; izlenme sinyalinde Netflix bileşeni 0 değil YOK olur.
+            aktif = nf.active_countries(source_stats.get("country_last_week", {}), source_stats.get("last_week"))
+            db.set_pipeline_meta(conn, "netflix_active_countries_52w", json.dumps(aktif))
         db.set_pipeline_meta(conn, "netflix_synced_at", now.isoformat())
     finally:
         conn.close()
@@ -379,6 +442,9 @@ def sync_all(
         "countries_with_matches": countries_with_matches,
         "truncated_country": truncated,
         "records_written": len(all_records),
+        "weekly_rows_written": len(all_weekly),
+        "chart_entries_written": len(all_weekly),
+        "records_deleted": records_deleted,
         "unresolved_titles": sorted(unresolved_all),
         "source_first_week": source_stats.get("first_week"),
         "source_last_week": source_stats.get("last_week"),

@@ -18,7 +18,7 @@ const ALAN_ADLARI = {
   correlation: 'Korelasyon (Pearson r)',
   didEstimate: 'Fark-içinde-fark (DiD)',
   leadingSignal: 'Öncü seyahat sinyali',
-  visibilityScore: 'Görünürlük skoru',
+  visibilityScore: 'Yayın varlığı (katalog ağırlığı)',
   globalRank: 'Küresel sıra',
   officialPlatformRecords: 'Resmî platform kaydı',
   licensingRevenue: 'Lisans geliri',
@@ -40,7 +40,7 @@ function DegerHucresi({ deger }) {
   if (deger.status === 'hesaplanamaz') {
     return (
       <span className="convergence__pending" title={deger.reason}>
-        <span className="badge badge--uncertain">Gerçek Veri Bekleniyor</span>
+        <span className="badge badge--uncertain">Hesaplanamadı</span>
         <span className="convergence__reason">{deger.reason}</span>
       </span>
     )

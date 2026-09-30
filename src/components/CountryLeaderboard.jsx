@@ -1,5 +1,6 @@
 import { fetchCountryLeaderboard } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
+import { EMPTY } from '../lib/emptyStates.js'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 
@@ -36,9 +37,7 @@ export default function CountryLeaderboard({ iso2 }) {
   if (state.status === 'error' || state.status === 'empty') {
     return (
       <p className="dashboard__empty">
-        {state.status === 'error'
-          ? `Sıralama yüklenemedi (${state.error}).`
-          : state.error || 'Bu ülke için henüz yeterli veri yok.'}
+        {state.status === 'error' ? `Sıralama yüklenemedi (${state.error}).` : state.error || EMPTY.leaderboardEmpty}
       </p>
     )
   }

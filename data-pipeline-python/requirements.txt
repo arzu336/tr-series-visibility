@@ -1,8 +1,12 @@
 # pyproject.toml ile aynı sürümler — `pip install -r requirements.txt` ya da `pip install -e .[dev]`
 beautifulsoup4==4.12.3
-lxml==5.2.2
+lxml>=6.1.1          # flixpatrol için scrapling>=0.4 lxml>=6.1.1 istiyor (bs4/pandas uyumlu; eski pin: 5.2.2)
 pandas==2.2.2
 pydantic==2.13.1
 python-dotenv==1.2.2
 requests==2.32.3
 pytest==9.1.1
+
+# FlixPatrol sağlayıcısı (Cloudflare korumalı site; site sahibinin crawl izniyle).
+# Tarayıcı bağımlılıkları ayrıca: `scrapling install`
+scrapling[fetchers]>=0.4.15

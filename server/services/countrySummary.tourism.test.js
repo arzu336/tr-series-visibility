@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { buildTourismDimension } from './countrySummary.js'
+import { buildTourismDimension, leadingSignalFor, basinTonu } from './countrySummary.js'
 
 // Regresyon: buildTourismDimension, tourismData.js'in camelCase sözleşmesini (visitorCount,
 // düz sayı before/after) snake_case/nesne sanıyordu → undefined - undefined = NaN, ve bu NaN
@@ -83,11 +83,45 @@ describe('buildTourismDimension — gerçek sözleşmeyle', () => {
     hicNaNYok(r)
   })
 
-  it('korelasyon dürüstçe hesaplanamaz kalır (görünürlük serisi henüz eşleşmiyor)', async () => {
-    const r = await buildTourismDimension('DE', { score: 500 }, deps)
+  it('korelasyon: ortak ay yokken "Aylık seri birikiyor: 0/3 ay" ile hesaplanamaz kalır', async () => {
+    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, getMonthlyPeriods: () => [] })
     expect(r.didEstimate.status).toBe('hesaplandi')
     expect(r.correlation.status).toBe('hesaplanamaz')
-    expect(r.correlation.reason).toMatch(/turist: 3 ay/)
+    expect(r.correlation.reason).toMatch(/^Aylık seri birikiyor: 0\/3 ay/)
+    expect(r.correlation).toMatchObject({ monthsAvailable: 0, monthsRequired: 3 })
+  })
+
+  it('korelasyon: ortak ay sayısı gerçek veriden sayılır (2/3), cari ay sayılmaz', async () => {
+    const aylik = () => [
+      { period: '2024-07', avgScore: 100, sampleCount: 5, isCurrent: false },
+      { period: '2025-07', avgScore: 120, sampleCount: 5, isCurrent: false },
+      { period: '2025-08', avgScore: 130, sampleCount: 2, isCurrent: true },
+      { period: '2023-01', avgScore: 90, sampleCount: 5, isCurrent: false },
+    ]
+    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, getMonthlyPeriods: aylik })
+    expect(r.correlation.status).toBe('hesaplanamaz')
+    expect(r.correlation.reason).toMatch(/^Aylık seri birikiyor: 2\/3 ay/)
+    expect(r.correlation.monthsAvailable).toBe(2)
+  })
+
+  it('korelasyon: 3+ ortak ayda Pearson hesaplanır', async () => {
+    const aylik = () => [
+      { period: '2023-07', avgScore: 90, sampleCount: 5, isCurrent: false },
+      { period: '2024-07', avgScore: 100, sampleCount: 5, isCurrent: false },
+      { period: '2025-07', avgScore: 120, sampleCount: 5, isCurrent: false },
+      { period: '2025-08', avgScore: 130, sampleCount: 5, isCurrent: false }, // turist serisinde yok → sayılmaz
+    ]
+    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, getMonthlyPeriods: aylik })
+    expect(r.correlation.status).toBe('hesaplandi')
+    expect(r.correlation).toMatchObject({ sampleSize: 3, unit: 'pearson-r', months: ['2023-07', '2024-07', '2025-07'] })
+    expect(r.correlation.value).toBeGreaterThan(0.9) // 900/1000/1200 ile 90/100/120 neredeyse doğrusal
+    expect(Math.abs(r.correlation.value)).toBeLessThanOrEqual(1)
+    hicNaNYok(r)
+  })
+
+  it('korelasyon: yayın varlığı ölçümü yoksa nedeni bunu söyler', async () => {
+    const r = await buildTourismDimension('DE', { score: null }, { ...deps, getMonthlyPeriods: () => [] })
+    expect(r.correlation.reason).toBe('bu ülke için yayın varlığı ölçümü yok')
   })
 
   it('seri yoksa üç boyut da hesaplanamaz', async () => {
@@ -166,5 +200,64 @@ describe('buildTourismDimension — sözleşme bozulursa NaN sızmaz (asıl regr
     expect(r.arrivals.status).toBe('hesaplanamaz')
     expect(r.didEstimate.status).toBe('hesaplanamaz')
     hicNaNYok(r)
+  })
+})
+
+describe('leadingSignalFor — kapsam metni', () => {
+  it('tarama henüz sonuç üretmemişse bunu söyler', () => {
+    const r = leadingSignalFor('DE', { status: 'gerçek-veri-bekleniyor', scope: 15, signals: [] })
+    expect(r.status).toBe('hesaplanamaz')
+    expect(r.reason).toMatch(/henüz sonuç üretmedi/)
+  })
+
+  it('kapsam dışı ülkede "Kapsam: görünürlükte ilk N ülke" yazar, N özetten gelir', () => {
+    const r = leadingSignalFor('DE', {
+      status: 'gerçek-veri-mevcut',
+      scope: 15,
+      signals: [{ iso2: 'FR', correlation: 0.2 }],
+    })
+    expect(r.reason).toBe('Kapsam: görünürlükte ilk 15 ülke; bu ülke tarama kapsamında değil')
+  })
+
+  it('kapsamdaki ülkede en güçlü korelasyon döner', () => {
+    const r = leadingSignalFor('FR', {
+      status: 'gerçek-veri-mevcut',
+      scope: 15,
+      signals: [
+        { iso2: 'FR', correlation: 0.2, travelQuery: 'Antalya', lagWeeks: 16, sampleSize: 30, direction: 'pozitif' },
+        { iso2: 'FR', correlation: -0.5, travelQuery: 'Istanbul', lagWeeks: 16, sampleSize: 30, direction: 'negatif' },
+      ],
+    })
+    expect(r).toMatchObject({ status: 'hesaplandi', value: -0.5, travelQuery: 'Istanbul' })
+  })
+})
+
+describe('basinTonu — hiç taranmamış ile taranmış-ama-haber-yok ayrımı', () => {
+  it('hiç tarama yoksa: henüz yapılmadı + haftalık tarama kapsamı', () => {
+    const r = basinTonu('DE', [])
+    expect(r.status).toBe('hesaplanamaz')
+    expect(r.reason).toMatch(
+      /^DE için basın taraması henüz yapılmadı \(haftalık tarama görünürlükte ilk \d+ ülke × \d+ diziyle sınırlı/
+    )
+    expect(r).toMatchObject({ scanned: false, scanCount: 0 })
+  })
+
+  it('taranmış ama hepsi yetersiz-veri ise: N dizi tarandı, yeterli haber yok', () => {
+    const taramalar = [
+      { dominant_sentiment: 'yetersiz-veri', positive_score: null },
+      { dominant_sentiment: 'yetersiz-veri', positive_score: null },
+    ]
+    const r = basinTonu('CA', taramalar)
+    expect(r.reason).toBe("CA için 2 dizi tarandı, GDELT'te yeterli haber bulunamadı")
+    expect(r).toMatchObject({ scanned: true, scanCount: 2 })
+  })
+
+  it('analizli tarama varsa ortalama olumlu yüzde hesaplanır', () => {
+    const r = basinTonu('BR', [
+      { dominant_sentiment: 'positive', positive_score: 0.6 },
+      { dominant_sentiment: 'negative', positive_score: 0.2 },
+      { dominant_sentiment: 'yetersiz-veri', positive_score: null },
+    ])
+    expect(r).toMatchObject({ status: 'hesaplandi', value: 40, sampleSize: 2 })
   })
 })

@@ -7,6 +7,7 @@ import {
   fetchSeriesMeta,
 } from '../lib/api.js'
 import MultiSeriesTrendChart from './MultiSeriesTrendChart.jsx'
+import { EMPTY } from '../lib/emptyStates.js'
 
 const MAX_COMPARE = 3
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w185'
@@ -73,7 +74,7 @@ function Head2HeadCard({ card, isRatingLeader, isShareLeader, isCountryLeader })
 
 function RegionalDominanceTable({ topRows, cards }) {
   if (topRows.length === 0) {
-    return <p className="dashboard__empty">Seçilen diziler için ülke bazlı karşılaştırma verisi bulunamadı.</p>
+    return <p className="dashboard__empty">{EMPTY.comparisonNoData}</p>
   }
   return (
     <div className="regional-dominance">

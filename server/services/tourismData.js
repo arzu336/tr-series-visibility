@@ -144,6 +144,13 @@ export async function syncTourismDataIfNeeded() {
   return result
 }
 
+const selectVisitorMonthsStmt = db.prepare('SELECT DISTINCT year, month FROM tourist_arrivals')
+
+/** Turist serisinin kapsadığı aylar (tüm ülkeler) — 'YYYY-MM' kümesi. */
+export function getVisitorMonthKeys() {
+  return new Set(selectVisitorMonthsStmt.all().map((r) => `${r.year}-${String(r.month).padStart(2, '0')}`))
+}
+
 export function getVisitorSeries(iso2) {
   return selectSeriesStmt.all(iso2).map((r) => ({ year: r.year, month: r.month, visitorCount: r.visitor_count }))
 }

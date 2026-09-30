@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { formatTrendsDate } from '../lib/formatDate.js'
+import { EMPTY } from '../lib/emptyStates.js'
 
 const WIDTH = 640
 const HEIGHT = 200
@@ -16,7 +17,7 @@ export default function SeriesTrendChart({ timeline, scopeLabel = null }) {
   const kapsam = scopeLabel || 'küresel'
 
   if (!timeline || timeline.length < 2) {
-    return <p className="dashboard__empty">Bu dizi için {kapsam} zaman serisi verisi bulunamadı.</p>
+    return <p className="dashboard__empty">{EMPTY.seriesTimeSeriesMissing(kapsam)}</p>
   }
 
   const innerWidth = WIDTH - PAD_X * 2

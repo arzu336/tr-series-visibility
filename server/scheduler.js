@@ -10,6 +10,8 @@ import { runTourismTrendsCollectionIfNeeded } from './services/tourismTrendsColl
 import { runSocialEnrichmentIfNeeded } from './services/socialEnricher.js'
 import { runActorTrendsCollectionIfNeeded } from './services/actorTrendsCollector.js'
 import { runNetflixSyncIfNeeded } from './services/netflixPipelineRunner.js'
+import { runReytingtvSyncIfNeeded } from './services/reytingtvRunner.js'
+import { runFlixpatrolSyncIfNeeded } from './services/flixpatrolRunner.js'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -103,7 +105,20 @@ async function runZenginlestirmeZinciri() {
   try {
     await runNetflixSyncIfNeeded()
   } catch (err) {
+    try {
+      await runReytingtvSyncIfNeeded()
+    } catch (err) {
+      console.error('[scheduler] Türkiye TV listesi çekimi başarısız:', err.message)
+    }
     console.error('[scheduler] Netflix senkronizasyonu başarısız:', err.message)
+  }
+
+  // FlixPatrol bağımsız çalışır (Netflix/reyting sonucundan etkilenmez); haftalık kapı
+  // runFlixpatrolSyncIfNeeded içinde. Cloudflare/tarayıcı gerektirdiğinden yalnızca yerelde.
+  try {
+    await runFlixpatrolSyncIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] FlixPatrol senkronizasyonu başarısız:', err.message)
   }
 }
 

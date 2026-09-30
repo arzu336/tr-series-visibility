@@ -4834,3 +4834,334 @@ button.sidebar__big-card:hover {
     margin-top: 2mm;
   }
 }
+
+/* --- İzlenme dönüşümü (Faz 1): liste bileşeni, genel görünüm şeridi, lejant seviyeleri, ülke gerçekleri --- */
+.chart-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.chart-list__item + .chart-list__item {
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.chart-list__row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.45rem 0.2rem;
+  width: 100%;
+  text-align: left;
+  color: inherit;
+  background: none;
+  border: 0;
+  font: inherit;
+}
+
+.chart-list__row--btn {
+  cursor: pointer;
+  border-radius: 8px;
+}
+
+.chart-list__row--btn:hover,
+.chart-list__row--btn:focus-visible {
+  background: rgba(255, 255, 255, 0.05);
+  outline: none;
+}
+
+.chart-list--compact .chart-list__row {
+  padding: 0.3rem 0.2rem;
+}
+
+.chart-list__rank {
+  min-width: 1.6rem;
+  font-weight: 700;
+  color: #8792a8;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-list__body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  flex: 1;
+}
+
+.chart-list__name {
+  color: #f1f3f8;
+  font-size: 0.9rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.chart-list__kind {
+  margin-left: 0.4rem;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #f2a65a;
+  border: 1px solid rgba(242, 166, 90, 0.5);
+  border-radius: 999px;
+  padding: 0 0.4rem;
+  vertical-align: middle;
+}
+
+.chart-list__meta {
+  color: #8792a8;
+  font-size: 0.74rem;
+}
+
+.chart-list__trend {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #8792a8;
+  min-width: 2.2rem;
+  text-align: right;
+}
+
+.chart-list__trend--up {
+  color: #4ec27a;
+}
+
+.chart-list__trend--down {
+  color: #ff6b6b;
+}
+
+.chart-list__trend--new {
+  color: #3987e5;
+}
+
+.chart-source {
+  margin: 0.5rem 0 0;
+  color: #6b7488;
+  font-size: 0.7rem;
+}
+
+/* Genel görünüm şeridi — harita bölmesinin üstünde, katlanabilir; düzeni değiştirmez */
+.charts-strip {
+  position: absolute;
+  top: 0.75rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 6;
+  width: min(880px, calc(100% - 2rem));
+  background: rgba(10, 14, 24, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 14px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(6px);
+}
+
+.charts-strip__bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.45rem 0.9rem;
+  flex-wrap: wrap;
+}
+
+.charts-strip__toggle {
+  background: none;
+  border: 0;
+  color: #f1f3f8;
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 0.2rem 0;
+}
+
+.charts-strip__teaser {
+  font-weight: 400;
+  color: #b8c0d1;
+  font-size: 0.85rem;
+}
+
+.charts-strip__control {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: #8792a8;
+  font-size: 0.78rem;
+  margin-left: auto;
+}
+
+.charts-strip__control select {
+  background: #05070d;
+  color: #f1f3f8;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 6px;
+  padding: 0.2rem 0.4rem;
+  font-size: 0.78rem;
+}
+
+.charts-strip__btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  color: #b8c0d1;
+  border-radius: 999px;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.charts-strip__btn--active {
+  border-color: #ee3135;
+  color: #f1f3f8;
+}
+
+.charts-strip__panels {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem 1.25rem;
+  padding: 0 0.9rem 0.8rem;
+  max-height: 260px;
+  overflow-y: auto;
+}
+
+.charts-strip__panel {
+  min-width: 0;
+}
+
+.charts-strip__title {
+  margin: 0.2rem 0 0.35rem;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #8792a8;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.5rem;
+  align-items: baseline;
+}
+
+.charts-strip__filter {
+  text-transform: none;
+  letter-spacing: 0;
+  font-size: 0.72rem;
+  color: #b8c0d1;
+  display: inline-flex;
+  gap: 0.3rem;
+  align-items: center;
+}
+
+@media (max-width: 900px) {
+  .charts-strip__panels {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Lejant: izlenme seviyeleri */
+.legend__levels {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.3rem;
+}
+
+.legend__level {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.72rem;
+  color: #b8c0d1;
+}
+
+/* Ülke paneli: izlenme gerçekleri kartı */
+.panel__watch-card {
+  background: #0e1420;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+  padding: 0.85rem 1rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.panel__watch-level {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: #b8c0d1;
+  margin-bottom: 0.5rem;
+}
+
+.panel__watch-primary {
+  margin: 0 0 0.4rem;
+  font-size: 0.98rem;
+  color: #f1f3f8;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.panel__watch-fact {
+  margin: 0.25rem 0;
+  font-size: 0.82rem;
+  color: #d5dae6;
+  line-height: 1.45;
+}
+
+.panel__watch-source {
+  color: #6b7488;
+  font-size: 0.7rem;
+  margin-left: 0.35rem;
+}
+
+.panel__watch-warning {
+  margin: 0.6rem 0 0;
+  padding-left: 0.6rem;
+  border-left: 3px solid #f2a65a;
+  color: #f2a65a;
+  font-size: 0.78rem;
+  line-height: 1.4;
+}
+
+.panel__now {
+  margin: 0.4rem 0 0.8rem;
+}
+
+.panel__year-ago {
+  margin: 0.4rem 0 0;
+  color: #8792a8;
+  font-size: 0.78rem;
+}
+
+.sidebar__levels {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.sidebar__level-row {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.78rem;
+  color: #d5dae6;
+}
+
+.sidebar__level-count {
+  margin-left: auto;
+  color: #8792a8;
+}
+
+.sidebar__big-card-value--link {
+  background: none;
+  border: 0;
+  padding: 0;
+  color: inherit;
+  font: inherit;
+  cursor: pointer;
+  text-align: left;
+}
+
+.sidebar__big-card-value--link:hover {
+  text-decoration: underline;
+}
+
+.app__brand-sub {
+  margin: 0;
+  color: #8792a8;
+  font-size: 0.78rem;
+}

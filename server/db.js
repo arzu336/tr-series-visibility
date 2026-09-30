@@ -106,6 +106,18 @@ db.exec(`
     value TEXT
   );
 
+  -- Yerel başlıkla (IMDb/Wikipedia yerel adı) yapılan Google Trends ülke kırılımı sorguları.
+  -- trends_cache Türkçe adla sorgular ve Latin Amerika/Orta Doğu'da ~0 döner; izlenme sinyalinin
+  -- arama bileşeni iki tabloyu birlikte okur. by_country: [{country, value}] JSON.
+  CREATE TABLE IF NOT EXISTS search_signal_cache (
+    query TEXT PRIMARY KEY,
+    lang TEXT,
+    tmdb_id INTEGER,
+    series_name TEXT,
+    queried_at TEXT,
+    by_country TEXT
+  );
+
   CREATE TABLE IF NOT EXISTS social_listening_cache (
     key TEXT PRIMARY KEY,
     series_name TEXT,

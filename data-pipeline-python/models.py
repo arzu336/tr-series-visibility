@@ -82,6 +82,8 @@ class NetflixCountrySignal(BaseModel):
     latest_week: Optional[str] = None
     latest_rank: Optional[int] = None
     first_week: Optional[str] = None
+    # (hafta, sıra) çiftleri — izlenme sinyalinin 52 haftalık penceresi Node tarafında bunlardan kesilir.
+    weekly: list[tuple[str, int]] = []
 
 
 class NetflixCountryRanking(BaseModel):

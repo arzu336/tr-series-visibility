@@ -157,13 +157,15 @@ export default function ExportImpactTab({ onSelectCountry }) {
 
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Yükselen Pazarlar</h3>
-        <p className="dashboard__hint">Görünürlüğü en hızlı artan pazarlar, son 7 gün.</p>
+        <p className="dashboard__hint">Yayın varlığı en hızlı artan pazarlar, son 7 gün.</p>
         <RisingMarketsTable risingCountries={data.risingCountries} />
       </section>
 
       <section className="dashboard__section">
-        <h3 className="dashboard__section-title">Zaman İçinde Görünürlük</h3>
-        <p className="dashboard__hint">Toplam görünürlük skorunun ay/yıl bazında değişimi.</p>
+        <h3 className="dashboard__section-title">Zaman İçinde Yayın Varlığı</h3>
+        <p className="dashboard__hint">
+          Yayındaki kataloğun ağırlığının ay/yıl bazında değişimi (izlenme değil, erişim).
+        </p>
         <div style={{ opacity: periodLoading ? 0.5 : 1, transition: 'opacity 200ms ease' }}>
           <PeriodChart
             periods={periodData?.periods || []}

@@ -78,13 +78,52 @@ def write_to_node_db(monthly: dict[tuple[int, int, int], tuple[float, int]]) -> 
         conn.close()
 
 
-def run(limit: int | None) -> None:
-    conn = db.get_connection(DB_PATH)
+RESULT_MARKER = "RESULT_JSON "
+
+
+def entries_to_daily_ranks(entries) -> list:
+    """chart_entries satırlarından eski reytingtv_daily_ranks satırları (yalnızca eşleşen diziler) —
+    Node'un aylık popülerlik yedeği (series_popularity_monthly) hâlâ bu tabloyu okur."""
+    from models import ReytingTvDailyRank
+
+    out = []
+    for e in entries:
+        # Eşleşse bile dizi değilse (MasterChef gibi katalogdaki yarışmalar) popülerlik yedeğine girmez.
+        if e.series_id is None or e.program_kind != "series":
+            continue
+        out.append(
+            ReytingTvDailyRank(
+                tmdb_id=e.series_id,
+                matched_title=e.title_raw,
+                program_raw=e.title_raw,
+                category=e.segment,
+                rank=e.rank,
+                rank_score=rtv.compute_rank_score(e.rank),
+                air_date=datetime.date.fromisoformat(e.period_date),
+                source_url=e.source_url,
+            )
+        )
+    return out
+
+
+def run(limit: int | None, days: int | None = None, db_path: Path = DB_PATH, node_db_path: Path = NODE_DB_PATH) -> dict:
+    from providers.reytingtv import ReytingTvProvider
+
+    now = datetime.datetime.now(datetime.timezone.utc)
+    since = (now.date() - datetime.timedelta(days=days)) if days else None
+    conn = db.get_connection(db_path)
     try:
-        log.info("reytingtv.com arşivi taranıyor...")
-        results = rtv.scrape_daily_ranks(NODE_DB_PATH, limit=limit, progress_every=50)
-        log.info(f"{len(results)} eşleşen satır bulundu, pipeline.db'ye yazılıyor...")
-        db.save_reytingtv_daily_ranks(conn, results, datetime.datetime.now(datetime.timezone.utc).isoformat())
+        log.info(f"reytingtv.com arşivi taranıyor... (son {days} gün)" if days else "reytingtv.com arşivi taranıyor...")
+        provider = ReytingTvProvider(node_db_path)
+        entries = provider.fetch(limit=limit, since=since, fetched_at=now.isoformat(), progress_every=50)
+        written = db.save_chart_entries(conn, entries)
+        results = entries_to_daily_ranks(entries)
+        log.info(f"{written} liste satırı (tam Top 10) ve {len(results)} eşleşen dizi satırı yazılıyor...")
+        db.save_reytingtv_daily_ranks(conn, results, now.isoformat())
+        gunler = sorted({e.period_date for e in entries})
+        db.set_pipeline_meta(conn, "reytingtv_synced_at", now.isoformat())
+        if gunler:
+            db.set_pipeline_meta(conn, "reytingtv_last_air_date", gunler[-1])
 
         monthly = rollup_monthly(conn)
         log.info(f"{len(monthly)} (dizi, ay) satırı hesaplandı, Node app.db'ye yazılıyor...")
@@ -94,12 +133,29 @@ def run(limit: int | None) -> None:
         distinct_series = len({k[0] for k in monthly})
         distinct_months = len({(k[1], k[2]) for k in monthly})
         log.info(f"özet: {distinct_series} farklı dizi, {distinct_months} farklı (yıl,ay) kombinasyonu.")
+        kinds = {}
+        for e in entries:
+            kinds[e.program_kind] = kinds.get(e.program_kind, 0) + 1
+        return {
+            "status": "ok",
+            "chart_entries_written": written,
+            "days": len(gunler),
+            "first_air_date": gunler[0] if gunler else None,
+            "last_air_date": gunler[-1] if gunler else None,
+            "program_kinds": kinds,
+            "matched_series_rows": len(results),
+        }
     finally:
         conn.close()
 
 
 if __name__ == "__main__":
+    import json
+
     parser = argparse.ArgumentParser()
-    parser.add_argument("--limit", type=int, default=None)
+    parser.add_argument("--limit", type=int, default=None, help="En fazla N makale (test/deneme)")
+    parser.add_argument("--days", type=int, default=None, help="Yalnızca son N günün makaleleri (zamanlayıcı için)")
     args = parser.parse_args()
-    run(args.limit)
+    sonuc = run(args.limit, days=args.days)
+    log.info(f"sonuç: {sonuc}")
+    print(RESULT_MARKER + json.dumps(sonuc, ensure_ascii=False, default=str), flush=True)

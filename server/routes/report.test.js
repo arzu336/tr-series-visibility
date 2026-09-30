@@ -32,7 +32,7 @@ const sahteRapor = (iso2) => {
     status: 'hesaplandi',
     data: {
       items: [
-        { text: 'Toplam görünürlükte 137 ülke arasında 7. sırada.', basis: 'ranking' },
+        { text: 'İzlenme düzeyi "yüksek": izlenme sinyali hesaplanan 111 ülke arasında 7. sırada.', basis: 'ranking' },
         { text: 'Bu pazarda tanıtım faaliyetleri artırılmalı.', basis: 'sizinti' },
       ],
     },
@@ -161,7 +161,7 @@ describe('GET /api/report/country/:iso2 — doğrulama ve kapı', () => {
   it('direktif içeren bulgu yanıttan elenir (iddia kapısı, istisna yok)', async () => {
     const res = await viewer.get('/api/report/country/DE?profile=executive')
     const metinler = res.body.sections.findings.data.items.map((i) => i.text)
-    expect(metinler).toEqual(['Toplam görünürlükte 137 ülke arasında 7. sırada.'])
+    expect(metinler).toEqual(['İzlenme düzeyi "yüksek": izlenme sinyali hesaplanan 111 ülke arasında 7. sırada.'])
   })
 })
 

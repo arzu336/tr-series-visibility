@@ -22,6 +22,7 @@ function ulkeAdi(deger) {
 import SeriesTrendChart from './SeriesTrendChart.jsx'
 import CastBar from './CastBar.jsx'
 import ComparisonView from './ComparisonView.jsx'
+import { EMPTY } from '../lib/emptyStates.js'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w185'
 
@@ -115,7 +116,7 @@ function GlobalFootprintCard({ result, seriesId, onShowOnMap }) {
     return (
       <div className="subcard">
         <h4 className="subcard__title">Küresel Ayak İzi — İlk 8 Ülke</h4>
-        <p className="dashboard__empty">Bu dizi için ülke bazlı arama ilgisi verisi bulunamadı.</p>
+        <p className="dashboard__empty">{EMPTY.seriesNoCountryInterest}</p>
       </div>
     )
   }
@@ -177,10 +178,10 @@ function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, sca
       {status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
 
       {status === 'ready' && summary?.status === 'pending' && (
-        <p className="dashboard__empty">Bu dizi için henüz hiçbir ülkede basın taraması yapılmadı.</p>
+        <p className="dashboard__empty">{EMPTY.pressSeriesNotScanned}</p>
       )}
       {status === 'ready' && summary?.status === 'no-data' && (
-        <p className="dashboard__empty">{summary.scannedCount} ülke tarandı ama hiçbirinde haber bulunamadı.</p>
+        <p className="dashboard__empty">{EMPTY.pressSeriesScannedNoNews(summary.scannedCount)}</p>
       )}
       {status === 'ready' && summary?.status === 'ready' && (
         <>
@@ -245,7 +246,7 @@ function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, sca
 
 function SocialPulseBlock({ social }) {
   if (!social?.youtube) {
-    return <p className="dashboard__empty">Bu dizi için video verisi bulunamadı.</p>
+    return <p className="dashboard__empty">{EMPTY.socialNoVideo}</p>
   }
   const videoUrl = safeExternalUrl(social.youtube.link)
   return (
@@ -562,7 +563,7 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
               <p className="dashboard__empty">
                 {timeSeriesError
                   ? timeSeriesError
-                  : `Bu dizi için ${tsGeo ? `${ulkeAdi(tsGeo)} bazlı` : 'küresel'} zaman serisi verisi bulunamadı.`}
+                  : EMPTY.seriesTimeSeriesMissing(tsGeo ? `${ulkeAdi(tsGeo)} bazlı` : 'küresel')}
               </p>
             )}
             {timeSeriesStatus === 'ready' && (

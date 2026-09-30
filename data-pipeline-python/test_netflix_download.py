@@ -147,6 +147,25 @@ class TestLooksComplete:
         p.write_bytes(b"")
         assert nf._looks_complete(p, 0) is False
 
+    # Gerçek dosya (2026-09-30, 32.444.801 bayt) son satırdan sonra \n koymuyor.
+    def test_satir_sonu_olmayan_ama_boyutu_content_length_e_esit_dosya_tamdir(self, tmp_path):
+        p = tmp_path / "a.tsv"
+        govde = ORNEK_BYTES.rstrip(b"\n")
+        p.write_bytes(govde)
+        assert not govde.endswith(b"\n")
+        assert nf._looks_complete(p, len(govde)) is True
+
+    def test_boyut_esit_ama_son_satir_8_alandan_az_ise_eksik(self, tmp_path):
+        p = tmp_path / "a.tsv"
+        govde = ORNEK_BYTES.rstrip(b"\n").rsplit(b"\t", 1)[0]  # son alan düştü → 7 alan
+        p.write_bytes(govde)
+        assert nf._looks_complete(p, len(govde)) is False
+
+    def test_content_length_bilinmiyor_ve_satir_sonu_yoksa_eksik(self, tmp_path):
+        p = tmp_path / "a.tsv"
+        p.write_bytes(ORNEK_BYTES.rstrip(b"\n"))
+        assert nf._looks_complete(p, -1) is False
+
 
 class TestDownloadRangeYokSayan:
     """Bugünkü gerçek Netflix CDN davranışı: Range → 200 + tam gövde."""
@@ -302,6 +321,20 @@ class TestDownloadOnbellek:
         assert sunucu.istekler == []  # süre dolmuş, hiç deneme yapılmadı
 
 
+class TestScanSonSatirSatirSonsuz:
+    """Sonda \\n olmayan tam dosyada son ülke (burada DK, gerçekte VN) bloğu tam sayılır."""
+
+    def test_son_ulke_tam_sayilir_ve_satir_okunur(self, tmp_path):
+        p = tmp_path / "a.tsv"
+        p.write_bytes(ORNEK_BYTES.rstrip(b"\n"))
+        stats = {}
+        by_iso2, complete, truncated = nf.scan_all_countries(p, True, TITLES, stats=stats)
+        assert truncated is None
+        assert "DK" in complete and complete == {"AR", "BR", "CL", "DK"}
+        assert by_iso2["DK"][0].show_title == "Kurulus Osman"
+        assert stats["rows"] == 7 and stats["last_week"] == "2026-09-13"
+
+
 class TestScanAllCountries:
     def test_tam_dosyada_tum_ulkeler(self, tmp_path):
         p = tmp_path / "a.tsv"
@@ -326,7 +359,12 @@ class TestScanAllCountries:
         p.write_bytes(ORNEK_BYTES)
         stats = {}
         nf.scan_all_countries(p, True, TITLES, stats=stats)
-        assert stats == {"first_week": "2026-09-06", "last_week": "2026-09-13", "rows": 7}
+        assert {k: stats[k] for k in ("first_week", "last_week", "rows")} == {
+            "first_week": "2026-09-06",
+            "last_week": "2026-09-13",
+            "rows": 7,
+        }
+        assert stats["country_last_week"] == {"AR": "2026-09-13", "BR": "2026-09-13", "CL": "2026-09-13", "DK": "2026-09-13"}
 
     def test_kismi_dosyada_son_ulke_yarim_sayilir(self, tmp_path):
         p = tmp_path / "a.tsv"
@@ -383,6 +421,20 @@ class TestSyncAll:
         assert sonuc["countries_with_matches"] == ["AR", "BR", "DK"]
         assert sonuc["records_written"] == 3
         assert sonuc["unresolved_titles"] == []
+        # Haftalık satırlar: AR Kurulus Osman ×2 hafta, BR Sefirin Kizi ×1, DK Kurulus Osman ×1
+        assert sonuc["weekly_rows_written"] == 4
+        assert sonuc["records_deleted"] == 0
+        conn_w = sqlite3.connect(db_path)
+        haftalik = conn_w.execute(
+            "SELECT country_iso2, week, show_title, rank FROM netflix_weekly_ranks ORDER BY 1, 2"
+        ).fetchall()
+        conn_w.close()
+        assert haftalik == [
+            ("AR", "2026-09-06", "Kurulus Osman", 3),
+            ("AR", "2026-09-13", "Kurulus Osman", 1),
+            ("BR", "2026-09-13", "Sefirin Kizi", 2),
+            ("DK", "2026-09-13", "Kurulus Osman", 4),
+        ]
         assert sonuc["source_first_week"] == "2026-09-06"
         assert sonuc["source_last_week"] == "2026-09-13"
         conn = sqlite3.connect(db_path)
@@ -390,6 +442,9 @@ class TestSyncAll:
         assert meta["netflix_source_last_week"] == "2026-09-13"
         assert meta["netflix_source_complete"] == "1"
         assert meta["netflix_truncated_country"] is None
+        # Tam dosya: pazar listesi = dosyadaki tüm ülkeler (CL dahil, Türk dizisi eşleşmese de)
+        assert json.loads(meta["netflix_source_countries"]) == ["AR", "BR", "CL", "DK"]
+        assert json.loads(meta["netflix_market_countries"]) == ["AR", "BR", "CL", "DK"]
         ilk = conn.execute("SELECT first_week_date, last_week_date FROM netflix_country_rankings WHERE country_iso2='AR'").fetchone()
         conn.close()
         assert ilk == ("2026-09-06", "2026-09-13")
@@ -427,8 +482,12 @@ class TestSyncAll:
         assert sonuc["countries_with_matches"] == ["AR", "BR"]
         conn = sqlite3.connect(db_path)
         ulkeler = {r[0] for r in conn.execute("SELECT country_iso2 FROM netflix_country_rankings")}
+        meta = dict(conn.execute("SELECT key, value FROM pipeline_meta").fetchall())
         conn.close()
         assert ulkeler == {"AR", "BR"}
+        # Kısmi dosya: bloğu tam olan ülkeler (CL dahil) yazılır, kesilen DK yazılmaz; pazar listesi ÜRETİLMEZ.
+        assert json.loads(meta["netflix_source_countries"]) == ["AR", "BR", "CL"]
+        assert "netflix_market_countries" not in meta
 
     def test_indirme_tamamen_basarisizsa_unavailable_doner_tablo_dokunulmaz(self, tmp_path, monkeypatch):
         sunucu = SahteSunucu(ORNEK_BYTES, kesme_plani=[0, 0, 0, 0], range_destegi=False)
@@ -522,6 +581,78 @@ def _aka_db(tmp_path, satirlar):
     conn.commit()
     conn.close()
     return p
+
+
+class TestEskiSatirTemizligi:
+    """Tam (ya da bloğu tam) ülkelerde bu koşuda eşleşmeyen eski satırlar silinir; kesilen ülke korunur."""
+
+    def _eski_satir_ekle(self, db_path, iso2, tmdb_id=999, title="Hot Skull"):
+        netflix_pipeline.db.get_connection(db_path).close()  # şema
+        conn = sqlite3.connect(db_path)
+        try:
+            conn.execute(
+                "INSERT INTO netflix_country_rankings (country_iso2, tmdb_id, show_title, matched_title, weeks_in_top10,"
+                " peak_rank, rank_score, last_week_date, first_week_date, updated_at) VALUES (?,?,?,?,1,5,50,'2022-12-11','2022-12-11','2026-09-23T10:30:00+00:00')",
+                (iso2, tmdb_id, title, title),
+            )
+            conn.execute(
+                "INSERT INTO netflix_weekly_ranks (country_iso2, week, tmdb_id, show_title, rank, updated_at)"
+                " VALUES (?,'2022-12-11',?,?,5,'2026-09-23T10:30:00+00:00')",
+                (iso2, tmdb_id, title),
+            )
+            conn.commit()
+        finally:
+            conn.close()
+
+    def test_tam_dosyada_eslesmeyen_eski_satir_silinir(self, tmp_path, monkeypatch):
+        (tmp_path / nf.FILENAME).write_bytes(ORNEK_BYTES)
+        monkeypatch.setattr(nf, "_COZULMUS_DATASET", (tmp_path / nf.FILENAME, True))
+        db_path = tmp_path / "pipeline.db"
+        self._eski_satir_ekle(db_path, "AR")  # AR bloğu tam, Hot Skull artık eşleşmiyor
+        sonuc = netflix_pipeline.sync_all(idx("Kurulus Osman", "Sefirin Kizi"), cache_dir=tmp_path, db_path=db_path)
+        assert sonuc["records_deleted"] == 2  # özet + haftalık
+        conn = sqlite3.connect(db_path)
+        kalan = conn.execute("SELECT show_title FROM netflix_country_rankings WHERE country_iso2='AR'").fetchall()
+        conn.close()
+        assert kalan == [("Kurulus Osman",)]
+
+    def test_kismi_dosyada_kesilen_ulkenin_eski_satiri_korunur(self, tmp_path, monkeypatch):
+        (tmp_path / "all-weeks-countries.tsv.partial").write_bytes(ORNEK_BYTES[:-20])  # DK kesik
+        monkeypatch.setattr(nf, "_COZULMUS_DATASET", (tmp_path / "all-weeks-countries.tsv.partial", False))
+        db_path = tmp_path / "pipeline.db"
+        self._eski_satir_ekle(db_path, "DK")  # kesilen ülke → dokunulmaz
+        self._eski_satir_ekle(db_path, "TR")  # dosyada hiç yok → dokunulmaz
+        self._eski_satir_ekle(db_path, "BR")  # bloğu tam → silinir
+        sonuc = netflix_pipeline.sync_all(idx("Kurulus Osman", "Sefirin Kizi"), cache_dir=tmp_path, db_path=db_path)
+        assert sonuc["records_deleted"] == 2
+        conn = sqlite3.connect(db_path)
+        kalan = {r[0] for r in conn.execute("SELECT country_iso2 FROM netflix_country_rankings WHERE show_title='Hot Skull'")}
+        conn.close()
+        assert kalan == {"DK", "TR"}
+
+
+class TestBaslikDislama:
+    """'The Promise' (Netflix PH, videoId 81437458, 2015) Pangako Sa 'Yo'dur, Yemin değil — kanıt NETFLIX_TITLE_EXCLUSIONS'ta."""
+
+    def test_dislanan_baslik_takma_ad_olarak_uretilmez(self, tmp_path):
+        katalog = idx("Yemin")
+        dbp = _aka_db(tmp_path, [(1, "Yemin", "tt1", "GB", "The Promise"), (1, "Yemin", "tt1", "AU", "The Promise"), (1, "Yemin", "tt1", "US", "Oath")])
+        aliases = netflix_pipeline.load_title_aliases(katalog, db_path=dbp)
+        adlar = {a.name for a in aliases}
+        assert "The Promise" not in adlar
+        assert "Oath" in adlar  # diğer güvenilir AKA'lar etkilenmez
+
+    def test_dislanan_baslik_eslestirilmez(self):
+        katalog = idx("Yemin") + [SeriesIndexEntry(tmdb_id=1, name="The Promise", normalized=normalize_title("The Promise"))]
+        assert netflix_pipeline.resolve_netflix_title("The Promise", katalog) is None
+        assert netflix_pipeline.resolve_netflix_title("Yemin", katalog).tmdb_id == 1
+
+    def test_yeni_takma_adlar_kataloga_baglanir(self, tmp_path):
+        katalog = idx("Seni Tanıyorum", "Masumiyet Müzesi", "Adsız Aşıklar")
+        by_name = {a.name: a.tmdb_id for a in netflix_pipeline.load_title_aliases(katalog, db_path=tmp_path / "yok.db")}
+        assert by_name["Not a Stranger"] == 1
+        assert by_name["The Museum of Innocence"] == 2
+        assert by_name["Lovers Anonymous"] == 3
 
 
 class TestBaslikTakmaAdlari:

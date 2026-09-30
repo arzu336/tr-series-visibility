@@ -1,8 +1,9 @@
 import { useMemo } from 'react'
-import { fetchImdbData, fetchSeriesEnrichment } from '../lib/api.js'
+import { fetchImdbData, fetchSeriesEnrichment, fetchSeriesCharts } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
 import CastBar from './CastBar.jsx'
-import { VISIBILITY_SCORE_NOTE } from '../lib/methodologyNotes.js'
+import ChartList, { ChartSource } from './ChartList.jsx'
+import { NETFLIX_RANK_NOTE, AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import countryNames from '../data/country-centroids.json'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w154'
@@ -22,6 +23,8 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
   const imdb = imdbReq.status === 'ready' ? imdbReq.data : null
   const imdbStatus = imdbReq.status === 'ready' ? imdb?.status : imdbReq.status === 'error' ? 'unavailable' : 'loading'
   const enrichment = useAsync(() => fetchSeriesEnrichment(seriesId), [seriesId], { enabled: seriesId != null }).data
+  const chartsReq = useAsync(() => fetchSeriesCharts(seriesId), [seriesId], { enabled: seriesId != null })
+  const charts = chartsReq.status === 'ready' ? chartsReq.data : null
 
   const series = useMemo(() => {
     let base = null
@@ -30,10 +33,10 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
       const match = c.seriesList?.find((s) => s.id === seriesId)
       if (match) {
         if (!base) base = match
-        countries.push({ iso2: c.iso2, score: c.score })
+        countries.push({ iso2: c.iso2 })
       }
     }
-    countries.sort((a, b) => b.score - a.score)
+    countries.sort((a, b) => nameOf(a.iso2).localeCompare(nameOf(b.iso2), 'tr'))
     return base ? { ...base, countries } : null
   }, [allCountries, seriesId])
 
@@ -42,7 +45,14 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
   }
 
   const handleShowOnMap = () => {
-    onShowOnMap?.(series.name, series.countries)
+    // Haritada vurgu: Netflix Top 10'a girdiği ülkeler (hafta sayısıyla); liste kaydı yoksa yayında olduğu ülkeler.
+    const chartCountries = charts?.status === 'hesaplandi' && charts.countries.length ? charts.countries : null
+    onShowOnMap?.(
+      series.name,
+      chartCountries
+        ? chartCountries.map((c) => ({ iso2: c.iso2, weeks: c.weeks }))
+        : series.countries.map((c) => ({ iso2: c.iso2, weeks: null }))
+    )
   }
 
   return (
@@ -75,14 +85,24 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
       <div className="map-popup-card__pills" style={{ margin: '0 0 1rem' }}>
         {series.theme && <span className="map-popup-card__pill">{series.theme}</span>}
         <span className="map-popup-card__pill">{series.countries.length} ülkede yayında</span>
+        {charts?.status === 'hesaplandi' && charts.countries.length > 0 && (
+          <span className="map-popup-card__pill" title={NETFLIX_RANK_NOTE}>
+            Netflix Top 10: {charts.countries.length} ülke · {charts.totalWeeks} hafta
+          </span>
+        )}
+        {charts?.turkeyTv && (
+          <span className="map-popup-card__pill">
+            Türkiye TV Top 10: {charts.turkeyTv.days} gün · en iyi #{charts.turkeyTv.bestRank}
+          </span>
+        )}
       </div>
 
       <button
         className="actor-modal__network-btn"
         onClick={handleShowOnMap}
-        title="Bu dizinin gerçekten yayınlandığı ülkeleri haritada işaretle"
+        title="Netflix Top 10'a girdiği ülkeleri (hafta sayısıyla) haritada işaretle; liste kaydı yoksa yayında olduğu ülkeler"
       >
-        🗺️ Bu Dizinin Yayınlandığı Ülkeleri Haritada Göster
+        🗺️ Listeye Girdiği Ülkeleri Haritada Göster
       </button>
 
       {series.cast?.length > 0 && (
@@ -92,10 +112,29 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
         </>
       )}
 
-      <h3>Yayınlandığı Ülkeler</h3>
-      <p className="dashboard__hint" title={`Sağdaki sayı ülkenin genel görünürlük skorudur. ${VISIBILITY_SCORE_NOTE}`}>
-        Ülkenin genel skoru ⓘ
-      </p>
+      <h3>Listeye Girdiği Ülkeler</h3>
+      {chartsReq.status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
+      {charts?.status === 'hesaplandi' && charts.countries.length > 0 && (
+        <>
+          <ChartList
+            compact
+            items={charts.countries.map((c, i) => ({
+              rank: i + 1,
+              name: nameOf(c.iso2),
+              kind: 'series',
+              periods: c.weeks,
+              bestRank: c.bestRank,
+              lastDate: c.lastWeek,
+            }))}
+          />
+          <ChartSource source={charts.source} periodLabel="tüm dönem (2021→)" />
+        </>
+      )}
+      {charts && (charts.status !== 'hesaplandi' || charts.countries.length === 0) && (
+        <p className="dashboard__empty">{charts.reason || "Bu dizi Netflix Top 10'a hiçbir ülkede girmedi."}</p>
+      )}
+
+      <h3 title={AVAILABILITY_NOTE}>Yayında Olduğu Ülkeler — {series.countries.length} ⓘ</h3>
       <ul className="panel__series-list">
         {series.countries.map((c) => (
           <li key={c.iso2} className="panel__series-item panel__series-item--static">
@@ -103,7 +142,6 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
               <span className="panel__series-info">
                 <span className="panel__series-name">{nameOf(c.iso2)}</span>
               </span>
-              <span className="panel__series-score">{c.score.toFixed(1)}</span>
             </div>
           </li>
         ))}

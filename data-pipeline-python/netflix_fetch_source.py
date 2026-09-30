@@ -80,10 +80,28 @@ def inspect_tsv(path: Path) -> dict:
     }
 
 
-def verify_source(path: Path, downloader_says_complete: bool) -> dict:
+def known_content_length(path: Path) -> int:
+    """Dosyanın sunucu content-length'i biliniyorsa onu döner, yoksa -1.
+    Kaynaklar: yanındaki `<dosya>.json` (indiricinin kısmi-indirme meta'sı) ya da aynı dizindeki
+    netflix-source-summary.json. Boyutla eşleşmeyen bir değer bilinmiyor sayılır."""
+    size = path.stat().st_size if path.exists() else -1
+    for cand in (Path(str(path) + ".json"), path.parent / SUMMARY_FILENAME):
+        try:
+            meta = json.loads(cand.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            continue
+        cl = meta.get("content_length")
+        if isinstance(cl, int) and cl == size:
+            return cl
+    return -1
+
+
+def verify_source(path: Path, downloader_says_complete: bool, expected: int = -1) -> dict:
     """İndiricinin 'tam' kararını bağımsız kontrollerle çaprazlar; tek bir `complete` bayrağı ve
-    insan-okunur `reason` üretir."""
-    structural_ok = nf._looks_complete(path, -1)
+    insan-okunur `reason` üretir. `expected` = sunucunun content-length'i (bilinmiyorsa -1 → sıkı
+    yapısal kural: dosya \\n ile bitmeli). Gerçek dosya sondaki satır sonu olmadan bitiyor; bu yüzden
+    content-length'i geçirmek önemlidir."""
+    structural_ok = nf._looks_complete(path, expected)
     info = inspect_tsv(path) if path.exists() and path.stat().st_size > 0 else {
         "header_ok": False, "rows": 0, "countries": 0, "first_country": None, "last_country": None,
         "first_week": None, "last_week": None,
@@ -92,7 +110,11 @@ def verify_source(path: Path, downloader_says_complete: bool) -> dict:
     if not downloader_says_complete:
         reasons.append("indirici tüm denemelerde eksik kaldı (content-length'e ulaşılamadı)")
     if not structural_ok:
-        reasons.append("son satır kesik ya da alan sayısı 8 değil")
+        reasons.append(
+            "son satır kesik ya da alan sayısı 8 değil"
+            if expected != -1
+            else "son satır kesik ya da alan sayısı 8 değil (content-length bilinmiyor: dosya satır sonuyla bitmeli)"
+        )
     if not info["header_ok"]:
         reasons.append("başlık satırı beklenen 8 sütunla eşleşmiyor")
     if info["rows"] < MIN_ROWS_FOR_REAL_FILE:
@@ -104,6 +126,7 @@ def verify_source(path: Path, downloader_says_complete: bool) -> dict:
         "reason": None if not reasons else "; ".join(reasons),
         "path": str(path),
         "size_bytes": path.stat().st_size if path.exists() else 0,
+        "content_length": expected if expected != -1 else None,
         "structural_ok": structural_ok,
         **info,
     }
@@ -112,7 +135,9 @@ def verify_source(path: Path, downloader_says_complete: bool) -> dict:
 def fetch(cache_dir: Path, force: bool = True) -> dict:
     """İndir + doğrula + özet. Ağ tamamen başarısızsa RuntimeError (indirici fırlatır)."""
     path, is_complete = nf.download_dataset(cache_dir, force=force)
-    summary = verify_source(path, is_complete)
+    # İndirici "tam" dediyse boyut zaten content-length ile eşleşmiştir; kısmi dosyada meta'dan okunur.
+    expected = path.stat().st_size if is_complete else known_content_length(path)
+    summary = verify_source(path, is_complete, expected)
     summary["downloaded_at"] = datetime.now(timezone.utc).isoformat()
     summary["source_url"] = nf.DATA_URL
     return summary

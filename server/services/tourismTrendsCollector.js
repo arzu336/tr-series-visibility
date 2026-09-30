@@ -8,7 +8,8 @@ import {
 import { getSerpApiUsageThisMonth, TIMESERIES_TTL_MS } from './serpApiCache.js'
 
 const TRAVEL_QUERIES = ['Travel to Turkey', 'Istanbul', 'Antalya']
-const TOP_COUNTRY_COUNT = 15
+/** Öncü sinyal taramasının kapsamı: görünürlükte ilk N ülke. Arayüz ve rapor metinleri bunu okur. */
+export const LEADING_SIGNAL_SCOPE = 15
 const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000
 const META_KEY = 'lastTourismTrendsCollectAt'
 const DELAY_AFTER_LIVE_CALL_MS = 1500
@@ -47,7 +48,7 @@ export async function runTourismTrendsCollectionIfNeeded() {
 
   try {
     const { data } = await getEnrichedVisibility()
-    const candidates = getExpandedCandidatePool(data.countries, TOP_COUNTRY_COUNT)
+    const candidates = getExpandedCandidatePool(data.countries, LEADING_SIGNAL_SCOPE)
     const nowIso = new Date().toISOString()
 
     outer: for (const candidate of candidates) {
@@ -110,7 +111,13 @@ function kritikKorelasyon(sampleSize) {
 export function getTourismLeadingSignalSummary() {
   const rows = getFreshSignalsStmt.all(Date.now())
   if (rows.length === 0) {
-    return { status: 'gerçek-veri-bekleniyor', lagWeeksRange: '3-6 ay', signals: [], strongestSignal: null }
+    return {
+      status: 'gerçek-veri-bekleniyor',
+      scope: LEADING_SIGNAL_SCOPE,
+      lagWeeksRange: '3-6 ay',
+      signals: [],
+      strongestSignal: null,
+    }
   }
   const signals = rows.map((r) => {
     const criticalR = kritikKorelasyon(r.sample_size)
@@ -134,6 +141,7 @@ export function getTourismLeadingSignalSummary() {
   const anlamliSayisi = signals.filter((s) => s.significant).length
   return {
     status: 'gerçek-veri-mevcut',
+    scope: LEADING_SIGNAL_SCOPE,
     lagWeeksRange: `${LEADING_INDICATOR_LAG_WEEKS} hafta (~4 ay)`,
     countriesScanned: new Set(signals.map((s) => s.iso2)).size,
     signalCount: signals.length,

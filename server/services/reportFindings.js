@@ -18,15 +18,10 @@ export function candidateFindings({ ranking, trend, netflix, themes, pressTone }
   const out = []
 
   if (ranking?.status === 'hesaplandi') {
-    const { perCapitaRank, perCapitaOf, totalRank, totalOf } = ranking.data
-    if (perCapitaRank != null) {
+    const { rank, of, level } = ranking.data
+    if (rank != null) {
       out.push({
-        text: `Kişi başına görünürlükte ${perCapitaOf} ülke arasında ${perCapitaRank}. sırada; toplam skorda ${totalOf} ülke arasında ${totalRank}. sırada.`,
-        basis: 'ranking',
-      })
-    } else if (totalRank != null) {
-      out.push({
-        text: `Toplam görünürlükte ${totalOf} ülke arasında ${totalRank}. sırada (kişi başına oran küçük payda nedeniyle sıralanmadı).`,
+        text: `İzlenme düzeyi "${level}": izlenme sinyali hesaplanan ${of} ülke arasında ${rank}. sırada.`,
         basis: 'ranking',
       })
     }
@@ -39,8 +34,8 @@ export function candidateFindings({ ranking, trend, netflix, themes, pressTone }
       out.push({
         text:
           t.direction === 'sabit'
-            ? `Görünürlük skoru son ${t.windowDays} günde sabit kaldı (${pct(Math.abs(t.changePct))} değişim).`
-            : `Görünürlük skoru son ${t.windowDays} günde ${pct(Math.abs(t.changePct))} ${yon}.`,
+            ? `Yayın varlığı son ${t.windowDays} günde sabit kaldı (${pct(Math.abs(t.changePct))} değişim).`
+            : `Yayın varlığı (katalog ağırlığı) son ${t.windowDays} günde ${pct(Math.abs(t.changePct))} ${yon}.`,
         basis: 'trend',
       })
     }
@@ -57,7 +52,7 @@ export function candidateFindings({ ranking, trend, netflix, themes, pressTone }
 
   if (themes?.status === 'hesaplandi' && themes.data.items?.length > 0) {
     const [ilk] = themes.data.items
-    out.push({ text: `En güçlü tema "${ilk.theme}" (görünürlüğün ${pct(ilk.sharePct)}'i).`, basis: 'themes' })
+    out.push({ text: `En güçlü tema "${ilk.theme}" (yayındaki kataloğun ${pct(ilk.sharePct)}'i).`, basis: 'themes' })
   }
 
   if (pressTone?.status === 'hesaplandi' && pressTone.data.mediaTone?.status === 'hesaplandi') {

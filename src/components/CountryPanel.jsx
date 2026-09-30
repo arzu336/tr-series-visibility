@@ -2,15 +2,16 @@ import { useEffect, useMemo, useState } from 'react'
 import CastBar from './CastBar.jsx'
 import ActorPanel from './ActorPanel.jsx'
 import SeriesPanel from './SeriesPanel.jsx'
-import { fetchRegionalInterest, fetchCountryPeriods, fetchSeriesPopularity } from '../lib/api.js'
+import { fetchRegionalInterest, fetchCountryCharts } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import PeriodChart from './PeriodChart.jsx'
 import MediaSentimentCard, { HybridScoreTag } from './MediaSentimentCard.jsx'
-import CountryLeaderboard from './CountryLeaderboard.jsx'
-import { describePerCapita, formatTotalScore } from '../lib/perCapitaLabel.js'
-import { PER_CAPITA_SCORE_NOTE, TOTAL_SCORE_NOTE } from '../lib/methodologyNotes.js'
+import ChartList, { ChartSource, fmtDateTr } from './ChartList.jsx'
+import { WATCH_LEVEL_COLORS, NO_SIGNAL_COLOR } from '../lib/scale.js'
+import { WATCH_LEVEL_NOTE, AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import { useAsync } from '../lib/useAsync.js'
 import { onEnterOrSpace } from '../lib/useDialog.js'
+import { EMPTY } from '../lib/emptyStates.js'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w92'
@@ -29,14 +30,14 @@ function RegionalInterest({ seriesName, iso2 }) {
 
   if (status === 'loading' || status === 'idle') return <p className="dashboard__empty">Yükleniyor…</p>
   if (status === 'error' || byRegion.length === 0) {
-    return <p className="dashboard__empty">Bu ülke/dizi için bölgesel arama ilgisi verisi bulunamadı.</p>
+    return <p className="dashboard__empty">{EMPTY.regionalInterestMissing}</p>
   }
 
   const top = byRegion.filter((r) => r.value > 0).slice(0, 8)
   const maxValue = Math.max(...top.map((r) => r.value), 1)
 
   if (top.length === 0) {
-    return <p className="dashboard__empty">Bu ülke/dizi için bölgesel arama ilgisi verisi bulunamadı.</p>
+    return <p className="dashboard__empty">{EMPTY.regionalInterestMissing}</p>
   }
 
   return (
@@ -180,44 +181,126 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
   )
 }
 
-function CountryScoreCard({ country }) {
-  const perCapita = describePerCapita(country)
+function yearAgoText(ya) {
+  if (!ya) return null
+  const liste = ya.entries?.length
+    ? ya.entries.map((e) => `#${e.rank} ${e.name}`).join(', ')
+    : 'listede Türk dizisi yoktu'
+  if (ya.mode === 'exact') return `1 yıl önce (${fmtDateTr(ya.periodDate)}): ${liste}`
+  if (ya.mode === 'window') return `1 yıl önce (±4 hafta, en yakın liste ${fmtDateTr(ya.periodDate)}): ${liste}`
+  return `1 yıl önce liste yoktu; en yakın kayıt ${fmtDateTr(ya.periodDate)}: ${liste}`
+}
+
+const SOURCE_LABEL = {
+  netflix_tudum: 'Netflix Top 10',
+  wikipedia: 'Wikipedia',
+  google_trends: 'Google Trends (önbellek)',
+  tmdb_providers: 'TMDB/JustWatch',
+}
+
+/** Ülke paneli üst kartı: kaynak sırasındaki ilk dolu gerçek öne, diğerleri altında; izlenme düzeyi ve uyarılar. */
+export function WatchFactsCard({ charts, status }) {
+  if (status === 'loading' || status === 'idle')
+    return <p className="dashboard__empty">İzlenme gerçekleri yükleniyor…</p>
+  if (status === 'error' || !charts) return <p className="dashboard__empty">İzlenme gerçekleri alınamadı.</p>
+  const level = charts.watch?.level ?? null
+  // JSON'dan gelir: kimlik karşılaştırması olmaz, kaynak+tür ile ayır
+  const sameFact = (a, b) => a && b && a.source === b.source && a.kind === b.kind
+  const others = charts.facts.filter((f) => !sameFact(f, charts.primary))
   return (
-    <div className="panel__score-card" role="group" aria-label="Görünürlük skorları">
-      <div className="panel__score-item" title={TOTAL_SCORE_NOTE}>
-        <span className="panel__score-label">Toplam görünürlük skoru ⓘ</span>
-        <strong className="panel__score-value">{formatTotalScore(country.score)}</strong>
-        <span className="panel__score-meta">{country.seriesCount} dizinin küresel popülerlik toplamı</span>
+    <div className="panel__watch-card" role="group" aria-label="İzlenme gerçekleri">
+      <div className="panel__watch-level" title={WATCH_LEVEL_NOTE}>
+        <span className="legend__swatch" style={{ background: level ? WATCH_LEVEL_COLORS[level] : NO_SIGNAL_COLOR }} />
+        İzlenme düzeyi: <strong>{level ?? 'sinyal yetersiz'}</strong>
+        {charts.watch?.index != null
+          ? ` · yüzdelik konum ${charts.watch.index}/100 · güven ${charts.watch.confidence}`
+          : ''}{' '}
+        ⓘ
       </div>
-      <div
-        className={
-          perCapita.status === 'unreliable' ? 'panel__score-item panel__score-item--unreliable' : 'panel__score-item'
-        }
-        title={PER_CAPITA_SCORE_NOTE}
-      >
-        <span className="panel__score-label">Kişi başına erişilebilirlik skoru ⓘ</span>
-        {perCapita.status === 'unavailable' ? (
-          <>
-            <strong className="panel__score-value panel__score-value--empty">—</strong>
-            <span className="panel__score-meta">{perCapita.note}</span>
-          </>
-        ) : (
-          <>
-            <strong className="panel__score-value">
-              {perCapita.valueText}
-              {perCapita.status === 'unreliable' && (
-                <span className="panel__score-flag" title={perCapita.note}>
-                  {' '}
-                  ⚠
-                </span>
-              )}
-            </strong>
-            <span className="panel__score-meta">{perCapita.denominatorText}</span>
-            {perCapita.status === 'unreliable' && <span className="panel__score-warning">{perCapita.note}</span>}
-          </>
-        )}
-      </div>
+      {charts.primary ? (
+        <p className="panel__watch-primary">
+          {charts.primary.text}
+          <span className="panel__watch-source">{SOURCE_LABEL[charts.primary.source] || charts.primary.source}</span>
+        </p>
+      ) : (
+        <p className="panel__watch-primary">{EMPTY.countryNoCharts}</p>
+      )}
+      {others.map((f) => (
+        <p key={f.source + f.kind} className="panel__watch-fact">
+          {f.text}
+          <span className="panel__watch-source">{SOURCE_LABEL[f.source] || f.source}</span>
+        </p>
+      ))}
+      {(charts.watch?.warnings || [])
+        .filter((w) => w.code !== 'regional-wiki')
+        .map((w) => (
+          <p key={w.code} className="panel__watch-warning" role="note">
+            ⚠ {w.text}
+          </p>
+        ))}
     </div>
+  )
+}
+
+/** "Şu an listede" + "Bu ülkede en çok izlenenler" + "1 yıl önce" — Netflix; Netflix yoksa Wikipedia listesi. */
+export function WatchLists({ charts, onSelectSeries }) {
+  if (!charts) return null
+  const nf = charts.netflix
+  if (nf?.status === 'hesaplandi') {
+    return (
+      <>
+        <h3>Şu an listede</h3>
+        <div className="panel__now">
+          <ChartList
+            compact
+            items={nf.now}
+            emptyText={`Netflix Top 10 (${fmtDateTr(charts.latestWeek)}): bu hafta Türk dizisi yok.`}
+            onSelect={onSelectSeries}
+          />
+        </div>
+        <h3>Bu ülkede en çok izlenenler</h3>
+        <ChartList
+          items={nf.top.map((t, i) => ({ ...t, rank: i + 1 }))}
+          emptyText={`Son 52 haftada Netflix Top 10'a Türk dizisi girmedi${nf.lastEntry ? `; son giriş ${fmtDateTr(nf.lastEntry)}` : ''}.`}
+          onSelect={onSelectSeries}
+        />
+        {yearAgoText(nf.yearAgo) && <p className="panel__year-ago">{yearAgoText(nf.yearAgo)}</p>}
+        <ChartSource
+          source={nf.source}
+          periodLabel={`son 52 hafta (${fmtDateTr(nf.window.from)} → ${fmtDateTr(nf.window.to)})`}
+        />
+      </>
+    )
+  }
+  const wiki = charts.wiki?.[0]
+  return (
+    <>
+      <h3>Bu ülkede en çok izlenenler</h3>
+      {nf?.status === 'hesaplanamaz' && <p className="dashboard__hint">{nf.reason}</p>}
+      {wiki ? (
+        <>
+          <ChartList
+            items={wiki.items.map((it, i) => ({
+              rank: i + 1,
+              seriesId: it.seriesId,
+              name: it.name,
+              kind: 'series',
+              meta: `${Math.round(it.views / 1000)}k okunma`,
+            }))}
+            onSelect={onSelectSeries}
+          />
+          <ChartSource
+            source={{
+              label: 'Wikipedia okunması',
+              platform: `${wiki.lang} Vikipedi${wiki.regional ? ' (ortak dil; okunma ülkeye ayrılamaz)' : ''}`,
+            }}
+            periodLabel="son 12 ay"
+          />
+        </>
+      ) : (
+        <p className="dashboard__empty">{EMPTY.countryNoCharts}</p>
+      )}
+    </>
   )
 }
 
@@ -243,36 +326,19 @@ export default function CountryPanel({
 }) {
   const [expandedId, setExpandedId] = useState(null)
   const [periodRange, setPeriodRange] = useState('monthly')
-  const [seriesRange, setSeriesRange] = useState('current')
 
-  const popularityReq = useAsync(() => fetchSeriesPopularity(seriesRange), [seriesRange], {
-    enabled: seriesRange !== 'current',
-  })
-  const seriesPopularity = popularityReq.data?.items ?? null
-
-  const periodsReq = useAsync(() => fetchCountryPeriods(country.iso2, periodRange), [country?.iso2, periodRange], {
-    enabled: Boolean(country?.iso2) && country?.dataSource !== 'proxy',
-  })
-  const countryPeriods = periodsReq.data
+  const chartsReq = useAsync(
+    () => fetchCountryCharts(country.iso2, { range: periodRange }),
+    [country?.iso2, periodRange],
+    { enabled: Boolean(country?.iso2), keepPrevious: true }
+  )
+  const charts = chartsReq.data
 
   useEffect(() => {
-    if (popularityReq.error) console.error('[CountryPanel] series-popularity', popularityReq.error)
-    if (periodsReq.error) console.error('[CountryPanel] periods', periodsReq.error)
-  }, [popularityReq.error, periodsReq.error])
+    if (chartsReq.error) console.error('[CountryPanel] charts', chartsReq.error)
+  }, [chartsReq.error])
 
-  const sortedSeriesList = useMemo(() => {
-    const list = country?.seriesList || []
-    if (seriesRange === 'current' || !seriesPopularity) return list
-    const canliDegerler = list.map((s) => s.popularity).sort((a, b) => a - b)
-    const canliYuzdelik = (deger) => {
-      if (canliDegerler.length === 0) return 50
-      const altinda = canliDegerler.filter((x) => x < deger).length
-      const esit = canliDegerler.filter((x) => x === deger).length
-      return ((altinda + esit / 2) / canliDegerler.length) * 100
-    }
-    const skor = (s) => seriesPopularity[s.id]?.percentile ?? canliYuzdelik(s.popularity)
-    return [...list].sort((a, b) => skor(b) - skor(a))
-  }, [country?.seriesList, seriesRange, seriesPopularity])
+  const sortedSeriesList = useMemo(() => country?.seriesList || [], [country?.seriesList])
 
   useEffect(() => {
     setExpandedId(null)
@@ -363,37 +429,38 @@ export default function CountryPanel({
                 <p className="panel__subtitle">{country.seriesCount} dizi yayında</p>
               )}
 
-              {/* Harita varsayılan olarak kişi başına metriği boyuyor (bkz. lib/scale.js) ama
-                  panel şimdiye kadar yalnızca ham toplamı ima ediyordu — kullanıcı haritada gördüğü
-                  rengi burada bir sayıyla eşleyemiyordu. İki skor yan yana, paydası açıkça yazılı:
-                  ham toplam katalog büyüklüğünü, kişi başına değer pazar yoğunluğunu okutur. Proxy
-                  ülkelerde görünürlük skoru hiç yok (Trends tahmini var), kart gösterilmez. */}
-              {country.dataSource !== 'proxy' && <CountryScoreCard country={country} />}
+              <WatchFactsCard charts={charts} status={chartsReq.status} />
 
-              <h3>Trend ve Görünürlük Geçmişi</h3>
-              {country.dataSource === 'proxy' ? (
-                <p className="dashboard__empty">Görünürlük geçmişi tutulmuyor.</p>
+              <WatchLists charts={charts} onSelectSeries={(id) => onSelectSeriesGlobal?.(id)} />
+
+              <h3>Listeye giren diziler — zaman içinde</h3>
+              {charts?.timeline?.length ? (
+                <>
+                  <PeriodChart
+                    periods={charts.timeline.map((t) => ({
+                      period: t.period,
+                      avgScore: t.seriesCount,
+                      isCurrent: false,
+                    }))}
+                    valueKey="avgScore"
+                    range={periodRange}
+                    onRangeChange={setPeriodRange}
+                    unitLabel="dizi"
+                  />
+                  <p className="dashboard__hint">Dönem başına Netflix Top 10'a giren farklı Türk dizisi sayısı.</p>
+                </>
               ) : (
-                <PeriodChart
-                  periods={countryPeriods?.periods || []}
-                  valueKey="avgScore"
-                  range={periodRange}
-                  onRangeChange={setPeriodRange}
-                  unitLabel="puan"
-                />
+                <p className="dashboard__empty">
+                  {country.dataSource === 'proxy'
+                    ? EMPTY.visibilityHistoryProxy
+                    : 'Bu ülkede Netflix Top 10 kaydı yok; zaman çizelgesi oluşmadı.'}
+                </p>
               )}
 
               {country.topSeries && (
                 <>
                   <h3>Bölgesel İlgi Dağılımı</h3>
                   <RegionalInterest seriesName={country.topSeries.name} iso2={country.iso2} />
-                </>
-              )}
-
-              {country.dataSource !== 'proxy' && (
-                <>
-                  <h3>Ülkede En Çok İlgi Gören İlk 5 Dizi</h3>
-                  <CountryLeaderboard iso2={country.iso2} />
                 </>
               )}
 
@@ -404,39 +471,23 @@ export default function CountryPanel({
                 </>
               ) : (
                 <>
-                  <h3>Yayındaki diziler</h3>
-                  <div className="period-toggle" role="group" aria-label="Popülerlik dönemi">
-                    {[
-                      ['current', 'Şu An'],
-                      ['monthly', 'Aylık'],
-                      ['yearly', 'Yıllık'],
-                      ['5yearly', '5 Yıllık'],
-                    ].map(([value, label]) => (
-                      <button
-                        key={value}
-                        className={
-                          seriesRange === value ? 'period-toggle__btn period-toggle__btn--active' : 'period-toggle__btn'
-                        }
-                        onClick={() => setSeriesRange(value)}
-                      >
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {seriesRange !== 'current' &&
-                    seriesPopularity &&
-                    Object.values(seriesPopularity).some((v) => v.isPartial) && (
-                      <p className="dashboard__hint">Bazı diziler için veri henüz kısmi.</p>
-                    )}
+                  <h3 title={AVAILABILITY_NOTE}>
+                    Yayındaki diziler — {country.seriesCount} dizi
+                    {charts?.access?.platformCount ? `, ${charts.access.platformCount} platformda` : ''} ⓘ
+                  </h3>
+                  {charts?.access?.platforms?.length > 0 && (
+                    <p className="dashboard__hint">
+                      {charts.access.platforms
+                        .slice(0, 6)
+                        .map((p) => `${p.name} (${p.count})`)
+                        .join(' · ')}
+                    </p>
+                  )}
                   <ul className="panel__series-list">
                     {sortedSeriesList.map((s, i) => {
                       const key = s.id ?? s.name
                       const isExpanded = expandedId === key
                       const isActiveOnMap = activeSeriesId != null && s.id === activeSeriesId
-                      const rawScore =
-                        seriesRange !== 'current' && seriesPopularity?.[s.id]?.value != null
-                          ? seriesPopularity[s.id].value
-                          : s.popularity
                       return (
                         <li
                           key={key}
@@ -474,20 +525,6 @@ export default function CountryPanel({
                           {isExpanded && (
                             <div className="panel__series-detail" onClick={(e) => e.stopPropagation()}>
                               <p className="panel__series-overview">{s.overview || 'Bu dizi için özet bulunmuyor.'}</p>
-                              <p className="panel__series-raw-score">
-                                Ham popülerlik puanı: <strong>{rawScore.toFixed(1)}</strong>
-                                {seriesRange !== 'current' && seriesPopularity?.[s.id]?.isPartial && (
-                                  <span title="Bu dönem için veri henüz kısmi"> *</span>
-                                )}
-                                {seriesRange !== 'current' && seriesPopularity?.[s.id]?.source === 'reytingtv_rank' && (
-                                  <span
-                                    className="panel__series-source-tag"
-                                    title="Türkiye'deki gerçek günlük reyting sırasına dayanıyor (canlı popülerlik verisi değil)"
-                                  >
-                                    TR
-                                  </span>
-                                )}
-                              </p>
                               <CastBar cast={s.cast} onSelectActor={onSelectActor} />
                               <HybridScoreTag seriesName={s.name} iso2={country.iso2} />
                               {onGoToSeriesAnalysis && (

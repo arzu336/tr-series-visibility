@@ -1,6 +1,6 @@
 import countryNames from '../../data/country-centroids.json'
-import { describePerCapita, formatTotalScore } from '../../lib/perCapitaLabel.js'
 import { fmtDate, fmtNum, fmtPct, fmtPeriod, fmtSignedPct, fmtWeek } from './format.js'
+import { EMPTY } from '../../lib/emptyStates.js'
 
 // Bölüm görünümleri: yalnızca sunucudan gelen `data`yı basar, hiçbir sayı burada türetilmez
 // (rapor sözleşmesi ulke-raporu-v1). Grafikler saf SVG — SSR ve baskıda aynı çıktı.
@@ -50,7 +50,7 @@ function MonthlyBars({ monthly }) {
       className="report__chart"
       viewBox={`0 0 ${W} ${H}`}
       role="img"
-      aria-label={`Aylık ortalama görünürlük skoru, ${monthly.length} ay`}
+      aria-label={`Aylık ortalama yayın varlığı, ${monthly.length} ay`}
     >
       {monthly.map((m, i) => {
         const h = ((m.avgScore || 0) / max) * (H - padB - padT)
@@ -96,22 +96,46 @@ function Sparkline({ timeline, label }) {
 }
 
 function ScoresSection({ data }) {
-  const pc = describePerCapita(data)
   return (
-    <dl className="report__kpis">
-      <Kpi
-        label="Toplam görünürlük skoru"
-        value={formatTotalScore(data.score)}
-        hint={`${data.seriesCount} dizinin küresel popülerlik toplamı`}
-      />
-      <Kpi
-        label="Kişi başına erişilebilirlik"
-        value={pc.valueText ?? '—'}
-        hint={pc.status === 'ready' ? pc.denominatorText : pc.note}
-        warn={pc.status !== 'ready'}
-      />
-      <Kpi label="Baskın tema" value={data.dominantTheme ?? '—'} />
-    </dl>
+    <>
+      <dl className="report__kpis">
+        <Kpi
+          label="İzlenme düzeyi"
+          value={data.level ?? 'sinyal yetersiz'}
+          hint={
+            data.index != null
+              ? `yüzdelik konum ${data.index}/100 · güven ${data.confidence}`
+              : 'en az iki kaynak gerekir'
+          }
+          warn={data.level == null}
+        />
+        <Kpi
+          label="Netflix Top 10 (son 52 hafta)"
+          value={data.netflix ? `${data.netflix.series} dizi · ${data.netflix.weeks} hafta` : '—'}
+          hint={
+            data.netflix
+              ? data.netflix.bestRank
+                ? `en iyi sıra ${data.netflix.bestRank}`
+                : 'Türk dizisi girmedi'
+              : data.netflixReason || 'Netflix bu pazarda liste yayımlamıyor'
+          }
+          warn={!data.netflix}
+        />
+        <Kpi
+          label="Yayın varlığı"
+          value={data.access ? `${data.access.seriesCount} dizi` : '—'}
+          hint={data.access ? `${data.access.platformCount} platformda` : 'sağlayıcı verisi yok'}
+        />
+        <Kpi label="Baskın tema" value={data.dominantTheme ?? '—'} />
+      </dl>
+      {(data.warnings || [])
+        .filter((w) => w.code === 'linear-tv')
+        .map((w) => (
+          <p key={w.code} className="report__caveat" role="note">
+            ⚠ {w.text}
+          </p>
+        ))}
+    </>
   )
 }
 
@@ -119,16 +143,11 @@ function RankingSection({ data }) {
   return (
     <dl className="report__kpis">
       <Kpi
-        label="Toplam skorda sıra"
-        value={data.totalRank != null ? `${data.totalRank}. / ${data.totalOf}` : '—'}
-        hint="Türkiye sıralamaya dahil değil"
+        label="İzlenme sırası"
+        value={data.rank != null ? `${data.rank}. / ${data.of}` : '—'}
+        hint="izlenme düzeyi hesaplanan ülkeler arasında; Türkiye dahil değil"
       />
-      <Kpi
-        label="Kişi başına sıra"
-        value={data.perCapitaRank != null ? `${data.perCapitaRank}. / ${data.perCapitaOf}` : '—'}
-        hint={data.perCapitaExcludedReason || 'milyon internet kullanıcısı başına'}
-        warn={Boolean(data.perCapitaExcludedReason)}
-      />
+      <Kpi label="Düzey" value={data.level ?? '—'} hint={data.confidence ? `güven ${data.confidence}` : undefined} />
     </dl>
   )
 }
@@ -379,6 +398,21 @@ function AvailabilitySection({ data }) {
 
 function NetflixHistorySection({ data }) {
   const src = data.sourceCoverage
+  if (data.zeroRecords) {
+    return (
+      <>
+        <p className="report__lead">{data.message}</p>
+        <dl className="report__kpis">
+          <Kpi
+            label="Kaynak dosyanın kapsadığı dönem"
+            value={`${fmtWeek(src?.firstWeek)} – ${fmtWeek(src?.lastWeek)}`}
+            hint={src?.complete === false ? 'kısmi dosya; bu ülkenin bloğu tam okundu' : 'tam dosya'}
+          />
+          <Kpi label="Top 10 kaydı" value="0" hint="katalogdaki Türk dizileri arasından" />
+        </dl>
+      </>
+    )
+  }
   return (
     <>
       <dl className="report__kpis">
@@ -454,26 +488,30 @@ function GapAnalysisSection({ data }) {
       </ul>
       <p className="report__fine">Aday havuzu: {POOL_LABELS[data.pool] || data.pool}.</p>
       <h4 className="report__subtitle">Benzer ülkelerde yayında olup bu ülkede olmayan diziler</h4>
-      <table className="dashboard__table dashboard__table--compact report__table">
-        <thead>
-          <tr>
-            <th scope="col">Dizi</th>
-            <th scope="col">Yayında olduğu benzer ülkeler</th>
-            <th scope="col">Netflix en iyi sıra</th>
-            <th scope="col">Boşluk puanı</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.items.map((g) => (
-            <tr key={g.tmdbId}>
-              <td>{g.name}</td>
-              <td>{g.availableIn.map(countryName).join(', ')}</td>
-              <td>{g.netflixBest != null ? g.netflixBest : '—'}</td>
-              <td>{fmtNum(g.gapScore, 1)}</td>
+      {data.items.length === 0 ? (
+        <p className="report__lead report__lead--ok">{data.message || EMPTY.gapNone}</p>
+      ) : (
+        <table className="dashboard__table dashboard__table--compact report__table">
+          <thead>
+            <tr>
+              <th scope="col">Dizi</th>
+              <th scope="col">Yayında olduğu benzer ülkeler</th>
+              <th scope="col">Netflix en iyi sıra</th>
+              <th scope="col">Boşluk puanı</th>
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody>
+            {data.items.map((g) => (
+              <tr key={g.tmdbId}>
+                <td>{g.name}</td>
+                <td>{g.availableIn.map(countryName).join(', ')}</td>
+                <td>{g.netflixBest != null ? g.netflixBest : '—'}</td>
+                <td>{fmtNum(g.gapScore, 1)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
       {data.totalGaps > data.items.length && (
         <p className="report__fine">
           İlk {data.items.length} gösteriliyor; toplam {data.totalGaps} boşluk.

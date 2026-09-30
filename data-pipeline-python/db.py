@@ -98,6 +98,41 @@ CREATE TABLE IF NOT EXISTS netflix_country_rankings (
     PRIMARY KEY (country_iso2, tmdb_id)
 );
 
+-- Eşleşen Türk dizilerinin HAFTALIK Top 10 satırları (ülke × hafta × dizi → sıra). Yukarıdaki
+-- özet tablo tüm dönemi toplar; izlenme sinyali son 52 haftayı buradan keser.
+CREATE TABLE IF NOT EXISTS netflix_weekly_ranks (
+    country_iso2 TEXT,
+    week TEXT,
+    tmdb_id INTEGER,
+    show_title TEXT,
+    rank INTEGER,
+    updated_at TEXT,
+    PRIMARY KEY (country_iso2, week, tmdb_id)
+);
+
+-- ORTAK LİSTE TABLOSU (bkz. providers/base.py): hangi kaynaktan gelirse gelsin her "Top" satırı burada.
+-- series_id boş olabilir (katalog dışı program); program_kind: series | other | unknown.
+-- Netflix: provider netflix_tudum, period_type week, segment 'TV'. reytingtv: provider reytingtv, day, segment Total/AB/20+ABC1.
+CREATE TABLE IF NOT EXISTS chart_entries (
+    provider TEXT NOT NULL,
+    platform TEXT,
+    country_iso2 TEXT NOT NULL,
+    period_type TEXT NOT NULL,
+    period_date TEXT NOT NULL,
+    segment TEXT NOT NULL DEFAULT '',
+    rank INTEGER NOT NULL,
+    series_id INTEGER,
+    title_raw TEXT,
+    program_kind TEXT DEFAULT 'unknown',
+    metric_value REAL,
+    metric_unit TEXT,
+    source_url TEXT,
+    fetched_at TEXT,
+    PRIMARY KEY (provider, country_iso2, period_type, period_date, segment, rank)
+);
+CREATE INDEX IF NOT EXISTS idx_chart_entries_series ON chart_entries (series_id, period_date);
+CREATE INDEX IF NOT EXISTS idx_chart_entries_period ON chart_entries (provider, period_date);
+
 -- Hattın kendi üst verisi (Node salt okunur okur): kaynak dosyanın kapsadığı hafta aralığı,
 -- dosyanın tam mı kısmi mi olduğu, son senkron zamanı. Rapor bunlarla "ülkenin son kaydı" ile
 -- "dosyanın son haftası" farkını ayırt eder (yoksa 'veri yok' ile 'dizi girmedi' karışır).
@@ -337,6 +372,65 @@ def save_netflix_country_rankings(conn: sqlite3.Connection, rankings: list[Netfl
         ],
     )
     conn.commit()
+
+
+def save_netflix_weekly_ranks(conn: sqlite3.Connection, rows: list[tuple], updated_at_iso: str) -> None:
+    """rows: (country_iso2, week, tmdb_id, show_title, rank). Aynı anahtar yeniden koşuda üzerine yazılır."""
+    conn.executemany(
+        """
+        INSERT INTO netflix_weekly_ranks (country_iso2, week, tmdb_id, show_title, rank, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+        ON CONFLICT(country_iso2, week, tmdb_id) DO UPDATE SET
+            show_title = excluded.show_title, rank = excluded.rank, updated_at = excluded.updated_at
+        """,
+        [(r[0], r[1], r[2], r[3], r[4], updated_at_iso) for r in rows],
+    )
+    conn.commit()
+
+
+def delete_stale_netflix_rows(conn: sqlite3.Connection, countries: list[str], before_iso: str) -> int:
+    """Bu koşuda bloğu TAM okunan ülkelerde, bu koşuda yenilenmemiş (updated_at < before_iso) satırları
+    siler — artık eşleşmeyen eski kayıtlar (ör. katalogdan düşen dizi) tabloda kalmasın. Kesilen ya da
+    dosyada olmayan ülkelere dokunulmaz. Silinen satır sayısını (iki tablo toplamı) döner."""
+    if not countries:
+        return 0
+    yer = ",".join("?" * len(countries))
+    toplam = 0
+    for tablo in ("netflix_country_rankings", "netflix_weekly_ranks"):
+        cur = conn.execute(
+            f"DELETE FROM {tablo} WHERE country_iso2 IN ({yer}) AND (updated_at IS NULL OR updated_at < ?)",
+            [*countries, before_iso],
+        )
+        toplam += cur.rowcount
+    cur = conn.execute(
+        f"DELETE FROM chart_entries WHERE provider = 'netflix_tudum' AND country_iso2 IN ({yer}) "
+        "AND (fetched_at IS NULL OR fetched_at < ?)",
+        [*countries, before_iso],
+    )
+    toplam += cur.rowcount
+    conn.commit()
+    return toplam
+
+
+def save_chart_entries(conn: sqlite3.Connection, entries) -> int:
+    """providers.base.ChartEntry listesini upsert eder; yazılan satır sayısını döner."""
+    rows = [e.as_row() for e in entries]
+    if not rows:
+        return 0
+    conn.executemany(
+        """
+        INSERT INTO chart_entries (provider, platform, country_iso2, period_type, period_date, segment, rank,
+            series_id, title_raw, program_kind, metric_value, metric_unit, source_url, fetched_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(provider, country_iso2, period_type, period_date, segment, rank) DO UPDATE SET
+            platform = excluded.platform, series_id = excluded.series_id, title_raw = excluded.title_raw,
+            program_kind = excluded.program_kind, metric_value = excluded.metric_value,
+            metric_unit = excluded.metric_unit, source_url = excluded.source_url, fetched_at = excluded.fetched_at
+        """,
+        rows,
+    )
+    conn.commit()
+    return len(rows)
 
 
 def save_reytingtv_daily_ranks(conn: sqlite3.Connection, ranks: list[ReytingTvDailyRank], fetched_at: str) -> None:

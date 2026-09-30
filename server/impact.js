@@ -5,6 +5,22 @@ import { getTourismLeadingSignalSummary } from './services/tourismTrendsCollecto
 import { getPipelineDb } from './services/pipelineDb.js'
 import { computeTourismCorrelation, PENDING_ANALYSIS } from './services/tourismCorrelation.js'
 import { getCached, setCached } from './cache.js'
+import { getCompletedMonthKeys } from './period-history.js'
+import { getVisitorMonthKeys } from './services/tourismData.js'
+import { CORRELATION_MIN_MONTHS, EMPTY } from '../src/lib/emptyStates.js'
+
+/** Korelasyon henüz kurulamadıysa "X/3 ay" — X, görünürlük aylık ortalamasıyla turist serisinin kesişen ay sayısı. */
+export function describePendingCorrelation(deps = {}) {
+  const gorunurluk = (deps.getCompletedMonthKeys || getCompletedMonthKeys)()
+  const turist = (deps.getVisitorMonthKeys || getVisitorMonthKeys)()
+  const monthsAvailable = [...gorunurluk].filter((k) => turist.has(k)).length
+  return {
+    ...PENDING_ANALYSIS,
+    monthsAvailable,
+    monthsRequired: CORRELATION_MIN_MONTHS,
+    accumulatingLabel: EMPTY.correlationAccumulating(monthsAvailable, CORRELATION_MIN_MONTHS),
+  }
+}
 
 export { pearsonCorrelation, confidenceInterval95, differenceInDifferences } from './services/tourismCorrelation.js'
 
@@ -129,7 +145,7 @@ export async function buildTourismImpact(countries, destinationRanking = []) {
     topDestinations: destinationBreakdown.top,
     otherDestinationsScore: destinationBreakdown.otherScore,
     concentrationWarning: buildConcentrationWarning(destinationBreakdown.top, destinationBreakdown.otherScore),
-    pendingAnalysis: tourismCorrelation || PENDING_ANALYSIS,
+    pendingAnalysis: tourismCorrelation || describePendingCorrelation(),
     leadingSignal: getTourismLeadingSignalSummary(),
   }
   setCached(TOURISM_IMPACT_CACHE_KEY, result, TOURISM_IMPACT_TTL_MS)
@@ -170,6 +186,6 @@ export async function buildImpactReport(countries, destinationRanking = []) {
     hasEnoughHistoryForTrends,
     topDestinations: destinationBreakdown.top,
     otherDestinationsScore: destinationBreakdown.otherScore,
-    pendingAnalysis: tourismCorrelation || PENDING_ANALYSIS,
+    pendingAnalysis: tourismCorrelation || describePendingCorrelation(),
   }
 }

@@ -13,6 +13,8 @@ import { analystRouter } from './routes/analyst.js'
 import { trendsRouter } from './routes/trends.js'
 import { impactRouter } from './routes/impact.js'
 import { reportRouter } from './routes/report.js'
+import { watchRouter } from './routes/watch.js'
+import { chartsRouter } from './routes/charts.js'
 
 // Uygulama kurulumu index.js'ten ayrıldı ki route testleri (supertest) sunucuyu dinlemeye almadan
 // ve zamanlayıcıyı başlatmadan aynı app'i kullanabilsin. index.js: app + scheduler + listen.
@@ -89,6 +91,8 @@ app.use(analystRouter)
 app.use(trendsRouter)
 app.use(impactRouter)
 app.use(reportRouter)
+app.use(watchRouter)
+app.use(chartsRouter)
 
 const distPath = path.join(__dirname, '..', 'dist')
 app.use('/map', express.static(path.join(distPath, 'map'), { maxAge: '30d', immutable: true }))
