@@ -4,7 +4,7 @@ import ErrorBoundary from './ErrorBoundary.jsx'
 import CountryLeaderboard from './CountryLeaderboard.jsx'
 import { HybridScoreTag } from './MediaSentimentCard.jsx'
 import SeriesPanel from './SeriesPanel.jsx'
-import CountryPanel from './CountryPanel.jsx'
+import CountryPanel, { WatchLists } from './CountryPanel.jsx'
 import CountryReportDocument from './report/CountryReportDocument.jsx'
 import CountryReportView from './report/CountryReportView.jsx'
 import ProfilePicker from './report/ProfilePicker.jsx'
@@ -517,5 +517,72 @@ describe('Kilit test — kaldırılan gösterge adları', () => {
     for (const r of [executive, marketing, producer]) {
       expect(renderToString(<CountryReportDocument report={r} countryName="Almanya" />)).not.toMatch(YASAKLI)
     }
+  })
+})
+
+describe('WatchLists — tüm platformlar, afişler, Türkiye TV', () => {
+  const charts = {
+    netflix: { status: 'hesaplandi', yearAgo: null },
+    lists: {
+      now: [
+        {
+          rank: 3,
+          seriesId: 7,
+          name: 'Uzak Şehir',
+          kind: 'series',
+          weeksInList: 1,
+          trend: 'yeni',
+          platform: 'Shahid',
+          posterPath: '/uzak.jpg',
+        },
+      ],
+      top: [
+        {
+          seriesId: 8,
+          name: 'Çukur',
+          kind: 'series',
+          periods: 2,
+          bestRank: 4,
+          lastDate: '2026-09-30',
+          platforms: ['Netflix', 'Shahid'],
+          posterPath: null,
+        },
+      ],
+      window: { from: '2025-10-02', to: '2026-09-30', weeks: 52 },
+    },
+    turkeyTv: {
+      date: '2026-08-23',
+      items: [
+        {
+          rank: 1,
+          seriesId: 9,
+          name: 'Kızılcık Şerbeti',
+          kind: 'series',
+          weeksInList: 40,
+          trend: '=',
+          posterPath: '/kizilcik.jpg',
+        },
+      ],
+    },
+  }
+
+  it('satırlarda platform ve afiş; afişi olmayan satırda yer tutucu', () => {
+    const html = renderToString(<WatchLists charts={charts} />)
+    expect(html).toContain('Shahid')
+    expect(html).toContain('Netflix, Shahid')
+    expect(html).toContain('https://image.tmdb.org/t/p/w92/uzak.jpg')
+    expect(html).toContain('chart-list__poster--empty')
+  })
+
+  it('Türkiye TV son günü tarihiyle ayrı liste olarak görünür', () => {
+    const html = renderToString(<WatchLists charts={charts} />)
+    expect(html).toMatch(/Türkiye TV — (<!-- -->)?23 Ağu 2026/)
+    expect(html).toContain('Kızılcık Şerbeti')
+    expect(html).toContain('https://image.tmdb.org/t/p/w92/kizilcik.jpg')
+  })
+
+  it('TV zaten "şu an" listesindeyse ayrı Türkiye TV bloğu tekrar edilmez', () => {
+    const tvNow = { ...charts, lists: { ...charts.lists, now: [{ ...charts.lists.now[0], platform: 'TV' }] } }
+    expect(renderToString(<WatchLists charts={tvNow} />)).not.toContain('Türkiye TV —')
   })
 })

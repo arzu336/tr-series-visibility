@@ -4874,6 +4874,24 @@ button.sidebar__big-card:hover {
   padding: 0.3rem 0.2rem;
 }
 
+.chart-list__poster {
+  width: 28px;
+  height: 42px;
+  object-fit: cover;
+  border-radius: 3px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.chart-list__poster--empty {
+  display: inline-block;
+}
+
+.chart-list--compact .chart-list__poster {
+  width: 24px;
+  height: 36px;
+}
+
 .chart-list__rank {
   min-width: 1.6rem;
   font-weight: 700;

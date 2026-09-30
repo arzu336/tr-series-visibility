@@ -1,5 +1,7 @@
 import { EMPTY } from '../lib/emptyStates.js'
 
+const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
+
 // Tek liste bileşeni: hangi sağlayıcıdan gelirse gelsin aynı görünüm — sıra, ad, kaç haftadır/gündür
 // listede, ↑↓/yeni. Altında kaynak ve son güncelleme (ChartSource). Uydurma yok: boş liste boş yazar.
 
@@ -45,7 +47,8 @@ function TrendBadge({ trend }) {
 }
 
 /**
- * items: [{ rank, name, kind, weeksInList|periods, trend?, bestRank?, lastDate?, meta? }]
+ * items: [{ rank, name, kind, weeksInList|periods, trend?, bestRank?, lastDate?, meta?, posterPath? }]
+ * showPosters: satır başında dizi afişi (yoksa boş yer tutucu)
  * periodWord: 'hafta' | 'gün'
  */
 export default function ChartList({
@@ -55,6 +58,7 @@ export default function ChartList({
   onSelect,
   compact = false,
   showKind = false,
+  showPosters = false,
 }) {
   if (!items || items.length === 0) return <p className="dashboard__empty">{emptyText}</p>
   return (
@@ -65,6 +69,12 @@ export default function ChartList({
         const inner = (
           <>
             <span className="chart-list__rank">{it.rank ?? i + 1}</span>
+            {showPosters &&
+              (it.posterPath ? (
+                <img className="chart-list__poster" src={`${POSTER_BASE}${it.posterPath}`} alt="" loading="lazy" />
+              ) : (
+                <span className="chart-list__poster chart-list__poster--empty" aria-hidden="true" />
+              ))}
             <span className="chart-list__body">
               <span className="chart-list__name">
                 {it.name}

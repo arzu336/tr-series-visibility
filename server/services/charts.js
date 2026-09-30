@@ -184,6 +184,7 @@ export function globalTopForWeek(rows, week, { nameOf = (id, raw) => raw } = {})
 
 // Liste platformları: chart_entries'te Netflix ayrı sağlayıcıdır (netflix_tudum, haftalık); diğerleri
 // flixpatrol sağlayıcısından gelir ve platform `segment` alanında taşınır (günlük anlık görüntü).
+// 'tv' = Türkiye TV günlük listesi (reytingtv, Total kategorisi) — yalnızca Türkiye panelinde.
 export const PLATFORM_LABELS = {
   netflix: 'Netflix',
   disney: 'Disney+',
@@ -191,6 +192,7 @@ export const PLATFORM_LABELS = {
   'hbo-max': 'HBO Max',
   'apple-tv': 'Apple TV+',
   shahid: 'Shahid',
+  tv: 'TV',
 }
 /** Bu kadar günden eski bir platform listesi "şu an" sayılmaz. */
 export const LIST_STALE_DAYS = 14
@@ -390,7 +392,7 @@ export async function getTurkeyTv({ date, segment = 'Total', onlySeries = true }
 
 /** Ülke paneli: kaynak sırasına göre gerçekler + liste + 1 yıl önce + zaman çizelgesi. */
 export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
-  const cacheKey = `charts:country:v2:${iso2}:${week ?? 'latest'}:${range}`
+  const cacheKey = `charts:country:v3:${iso2}:${week ?? 'latest'}:${range}`
   const cached = getCached(cacheKey)
   if (cached) return cached
   const conn = getPipelineDb()
@@ -452,10 +454,32 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
     }
   }
 
-  // Tüm platformlar birlikte: Netflix (haftalık) + FlixPatrol platformları (anlık görüntü).
-  const flixRows = conn ? readRows(conn, "provider='flixpatrol' AND country_iso2=?", [iso2]) : []
-  const lists = buildCountryLists({ netflixRows: rows, flixRows, latestWeek: latest, prevWeek: prev, nameOf })
-  const flixSeries = flixRows.filter((r) => r.series_id != null && r.program_kind === 'series')
+  // Tüm platformlar birlikte: Netflix (haftalık) + FlixPatrol platformları (anlık görüntü) + Türkiye
+  // panelinde Türkiye TV günlük listesi (Total kategorisi; platform olarak 'tv').
+  const tvRows =
+    conn && iso2 === 'TR'
+      ? readRows(conn, "provider='reytingtv' AND segment='Total'", []).map((r) => ({ ...r, segment: 'tv' }))
+      : []
+  const platformRows = [...(conn ? readRows(conn, "provider='flixpatrol' AND country_iso2=?", [iso2]) : []), ...tvRows]
+  const posterById = new Map(raw.series.map((sr) => [sr.id, sr.posterPath || null]))
+  const withPoster = (items) =>
+    items.map((it) => ({ ...it, posterPath: it.seriesId != null ? (posterById.get(it.seriesId) ?? null) : null }))
+  const built = buildCountryLists({
+    netflixRows: rows,
+    flixRows: platformRows,
+    latestWeek: latest,
+    prevWeek: prev,
+    nameOf,
+  })
+  const lists = { ...built, now: withPoster(built.now), top: withPoster(built.top) }
+  const flixSeries = platformRows.filter((r) => r.series_id != null && r.program_kind === 'series')
+  // Türkiye TV'nin en son yayımlanan günü ayrı liste olarak (tarihiyle): kaynak düzensiz yayımladığı
+  // için "şu an" listesine giremeyecek kadar eski olabilir; tarih açıkça gösterilir.
+  let turkeyTv = null
+  if (iso2 === 'TR') {
+    const tv = await getTurkeyTv({ segment: 'Total', onlySeries: true })
+    turkeyTv = tv.status === 'hesaplandi' ? { date: tv.date, items: withPoster(tv.items) } : null
+  }
 
   // 2) Wikipedia (ülkenin dilleri)
   const langs = languagesOfCountry(iso2)
@@ -547,6 +571,7 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
     wiki,
     access,
     lists,
+    turkeyTv,
     timeline: timeline([...rows, ...flixSeries], range),
     timelineRange: range,
   }

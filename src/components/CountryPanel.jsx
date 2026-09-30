@@ -205,13 +205,28 @@ export function WatchLists({ charts, onSelectSeries }) {
         <div className="panel__now">
           <ChartList
             compact
+            showPosters
             items={lists.now.map((it) => ({ ...it, meta: it.platform }))}
             emptyText="Bu hafta listelerde Türk dizisi yok."
             onSelect={onSelectSeries}
           />
         </div>
+        {charts.turkeyTv && !lists.now.some((it) => it.platform === 'TV') && (
+          <>
+            <h3>Türkiye TV — {fmtDateTr(charts.turkeyTv.date)}</h3>
+            <ChartList
+              compact
+              showPosters
+              periodWord="gün"
+              items={charts.turkeyTv.items}
+              emptyText="Bu günün listesinde dizi yok."
+              onSelect={onSelectSeries}
+            />
+          </>
+        )}
         <h3>Bu ülkede en çok izlenenler</h3>
         <ChartList
+          showPosters
           items={lists.top.map((t, i) => ({ ...t, rank: i + 1, meta: t.platforms.join(', ') }))}
           emptyText="Son 52 haftada listelere Türk dizisi girmedi."
           onSelect={onSelectSeries}
