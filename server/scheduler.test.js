@@ -31,6 +31,8 @@ vi.mock('./services/tourismTrendsCollector.js', () => ({
 vi.mock('./services/socialEnricher.js', () => ({ runSocialEnrichmentIfNeeded: kaydet('zincir:social') }))
 vi.mock('./services/actorTrendsCollector.js', () => ({ runActorTrendsCollectionIfNeeded: kaydet('zincir:actor') }))
 vi.mock('./services/netflixPipelineRunner.js', () => ({ runNetflixSyncIfNeeded: kaydet('zincir:netflix') }))
+vi.mock('./services/reytingtvRunner.js', () => ({ runReytingtvSyncIfNeeded: kaydet('zincir:reytingtv') }))
+vi.mock('./services/flixpatrolRunner.js', () => ({ runFlixpatrolSyncIfNeeded: kaydet('zincir:flixpatrol') }))
 
 const { runScheduledRefreshInner, startScheduler, META_KEY } = await import('./scheduler.js')
 
@@ -93,13 +95,21 @@ describe('zamanlanmış tetikleme', () => {
     expect(cagriSirasi).toContain('zincir:netflix')
   })
 
-  it('Netflix senkronizasyonu zincirin SONUNDA çalışır (15 dk sürebilir, önündekileri geciktirmez)', async () => {
+  it('liste çekimleri (Netflix, Türkiye TV, FlixPatrol) zincirin SONUNDA çalışır, önündekileri geciktirmez', async () => {
     await runScheduledRefreshInner()
 
     const netflixSira = cagriSirasi.indexOf('zincir:netflix')
     expect(netflixSira).toBeGreaterThan(cagriSirasi.indexOf('zincir:news'))
     expect(netflixSira).toBeGreaterThan(cagriSirasi.indexOf('zincir:tourismTrends'))
-    expect(netflixSira).toBe(cagriSirasi.length - 1)
+    expect(cagriSirasi.slice(netflixSira)).toEqual(['zincir:netflix', 'zincir:reytingtv', 'zincir:flixpatrol'])
+  })
+
+  it('Türkiye TV ve FlixPatrol, Netflix başarılı olduğunda da çalışır (catch içine düşme regresyonu)', async () => {
+    await runScheduledRefreshInner()
+
+    expect(cagriSirasi).toContain('zincir:netflix')
+    expect(cagriSirasi).toContain('zincir:reytingtv')
+    expect(cagriSirasi).toContain('zincir:flixpatrol')
   })
 
   it('Netflix senkronizasyonu FIRLATSA BİLE tetikleme çökmez ve bir sonraki tur çalışır', async () => {

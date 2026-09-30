@@ -31,7 +31,9 @@ chart_entries PK'si (provider, country_iso2, period_type, period_date, segment, 
 from __future__ import annotations
 
 import os
+import re
 import time
+from collections import defaultdict
 from datetime import date
 from pathlib import Path
 from typing import Optional
@@ -42,6 +44,7 @@ import netflix_pipeline as nfp  # resolve_netflix_title, load_title_aliases (tam
 import reytingtv_ranker as rtv  # load_tmdb_series_index
 from logsetup import get_logger
 from providers.base import ChartEntry, ChartProvider, classify_program_kind
+from providers.flixpatrol_countries import SLUG_TO_ISO2
 
 log = get_logger(__name__)
 
@@ -61,7 +64,9 @@ PLATFORMS: dict[str, str] = {
     # netflix'i resmî Tudum feed'inden alıyoruz (netflix_tudum); varsayılan kapsamda yok.
 }
 
-# Öncelikli pazarlar: FlixPatrol ülke slug'ı → ISO2.
+# Öncelikli pazarlar: FlixPatrol ülke slug'ı → ISO2. Kapsam bunlarla SINIRLI DEĞİL — her koşuda
+# platformun FlixPatrol dizininde listelenen tüm ülkeler çekilir (discover_countries); bunlar yalnızca
+# önce çekilir ki koşu yarıda kesilirse en önemli pazarlar kaydedilmiş olsun.
 COUNTRIES: dict[str, str] = {
     "spain": "ES", "italy": "IT", "germany": "DE", "russia": "RU", "romania": "RO",
     "bulgaria": "BG", "serbia": "RS", "greece": "GR", "saudi-arabia": "SA",
@@ -72,6 +77,54 @@ COUNTRIES: dict[str, str] = {
 # Geçmiş backfill için giriş yapılmış ücretli hesabın oturum cookie'leri (boşsa tarihli
 # sayfalar 402 döner). Örn: {"session": "...", "cf_clearance": "..."}
 SESSION_COOKIES: dict[str, str] = {}
+
+
+# FlixPatrol'un kullandığı uluslararası adlar → katalog TMDB kimliği. Her satır TMDB'de
+# origin_country=TR ve kimliği katalogda olan diziyle doğrulandı (2026-09-30, eşleşmemiş 164 başlık
+# tarandı). Netflix hattının takma ad listesinde olmayanlar burada; katalogda olmayan kimlik sessizce
+# atlanır (uydurma eşleşme yok).
+FLIXPATROL_TITLE_ALIASES: dict[int, tuple[str, ...]] = {
+    322499: ("Possible Love",),  # Muhtemel Aşk (Shahid)
+    317883: ("Torn Apart",),  # Daha 17 (Shahid)
+    322280: ("Master Omur",),  # Ömür Usta (Disney+)
+    308185: ("Power of Love",),  # Aşkın Gücü (Prime Video)
+    34899: ("Magnificent Century",),  # Muhteşem Yüzyıl (Prime Video)
+}
+
+# FlixPatrol Türkçe adları çoğu zaman aksansız yazar ("Esref Ruya" = "Eşref Rüya"); Netflix hattının
+# normalleştirmesi yalnızca büyük/küçük harfi eşitlediği için katlanmış varyantlar ayrıca eklenir.
+_TR_FOLD = str.maketrans("şŞıİğĞüÜöÖçÇâÂîÎûÛ", "sSiIgGuUoOcCaAiIuU")
+
+
+def build_match_index(series_index, extra_aliases=None):
+    """Eşleştirme havuzu: katalog + Netflix takma adları (IMDb AKA / yayın adı) + FlixPatrol adları
+    + Türkçe karakterleri katlanmış varyantlar. Katlanmış ad iki farklı diziye gidiyorsa atlanır."""
+    if not series_index:
+        return []
+    havuz = list(series_index)
+    havuz += nfp.load_title_aliases(series_index) if extra_aliases is None else list(extra_aliases)
+    katalog = {e.tmdb_id for e in series_index}
+    for tmdb_id, adlar in FLIXPATROL_TITLE_ALIASES.items():
+        if tmdb_id in katalog:
+            havuz += [rtv.SeriesIndexEntry(tmdb_id=tmdb_id, name=a, normalized=rtv.normalize_title(a)) for a in adlar]
+    katlanmis: dict[str, set[int]] = defaultdict(set)
+    for e in havuz:
+        f = e.name.translate(_TR_FOLD)
+        if f != e.name:
+            katlanmis[f].add(e.tmdb_id)
+    mevcut = {e.name for e in havuz}
+    for f, ids in katlanmis.items():
+        if len(ids) == 1 and f not in mevcut:
+            havuz.append(rtv.SeriesIndexEntry(tmdb_id=next(iter(ids)), name=f, normalized=rtv.normalize_title(f)))
+    return havuz
+
+
+def match_title(title: str, match_index) -> Optional[int]:
+    """FlixPatrol başlığını katalog kimliğine bağlar (tam ad; alt-dize değil). Bulamazsa None."""
+    if not match_index:
+        return None
+    m = nfp.resolve_netflix_title(title, match_index)
+    return m.tmdb_id if m else None
 
 
 def build_url(platform_slug: str, country_slug: str, day: Optional[str] = None) -> str:
@@ -129,9 +182,8 @@ def parse_top10_tv(
         detail_url = href if href.startswith("http") else f"https://flixpatrol.com{href}"
 
         # FlixPatrol satırı dizinin KENDİ adıdır (kanal adı içeren program metni değil): alt-dize
-        # araması yanlış eşleşme üretir, bu yüzden Netflix hattındaki tam-ad çözümleyici kullanılır.
-        match = nfp.resolve_netflix_title(title, series_index) if series_index else None
-        sid = match.tmdb_id if match else None
+        # araması yanlış eşleşme üretir, bu yüzden tam-ad çözümleyici kullanılır.
+        sid = match_title(title, series_index)
         out.append(
             ChartEntry(
                 provider="flixpatrol",
@@ -193,6 +245,20 @@ def _fetch_html(session, url: str) -> tuple[Optional[str], Optional[int]]:
     return None, status
 
 
+def discover_countries(session, platform_slug: str) -> list[tuple[str, str]]:
+    """Platformun FlixPatrol dizin sayfasındaki (/top10/<platform>/) ülkeler: [(slug, iso2)].
+    Böylece yalnızca gerçekten var olan sayfalar istenir (404 israfı yok) ve FlixPatrol yeni ülke
+    eklediğinde kod değişmeden kapsama girer. SLUG_TO_ISO2'de olmayan slug atlanır ve loglanır."""
+    html, _status = _fetch_html(session, f"{BASE_URL}/{platform_slug}/")
+    if not html:
+        return []
+    slugs = sorted(set(re.findall(rf"/top10/{re.escape(platform_slug)}/([a-z-]+)/", html)) - {"world"})
+    bilinmeyen = [s for s in slugs if s not in SLUG_TO_ISO2]
+    if bilinmeyen:
+        log.warning(f"flixpatrol: {platform_slug} icin ISO kodu bilinmeyen ulkeler atlandi: {bilinmeyen}")
+    return [(s, SLUG_TO_ISO2[s]) for s in slugs if s in SLUG_TO_ISO2]
+
+
 class FlixPatrolProvider(ChartProvider):
     name = "flixpatrol"
     platform = "multi"
@@ -215,7 +281,7 @@ class FlixPatrolProvider(ChartProvider):
 
     def coverage(self) -> dict:
         return {
-            "countries": sorted(COUNTRIES.values()),
+            "countries": sorted(set(SLUG_TO_ISO2.values())),  # platform dizinlerinden dinamik
             "platforms": sorted(PLATFORMS.values()),
             "period_type": "day",
             "since": None,  # yalnızca güncel; geçmiş 402 (paywall)
@@ -235,35 +301,44 @@ class FlixPatrolProvider(ChartProvider):
         """Ülke × platform sayfalarını TEK TEK üretir: (iso2, platform, durum_kodu, satırlar).
 
         Çağıran her sayfayı alır almaz kaydedebilsin diye üreteçtir — koşu yarıda kesilse bile
-        o ana kadarki veri kaybolmaz. `skip`: zaten çekilmiş (iso2, platform) çiftleri; bunlar
-        için istek atılmaz (kaldığı yerden devam).
+        o ana kadarki veri kaybolmaz. `countries` verilmezse her platformun ülkeleri FlixPatrol
+        dizininden okunur (discover_countries); öncelikli pazarlar (COUNTRIES) önce gelir.
+        `skip`: zaten çekilmiş (iso2, platform) çiftleri; bunlar için istek atılmaz.
         """
         if not self.enabled:
             raise RuntimeError(f"{ENV_ENABLE}=0 — FlixPatrol sağlayıcısı devre dışı.")
 
-        countries = countries or COUNTRIES
         platforms = platforms or PLATFORMS
         skip = skip or set()
         period_date = day or date.today().isoformat()
-        todo = [
-            (c_slug, c_iso2, p_slug, p_name)
-            for c_slug, c_iso2 in countries.items()
-            for p_slug, p_name in platforms.items()
-            if (c_iso2, p_name) not in skip
-        ]
-        if limit:
-            todo = todo[:limit]
-        if not todo:
-            return
-
-        series_index = rtv.load_tmdb_series_index(self.node_app_db_path) if self.node_app_db_path else []
-        if series_index:
-            # FlixPatrol dizileri uluslararası (çoğunlukla İngilizce) adlarıyla listeler; katalog
-            # Türkçe adları taşır. Netflix hattının takma adları (IMDb AKA + yayın adı) eklenir.
-            series_index = series_index + nfp.load_title_aliases(series_index)
-        session = open_session()
+        session = None
         try:
-            for c_slug, c_iso2, p_slug, p_name in todo:
+            if countries is not None:
+                plan = [(c, iso, p, name) for c, iso in countries.items() for p, name in platforms.items()]
+            else:
+                session = open_session()
+                plan = []
+                for p_slug, p_name in platforms.items():
+                    bulunan = discover_countries(session, p_slug) or list(COUNTRIES.items())
+                    plan += [(c, iso, p_slug, p_name) for c, iso in bulunan]
+                oncelik = {iso: i for i, iso in enumerate(COUNTRIES.values())}
+                plat_sira = {p: i for i, p in enumerate(platforms)}
+                plan.sort(key=lambda x: (oncelik.get(x[1], len(oncelik)), x[1], plat_sira[x[2]]))
+            plan = [x for x in plan if (x[1], x[3]) not in skip]
+            if limit:
+                plan = plan[:limit]
+            if not plan:
+                return
+
+            # FlixPatrol dizileri uluslararası (çoğunlukla İngilizce) adlarıyla listeler; katalog Türkçe
+            # adları taşır — havuz takma adlarla genişletilir (bkz. build_match_index).
+            series_index = build_match_index(
+                rtv.load_tmdb_series_index(self.node_app_db_path) if self.node_app_db_path else []
+            )
+            if session is None:
+                session = open_session()
+            log.info(f"flixpatrol: {len(plan)} sayfa cekilecek ({len(skip)} cift atlandi)")
+            for c_slug, c_iso2, p_slug, p_name in plan:
                 url = build_url(p_slug, c_slug, day)
                 html, status = _fetch_html(session, url)
                 rows = (
@@ -283,10 +358,11 @@ class FlixPatrolProvider(ChartProvider):
                 yield c_iso2, p_name, status, rows
                 time.sleep(self.request_delay_s)
         finally:
-            try:
-                session.close()
-            except Exception:  # noqa: BLE001
-                pass
+            if session is not None:
+                try:
+                    session.close()
+                except Exception:  # noqa: BLE001
+                    pass
 
     def fetch(self, **kwargs) -> list[ChartEntry]:
         """Güncel TV Top 10'u ülke × platform için kazır ve tüm satırları tek listede döner.

@@ -222,6 +222,49 @@ class TestFlixPatrol:
         assert len(oturum.urls) == 3  # 404 yeniden denenmedi, atlanan çifte istek gitmedi
         assert fp.build_url("disney", "spain") not in oturum.urls
 
+    def test_ulke_listesi_platform_dizininden_ve_oncelik_sirasi(self):
+        class Sayfa:
+            def __init__(self, status, html=""):
+                self.status, self.html_content = status, html
+
+        dizin = {
+            "https://flixpatrol.com/top10/disney/": "<a href='/top10/disney/albania/'>x</a><a href='/top10/disney/spain/'>x</a>"
+            "<a href='/top10/disney/world/'>x</a><a href='/top10/disney/atlantis/'>x</a>",
+            "https://flixpatrol.com/top10/shahid/": "<a href='/top10/shahid/iraq/'>x</a>",
+        }
+
+        class Oturum:
+            urls = []
+
+            def fetch(self, url):
+                Oturum.urls.append(url)
+                if url in dizin:
+                    return Sayfa(200, dizin[url])
+                return Sayfa(200, TestFlixPatrol.HTML)
+
+            def close(self):
+                pass
+
+        p = FlixPatrolProvider(request_delay_s=0)
+        sayfalar = list(
+            p.iter_pages(platforms={"disney": "disney", "shahid": "shahid"}, open_session=Oturum, fetched_at="t")
+        )
+        # world ve ISO kodu bilinmeyen slug atlanır; öncelikli pazar (ES) önce, sonra alfabetik
+        assert [(i, pl) for i, pl, _s, _r in sayfalar] == [("ES", "disney"), ("AL", "disney"), ("IQ", "shahid")]
+        assert all(len(r) == 3 for _i, _p, _s, r in sayfalar)
+
+    def test_eslestirme_havuzu_flixpatrol_adi_ve_turkce_katlama(self):
+        from providers.flixpatrol import build_match_index, match_title
+
+        katalog = [SeriesIndexEntry(283123, "Eşref Rüya", normalize_title("Eşref Rüya")),
+                   SeriesIndexEntry(34899, "Muhteşem Yüzyıl", normalize_title("Muhteşem Yüzyıl"))]
+        havuz = build_match_index(katalog, extra_aliases=[])
+        assert match_title("Esref Ruya", havuz) == 283123
+        assert match_title("Magnificent Century", havuz) == 34899
+        assert match_title("Magnificent Century: Kösem", havuz) is None  # alt-dize değil, tam ad
+        assert match_title("Loki", havuz) is None
+        assert build_match_index([]) == []
+
     def test_iter_pages_is_kalmadiysa_oturum_acmaz(self):
         p = FlixPatrolProvider(request_delay_s=0)
 

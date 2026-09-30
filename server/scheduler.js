@@ -105,12 +105,15 @@ async function runZenginlestirmeZinciri() {
   try {
     await runNetflixSyncIfNeeded()
   } catch (err) {
-    try {
-      await runReytingtvSyncIfNeeded()
-    } catch (err) {
-      console.error('[scheduler] Türkiye TV listesi çekimi başarısız:', err.message)
-    }
     console.error('[scheduler] Netflix senkronizasyonu başarısız:', err.message)
+  }
+
+  // Türkiye TV günlük listesi bağımsız çalışır. Önceden Netflix'in catch bloğunun içindeydi, yani
+  // yalnızca Netflix hata verdiğinde çalışıyordu (zamanlanmış hiçbir reytingtv koşusu kaydı yoktu).
+  try {
+    await runReytingtvSyncIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] Türkiye TV listesi çekimi başarısız:', err.message)
   }
 
   // FlixPatrol bağımsız çalışır (Netflix/reyting sonucundan etkilenmez); haftalık kapı

@@ -19,8 +19,9 @@ export const META_LAST_ATTEMPT = 'lastFlixpatrolSyncAttemptAt'
 export const META_LAST_ERROR = 'lastFlixpatrolSyncError'
 export const INTERVAL_MS = 7 * 24 * 60 * 60 * 1000 // haftalık
 export const RETRY_BACKOFF_MS = 12 * 60 * 60 * 1000 // başarısızlıkta 12 saat bekle
-// ~18 ülke × 5 platform × (Cloudflare çözüm + istek gecikmesi) uzun sürer; cömert üst sınır.
-export const RUN_TIMEOUT_MS = 90 * 60 * 1000
+// Tüm platformların FlixPatrol'daki tüm ülkeleri (~400 sayfa, sayfa başına birkaç sn; tek tarayıcı
+// oturumu) yaklaşık 45-60 dk. Python her sayfayı hemen kaydettiği için sınır aşılsa bile veri kalır.
+export const RUN_TIMEOUT_MS = 150 * 60 * 1000
 const MAX_OUTPUT_BYTES = 10 * 1024 * 1024
 
 const getMetaStmt = db.prepare('SELECT value FROM meta WHERE key = ?')

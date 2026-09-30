@@ -9,9 +9,10 @@ bilgisayarın uykuya geçmesi) o ana kadarki veri kalır. Aynı gün yeniden ça
 kaydedilmiş çiftler atlanır, kaldığı yerden devam eder.
 
 Kullanım:
-    python fetch_flixpatrol.py                 # tüm öncelikli ülke × platform
+    python fetch_flixpatrol.py                 # tüm platformlar × FlixPatrol'daki tüm ülkeleri
     python fetch_flixpatrol.py --limit 3       # ilk 3 (ülke,platform) — hızlı deneme
     python fetch_flixpatrol.py --force         # bugün çekilmiş olanları da yeniden çek
+    python fetch_flixpatrol.py --rematch       # ağa çıkmadan kayıtlı satırları yeniden eşleştir
 """
 from __future__ import annotations
 
@@ -40,6 +41,34 @@ def fetched_pairs(conn: sqlite3.Connection, period_date: str) -> set[tuple[str, 
         (period_date,),
     ).fetchall()
     return {(r[0], r[1]) for r in rows}
+
+
+def rematch(conn: sqlite3.Connection, match_index) -> dict:
+    """Kayıtlı FlixPatrol satırlarını güncel eşleştirme havuzuyla yeniden eşler (ağ yok). Takma ad
+    listesi genişlediğinde tüm arşive uygulanır; yalnızca değişen satırlar yazılır."""
+    from providers.base import classify_program_kind
+    from providers.flixpatrol import match_title
+
+    rows = conn.execute(
+        "SELECT rowid, title_raw, series_id, program_kind FROM chart_entries WHERE provider = 'flixpatrol'"
+    ).fetchall()
+    cache: dict[str, object] = {}
+    changed = 0
+    for rowid, title, sid, kind in rows:
+        if title not in cache:
+            cache[title] = match_title(title, match_index)
+        new_sid = cache[title]
+        new_kind = classify_program_kind(title, new_sid)
+        if new_sid != sid or new_kind != kind:
+            conn.execute(
+                "UPDATE chart_entries SET series_id = ?, program_kind = ? WHERE rowid = ?", (new_sid, new_kind, rowid)
+            )
+            changed += 1
+    conn.commit()
+    matched = conn.execute(
+        "SELECT COUNT(*) FROM chart_entries WHERE provider = 'flixpatrol' AND series_id IS NOT NULL"
+    ).fetchone()[0]
+    return {"status": "ok", "rows": len(rows), "changed": changed, "matched_rows": matched}
 
 
 def run(
@@ -98,8 +127,20 @@ def main() -> None:
     ap = argparse.ArgumentParser(description="FlixPatrol güncel TV Top 10 → chart_entries")
     ap.add_argument("--limit", type=int, default=None, help="ilk N (ülke,platform) çifti (deneme için)")
     ap.add_argument("--force", action="store_true", help="bugün çekilmiş çiftleri de yeniden çek")
+    ap.add_argument("--rematch", action="store_true", help="ağa çıkmadan kayıtlı satırları yeniden eşleştir")
     args = ap.parse_args()
-    print(json.dumps(run(limit=args.limit, force=args.force), ensure_ascii=True))
+    if args.rematch:
+        import reytingtv_ranker as rtv
+        from providers.flixpatrol import build_match_index
+
+        conn = db.get_connection(DB_PATH)
+        try:
+            result = rematch(conn, build_match_index(rtv.load_tmdb_series_index(NODE_DB_PATH)))
+        finally:
+            conn.close()
+    else:
+        result = run(limit=args.limit, force=args.force)
+    print(json.dumps(result, ensure_ascii=True))
 
 
 if __name__ == "__main__":
