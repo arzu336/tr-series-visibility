@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { fetchImdbData, fetchSeriesEnrichment, fetchSeriesCharts } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
 import CastBar from './CastBar.jsx'
+import MagazineNews from './MagazineNews.jsx'
 import ChartList, { ChartSource } from './ChartList.jsx'
 import { NETFLIX_RANK_NOTE, AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import countryNames from '../data/country-centroids.json'
@@ -111,6 +112,9 @@ export default function SeriesPanel({ seriesId, allCountries, onSelectActor, onS
           <CastBar cast={series.cast} onSelectActor={onSelectActor} />
         </>
       )}
+
+      <h3>Magazin</h3>
+      <MagazineNews seriesId={seriesId} />
 
       <h3>Listeye Girdiği Ülkeler</h3>
       {chartsReq.status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}

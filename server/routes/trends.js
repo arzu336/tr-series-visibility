@@ -20,6 +20,7 @@ import { getEnrichmentTargets } from '../services/enrichmentTargets.js'
 import { getSeriesTrendInsight } from '../services/seriesTrendInsight.js'
 import { enrichSeriesNewsNow } from '../services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from '../services/socialEnricher.js'
+import { getMagazineNews } from '../services/magazineNews.js'
 import { getCached } from '../cache.js'
 import {
   isValidIso2,
@@ -248,6 +249,16 @@ trendsRouter.get(
       totalEpisodes: enrichment?.dizilah?.totalEpisodes ?? null,
       cast: series.cast || [],
     })
+  })
+)
+
+// Dizi ve başrol oyuncuları hakkında güncel magazin haberleri (izinli kaynaklar, 2 gün önbellek).
+trendsRouter.get(
+  '/api/series/:tmdbId/magazine',
+  upstream('series-magazine', async (req, res) => {
+    const series = liveSeriesOr404(res, Number(req.params.tmdbId))
+    if (!series) return
+    res.json(await getMagazineNews(series))
   })
 )
 

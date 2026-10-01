@@ -6,6 +6,7 @@ import { HybridScoreTag } from './MediaSentimentCard.jsx'
 import SeriesPanel from './SeriesPanel.jsx'
 import CountryPanel, { WatchLists } from './CountryPanel.jsx'
 import ChartList from './ChartList.jsx'
+import { MagazineList } from './MagazineNews.jsx'
 import CountryReportDocument from './report/CountryReportDocument.jsx'
 import CountryReportView from './report/CountryReportView.jsx'
 import ProfilePicker from './report/ProfilePicker.jsx'
@@ -604,5 +605,41 @@ describe('ChartList trend işaretleri (Spotify tarzı)', () => {
   it('ilk kez giren YENİ, geri giren TEKRAR rozeti', () => {
     expect(html).toMatch(/chart-list__trend--new[^>]*>YENİ</)
     expect(html).toMatch(/chart-list__trend--reentry[^>]*>TEKRAR</)
+  })
+})
+
+describe('MagazineList', () => {
+  it('başlık, kaynak, tarih ve yeni sekmede açılan bağlantı; güvensiz bağlantı gösterilmez', () => {
+    const html = renderToString(
+      <MagazineList
+        items={[
+          {
+            title: 'Yalı Çapkını final yaptı',
+            source: 'Sabah',
+            link: 'https://www.sabah.com.tr/a',
+            date: '2026-09-28T10:00:00.000Z',
+            about: 'dizi',
+          },
+          {
+            title: 'Afra Saraçoğlu tatilde',
+            source: 'Milliyet',
+            link: 'https://www.milliyet.com.tr/b',
+            date: null,
+            about: 'Afra Saraçoğlu',
+          },
+          { title: 'Zararlı', source: 'X', link: 'javascript:alert(1)', date: null, about: 'dizi' },
+        ]}
+      />
+    )
+    expect(html).toContain('href="https://www.sabah.com.tr/a"')
+    expect(html).toContain('target="_blank"')
+    expect(html).toContain('rel="noopener noreferrer"')
+    expect(html).toMatch(/Sabah(<!-- -->)? · 28 Eyl 2026/)
+    expect(html).toContain('Afra Saraçoğlu')
+    expect(html).not.toContain('Zararlı')
+  })
+
+  it('haber yoksa boş durum metni', () => {
+    expect(renderToString(<MagazineList items={[]} />)).toContain('güncel haber bulunamadı')
   })
 })

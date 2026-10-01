@@ -6,6 +6,7 @@ import { fetchRegionalInterest, fetchCountryCharts } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import PeriodChart from './PeriodChart.jsx'
 import MediaSentimentCard, { HybridScoreTag } from './MediaSentimentCard.jsx'
+import MagazineNews from './MagazineNews.jsx'
 import ChartList, { fmtDateTr } from './ChartList.jsx'
 import { AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import { useAsync } from '../lib/useAsync.js'
@@ -484,6 +485,8 @@ export default function CountryPanel({
                               )}
                               <h4 className="panel__series-detail-heading">Basın &amp; Medya Algısı</h4>
                               <MediaSentimentCard seriesId={s.id} iso2={country.iso2} />
+                              <h4 className="panel__series-detail-heading">Magazin</h4>
+                              <MagazineNews seriesId={s.id} />
                             </div>
                           )}
                         </li>

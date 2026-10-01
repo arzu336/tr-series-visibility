@@ -162,6 +162,10 @@ export async function fetchSeriesMeta(tmdbId) {
   return handle(await fetch(`/api/series/${tmdbId}`))
 }
 
+export async function fetchMagazineNews(tmdbId) {
+  return handle(await fetch(`/api/series/${tmdbId}/magazine`))
+}
+
 export async function fetchCountryLeaderboard(iso2) {
   return handle(await fetch(`/api/country-leaderboard/${iso2}`))
 }
