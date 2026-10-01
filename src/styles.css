@@ -4949,16 +4949,7 @@ button.sidebar__big-card:hover {
 
 .chart-list__trend--up,
 .chart-list__trend--down {
-  display: inline-flex;
-  align-items: center;
-  justify-content: flex-end;
-  gap: 0.15rem;
-  font-variant-numeric: tabular-nums;
-}
-
-.chart-list__trend--up span,
-.chart-list__trend--down span {
-  font-size: 0.6rem;
+  font-size: 0.7rem;
 }
 
 .chart-list__trend--same {

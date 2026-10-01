@@ -26,8 +26,8 @@ export function ChartSource({ source, periodLabel }) {
   )
 }
 
-// Spotify listelerindeki gibi: yükselen yeşil ▲, düşen kırmızı ▼, aynı kalan gri çizgi; listeye ilk
-// kez giren "YENİ", daha önce listede olup geri giren "TEKRAR" rozeti.
+// Spotify listelerindeki gibi: yükselen yeşil ▲, düşen kırmızı ▼ (kaç sıra olduğu yalnızca ipucunda),
+// aynı kalan gri çizgi; listeye ilk kez giren "YENİ", daha önce listede olup geri giren "TEKRAR" rozeti.
 const TREND_LABELS = {
   yeni: 'listeye ilk kez girdi',
   tekrar: 'listeye geri girdi',
@@ -47,20 +47,10 @@ function TrendBadge({ trend }) {
   let content = trend
   if (up) {
     cls += ' chart-list__trend--up'
-    content = (
-      <>
-        <span aria-hidden="true">▲</span>
-        {trend.slice(1)}
-      </>
-    )
+    content = '▲'
   } else if (down) {
     cls += ' chart-list__trend--down'
-    content = (
-      <>
-        <span aria-hidden="true">▼</span>
-        {trend.slice(1)}
-      </>
-    )
+    content = '▼'
   } else if (trend === '=') {
     cls += ' chart-list__trend--same'
     content = '–'

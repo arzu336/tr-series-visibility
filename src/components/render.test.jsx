@@ -594,11 +594,10 @@ describe('ChartList trend işaretleri (Spotify tarzı)', () => {
     <ChartList items={[satir(1, '↑3'), satir(2, '↓2'), satir(3, '='), satir(4, 'yeni'), satir(5, 'tekrar')]} />
   )
 
-  it('yükselen ▲ yeşil, düşen ▼ kırmızı, aynı kalan gri çizgi', () => {
-    expect(html).toMatch(/chart-list__trend--up[^>]*aria-label="3 sıra yükseldi"/)
-    expect(html).toMatch(/chart-list__trend--down[^>]*aria-label="2 sıra düştü"/)
-    expect(html).toContain('▲')
-    expect(html).toContain('▼')
+  it('yükselen yeşil ▲, düşen kırmızı ▼ — sayı görünmez, yalnızca ipucunda; aynı kalan gri çizgi', () => {
+    expect(html).toMatch(/chart-list__trend--up[^>]*aria-label="3 sıra yükseldi"[^>]*>▲</)
+    expect(html).toMatch(/chart-list__trend--down[^>]*aria-label="2 sıra düştü"[^>]*>▼</)
+    expect(html).not.toMatch(/>▲3|>▼2/)
     expect(html).toMatch(/chart-list__trend--same[^>]*>–</)
   })
 
