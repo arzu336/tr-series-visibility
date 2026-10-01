@@ -237,3 +237,19 @@ describe('collapseSeasons — aynı dönemde aynı dizinin sezonları tek satır
     expect(collapseSeasons(ozet)).toBe(ozet)
   })
 })
+
+describe('trend — tekrar giriş', () => {
+  it('daha önce listede olup önceki dönemde olmayan dizi "tekrar", hiç olmayan "yeni"', () => {
+    const satirlar = [
+      row('2026-09-06', 4, 1, 'My Name Is Farah'),
+      row('2026-09-13', 2, 3, 'Not a Stranger'),
+      row('2026-09-20', 7, 1, 'My Name Is Farah'),
+      row('2026-09-20', 5, 2, 'Another Night'),
+    ]
+    const liste = chartForPeriod(satirlar, '2026-09-20', { prevPeriodDate: '2026-09-13', nameOf })
+    expect(liste.map((i) => [i.name, i.trend])).toEqual([
+      ['Enfes Bir Akşam', 'yeni'],
+      ['Adım Farah', 'tekrar'],
+    ])
+  })
+})

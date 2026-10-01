@@ -4947,8 +4947,40 @@ button.sidebar__big-card:hover {
   color: #ff6b6b;
 }
 
+.chart-list__trend--up,
+.chart-list__trend--down {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.15rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.chart-list__trend--up span,
+.chart-list__trend--down span {
+  font-size: 0.6rem;
+}
+
+.chart-list__trend--same {
+  color: #5d677c;
+}
+
+.chart-list__trend--pill {
+  min-width: 0;
+  padding: 0.05rem 0.35rem;
+  border-radius: 4px;
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+}
+
 .chart-list__trend--new {
-  color: #3987e5;
+  color: #8ec5ff;
+  background: rgba(57, 135, 229, 0.18);
+}
+
+.chart-list__trend--reentry {
+  color: #c4b5fd;
+  background: rgba(139, 92, 246, 0.18);
 }
 
 .chart-source {

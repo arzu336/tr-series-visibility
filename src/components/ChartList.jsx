@@ -26,22 +26,54 @@ export function ChartSource({ source, periodLabel }) {
   )
 }
 
+// Spotify listelerindeki gibi: yükselen yeşil ▲, düşen kırmızı ▼, aynı kalan gri çizgi; listeye ilk
+// kez giren "YENİ", daha önce listede olup geri giren "TEKRAR" rozeti.
+const TREND_LABELS = {
+  yeni: 'listeye ilk kez girdi',
+  tekrar: 'listeye geri girdi',
+  '=': 'sıra değişmedi',
+}
+
 function TrendBadge({ trend }) {
   if (!trend) return null
-  const cls =
-    trend === 'yeni'
-      ? 'chart-list__trend chart-list__trend--new'
-      : trend.startsWith('↑')
-        ? 'chart-list__trend chart-list__trend--up'
-        : trend.startsWith('↓')
-          ? 'chart-list__trend chart-list__trend--down'
-          : 'chart-list__trend'
+  const up = trend.startsWith('↑')
+  const down = trend.startsWith('↓')
+  const label = up
+    ? `${trend.slice(1)} sıra yükseldi`
+    : down
+      ? `${trend.slice(1)} sıra düştü`
+      : (TREND_LABELS[trend] ?? trend)
+  let cls = 'chart-list__trend'
+  let content = trend
+  if (up) {
+    cls += ' chart-list__trend--up'
+    content = (
+      <>
+        <span aria-hidden="true">▲</span>
+        {trend.slice(1)}
+      </>
+    )
+  } else if (down) {
+    cls += ' chart-list__trend--down'
+    content = (
+      <>
+        <span aria-hidden="true">▼</span>
+        {trend.slice(1)}
+      </>
+    )
+  } else if (trend === '=') {
+    cls += ' chart-list__trend--same'
+    content = '–'
+  } else if (trend === 'yeni') {
+    cls += ' chart-list__trend--pill chart-list__trend--new'
+    content = 'YENİ'
+  } else if (trend === 'tekrar') {
+    cls += ' chart-list__trend--pill chart-list__trend--reentry'
+    content = 'TEKRAR'
+  }
   return (
-    <span
-      className={cls}
-      aria-label={trend === 'yeni' ? 'listeye yeni girdi' : trend === '=' ? 'sıra değişmedi' : `sıra değişimi ${trend}`}
-    >
-      {trend}
+    <span className={cls} title={label} aria-label={label}>
+      {content}
     </span>
   )
 }

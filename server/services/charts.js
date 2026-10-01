@@ -46,7 +46,10 @@ function sourceOf(provider, rows) {
 
 // ---------------------------------------------------------------- saf hesaplar (test edilebilir)
 
-/** Belirli hafta/gün için liste; önceki döneme göre ↑↓/yeni ve o dönem itibarıyla kaç dönemdir listede. */
+/**
+ * Belirli hafta/gün için liste; önceki döneme göre trend ('↑n' | '↓n' | '=' | 'yeni' | 'tekrar') ve o dönem
+ * itibarıyla kaç dönemdir listede. 'tekrar': daha önce listede bulunmuş, önceki dönemde yokken geri girmiş.
+ */
 export function chartForPeriod(rows, periodDate, { prevPeriodDate = null, nameOf = (id, raw) => raw } = {}) {
   const cur = rows.filter((r) => r.period_date === periodDate).sort((a, b) => a.rank - b.rank)
   const prev = new Map(rows.filter((r) => r.period_date === prevPeriodDate).map((r) => [keyOf(r), r.rank]))
@@ -54,7 +57,17 @@ export function chartForPeriod(rows, periodDate, { prevPeriodDate = null, nameOf
     const k = keyOf(r)
     const weeksInList = rows.filter((x) => keyOf(x) === k && x.period_date <= periodDate).length
     const p = prevPeriodDate ? prev.get(k) : undefined
-    const trend = p == null ? 'yeni' : p > r.rank ? `↑${p - r.rank}` : p < r.rank ? `↓${r.rank - p}` : '='
+    // Önceki dönemde yoksa: daha önce hiç listede olmadıysa 'yeni', olduysa listeye geri girmiştir ('tekrar').
+    const trend =
+      p == null
+        ? weeksInList > 1
+          ? 'tekrar'
+          : 'yeni'
+        : p > r.rank
+          ? `↑${p - r.rank}`
+          : p < r.rank
+            ? `↓${r.rank - p}`
+            : '='
     return {
       rank: r.rank,
       seriesId: r.series_id ?? null,
@@ -410,7 +423,7 @@ export async function getTurkeyTv({ date, segment = 'Total', onlySeries = true }
 
 /** Ülke paneli: kaynak sırasına göre gerçekler + liste + 1 yıl önce + zaman çizelgesi. */
 export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
-  const cacheKey = `charts:country:v4:${iso2}:${week ?? 'latest'}:${range}`
+  const cacheKey = `charts:country:v5:${iso2}:${week ?? 'latest'}:${range}`
   const cached = getCached(cacheKey)
   if (cached) return cached
   const conn = getPipelineDb()

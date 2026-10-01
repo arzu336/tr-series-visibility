@@ -5,6 +5,7 @@ import CountryLeaderboard from './CountryLeaderboard.jsx'
 import { HybridScoreTag } from './MediaSentimentCard.jsx'
 import SeriesPanel from './SeriesPanel.jsx'
 import CountryPanel, { WatchLists } from './CountryPanel.jsx'
+import ChartList from './ChartList.jsx'
 import CountryReportDocument from './report/CountryReportDocument.jsx'
 import CountryReportView from './report/CountryReportView.jsx'
 import ProfilePicker from './report/ProfilePicker.jsx'
@@ -584,5 +585,25 @@ describe('WatchLists — tüm platformlar, afişler, Türkiye TV', () => {
   it('TV zaten "şu an" listesindeyse ayrı Türkiye TV bloğu tekrar edilmez', () => {
     const tvNow = { ...charts, lists: { ...charts.lists, now: [{ ...charts.lists.now[0], platform: 'TV' }] } }
     expect(renderToString(<WatchLists charts={tvNow} />)).not.toContain('Türkiye TV —')
+  })
+})
+
+describe('ChartList trend işaretleri (Spotify tarzı)', () => {
+  const satir = (rank, trend) => ({ rank, seriesId: rank, name: `Dizi ${rank}`, kind: 'series', weeksInList: 2, trend })
+  const html = renderToString(
+    <ChartList items={[satir(1, '↑3'), satir(2, '↓2'), satir(3, '='), satir(4, 'yeni'), satir(5, 'tekrar')]} />
+  )
+
+  it('yükselen ▲ yeşil, düşen ▼ kırmızı, aynı kalan gri çizgi', () => {
+    expect(html).toMatch(/chart-list__trend--up[^>]*aria-label="3 sıra yükseldi"/)
+    expect(html).toMatch(/chart-list__trend--down[^>]*aria-label="2 sıra düştü"/)
+    expect(html).toContain('▲')
+    expect(html).toContain('▼')
+    expect(html).toMatch(/chart-list__trend--same[^>]*>–</)
+  })
+
+  it('ilk kez giren YENİ, geri giren TEKRAR rozeti', () => {
+    expect(html).toMatch(/chart-list__trend--new[^>]*>YENİ</)
+    expect(html).toMatch(/chart-list__trend--reentry[^>]*>TEKRAR</)
   })
 })
