@@ -657,12 +657,44 @@ export async function getContinentCharts(continentByIso2, continents) {
   })
 }
 
-/** Dizi seçilince: listeye girdiği ülkeler (hafta sayısı, en iyi sıra), sıra geçmişi. */
+/**
+ * Dizinin girdiği tüm listeler, ülke × platform: Netflix (haftalık), FlixPatrol platformları ve Türkiye TV.
+ * Hafta = farklı takvim haftası (aynı hafta birden çok anlık görüntü tek sayılır). En son girilen önce.
+ */
+export function seriesListings({ netflixRows = [], flixRows = [], tvRows = [] } = {}) {
+  const agg = new Map()
+  const tagged = [
+    ...netflixRows.map((r) => [r, 'netflix']),
+    ...flixRows.map((r) => [r, r.segment]),
+    ...tvRows.map((r) => [r, 'tv']),
+  ]
+  for (const [r, slug] of tagged) {
+    const k = `${r.country_iso2}|${slug}`
+    const a = agg.get(k) || {
+      iso2: r.country_iso2,
+      platform: platformLabel(slug),
+      weekSet: new Set(),
+      bestRank: 99,
+      lastDate: null,
+    }
+    a.weekSet.add(weekEndOf(r.period_date))
+    a.bestRank = Math.min(a.bestRank, r.rank)
+    if (!a.lastDate || r.period_date > a.lastDate) a.lastDate = r.period_date
+    agg.set(k, a)
+  }
+  return [...agg.values()]
+    .map(({ weekSet, ...a }) => ({ ...a, weeks: weekSet.size }))
+    .sort((a, b) => b.lastDate.localeCompare(a.lastDate) || b.weeks - a.weeks || a.bestRank - b.bestRank)
+}
+
+/** Dizi seçilince: listeye girdiği ülkeler (Netflix; hafta sayısı, en iyi sıra), tüm platform listeleri, sıra geçmişi. */
 export async function getSeriesCharts(tmdbId) {
   const conn = getPipelineDb()
   if (!conn) return { status: 'hesaplanamaz', reason: EMPTY.netflixDbMissing, countries: [], history: [] }
   const rows = readRows(conn, "provider='netflix_tudum' AND series_id=?", [tmdbId])
   const tv = readRows(conn, "provider='reytingtv' AND series_id=? AND segment='Total'", [tmdbId])
+  const flix = readRows(conn, "provider='flixpatrol' AND series_id=? AND program_kind='series'", [tmdbId])
+  const listings = seriesListings({ netflixRows: rows, flixRows: flix, tvRows: tv })
   const byC = new Map()
   for (const r of rows) {
     const a = byC.get(r.country_iso2) || {
@@ -684,10 +716,12 @@ export async function getSeriesCharts(tmdbId) {
     entries: t.entries,
     bestRank: t.bestRank,
   }))
+  const any = rows.length || tv.length || flix.length
   return {
-    status: rows.length || tv.length ? 'hesaplandi' : 'hesaplanamaz',
-    reason: rows.length || tv.length ? null : 'Bu dizi hiçbir listeye girmedi (Netflix Top 10, Türkiye TV)',
+    status: any ? 'hesaplandi' : 'hesaplanamaz',
+    reason: any ? null : 'Bu dizi hiçbir listeye girmedi.',
     tmdbId,
+    listings,
     countries: [...byC.values()].sort((a, b) => b.weeks - a.weeks || a.bestRank - b.bestRank),
     totalWeeks: rows.length,
     history,

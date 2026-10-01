@@ -1,12 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
-import CastBar from './CastBar.jsx'
 import ActorPanel from './ActorPanel.jsx'
-import SeriesPanel from './SeriesPanel.jsx'
 import { fetchRegionalInterest, fetchCountryCharts } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import PeriodChart from './PeriodChart.jsx'
-import MediaSentimentCard, { HybridScoreTag } from './MediaSentimentCard.jsx'
-import MagazineNews from './MagazineNews.jsx'
 import ChartList, { fmtDateTr } from './ChartList.jsx'
 import { AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import { useAsync } from '../lib/useAsync.js'
@@ -263,22 +259,15 @@ export default function CountryPanel({
   allCountries,
   onClose,
   onSelectActor,
-  onSelectSeries,
   onSelectSeriesGlobal,
   onSelectCountry,
-  activeSeriesId,
   collapsed,
   onToggleCollapsed,
   activeActorId,
   onCloseActor,
   onShowActorNetwork,
-  activeSeriesGlobalId,
-  onCloseSeriesGlobal,
-  onShowSeriesOnMap,
-  onGoToSeriesAnalysis,
   onOpenReport,
 }) {
-  const [expandedId, setExpandedId] = useState(null)
   const [periodRange, setPeriodRange] = useState('monthly')
 
   const chartsReq = useAsync(
@@ -293,15 +282,6 @@ export default function CountryPanel({
   }, [chartsReq.error])
 
   const sortedSeriesList = useMemo(() => country?.seriesList || [], [country?.seriesList])
-
-  useEffect(() => {
-    setExpandedId(null)
-  }, [country?.iso2])
-
-  const handleSelectSeriesRow = (s, isExpanded, key) => {
-    setExpandedId(isExpanded ? null : key)
-    onSelectSeries?.(s.id)
-  }
 
   return (
     <>
@@ -338,21 +318,6 @@ export default function CountryPanel({
                 personId={activeActorId}
                 onShowNetwork={onShowActorNetwork}
                 onSelectSeriesGlobal={onSelectSeriesGlobal}
-              />
-            </>
-          ) : activeSeriesGlobalId != null ? (
-            <>
-              <button className="panel__close" onClick={onClose} aria-label="Kapat">
-                ×
-              </button>
-              <button className="panel__back-btn" onClick={onCloseSeriesGlobal}>
-                ← Geri
-              </button>
-              <SeriesPanel
-                seriesId={activeSeriesGlobalId}
-                allCountries={allCountries}
-                onSelectActor={onSelectActor}
-                onShowOnMap={onShowSeriesOnMap}
               />
             </>
           ) : !country ? (
@@ -429,21 +394,16 @@ export default function CountryPanel({
                   </h3>
                   <ul className="panel__series-list">
                     {sortedSeriesList.map((s, i) => {
-                      const key = s.id ?? s.name
-                      const isExpanded = expandedId === key
-                      const isActiveOnMap = activeSeriesId != null && s.id === activeSeriesId
+                      const open = () => onSelectSeriesGlobal?.(s.id)
                       return (
                         <li
-                          key={key}
-                          className={
-                            isExpanded ? 'panel__series-item panel__series-item--expanded' : 'panel__series-item'
-                          }
+                          key={s.id ?? s.name}
+                          className="panel__series-item"
                           role="button"
                           tabIndex={0}
-                          aria-expanded={isExpanded}
-                          aria-label={`${s.name} — ${isExpanded ? 'ayrıntıyı kapat' : 'ayrıntıyı aç ve haritada göster'}`}
-                          onClick={() => handleSelectSeriesRow(s, isExpanded, key)}
-                          onKeyDown={onEnterOrSpace(() => handleSelectSeriesRow(s, isExpanded, key))}
+                          aria-label={`${s.name} — dizi sayfasını aç`}
+                          onClick={open}
+                          onKeyDown={onEnterOrSpace(open)}
                         >
                           <div className="panel__series-row">
                             <span className="panel__series-rank">{i + 1}.</span>
@@ -453,14 +413,7 @@ export default function CountryPanel({
                               <span className="panel__series-poster panel__series-poster--empty" aria-hidden="true" />
                             )}
                             <span className="panel__series-info">
-                              <span className="panel__series-name">
-                                {s.name}
-                                {isActiveOnMap && (
-                                  <span className="panel__series-onmap" title="Haritada gösteriliyor">
-                                    🗺️
-                                  </span>
-                                )}
-                              </span>
+                              <span className="panel__series-name">{s.name}</span>
                               <span className="panel__series-meta">
                                 {yearOf(s.firstAirDate) || '—'} · {s.theme}
                               </span>
@@ -469,26 +422,6 @@ export default function CountryPanel({
                               )}
                             </span>
                           </div>
-                          {isExpanded && (
-                            <div className="panel__series-detail" onClick={(e) => e.stopPropagation()}>
-                              <p className="panel__series-overview">{s.overview || 'Bu dizi için özet bulunmuyor.'}</p>
-                              <CastBar cast={s.cast} onSelectActor={onSelectActor} />
-                              <HybridScoreTag seriesName={s.name} iso2={country.iso2} />
-                              {onGoToSeriesAnalysis && (
-                                <button
-                                  className="dashboard__link-btn"
-                                  style={{ marginTop: '0.5rem' }}
-                                  onClick={() => onGoToSeriesAnalysis(s.name)}
-                                >
-                                  📊 Dizi Analizine Git
-                                </button>
-                              )}
-                              <h4 className="panel__series-detail-heading">Basın &amp; Medya Algısı</h4>
-                              <MediaSentimentCard seriesId={s.id} iso2={country.iso2} />
-                              <h4 className="panel__series-detail-heading">Magazin</h4>
-                              <MagazineNews seriesId={s.id} />
-                            </div>
-                          )}
                         </li>
                       )
                     })}

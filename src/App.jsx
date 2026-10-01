@@ -18,6 +18,7 @@ const TrendsExplorer = lazy(() => import('./components/TrendsExplorer.jsx'))
 const ImpactAnalysisTabs = lazy(() => import('./components/ImpactAnalysisTabs.jsx'))
 const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
 const CountryReportView = lazy(() => import('./components/report/CountryReportView.jsx'))
+const SeriesPage = lazy(() => import('./components/SeriesPage.jsx'))
 const PENDING_APPROVALS_POLL_MS = 60000
 const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
 import { fetchVisibility, logout, fetchAdminUsers, fetchImdbData } from './lib/api.js'
@@ -27,6 +28,13 @@ const SIDEBAR_COLLAPSED_KEY = 'gp_sidebar_collapsed'
 const PANEL_COLLAPSED_KEY = 'gp_panel_collapsed'
 
 const darEkranVarsayilani = () => typeof window !== 'undefined' && window.matchMedia('(max-width: 900px)').matches
+
+// Dizi sayfasının adresi: ?dizi=<tmdbId>. Geri/ileri tuşu ve paylaşılan bağlantı bu parametreden açılır.
+function seriesIdFromUrl() {
+  if (typeof window === 'undefined') return null
+  const id = Number(new URLSearchParams(window.location.search).get('dizi'))
+  return Number.isInteger(id) && id > 0 ? id : null
+}
 
 export default function App() {
   const { authStatus, user, sessionNotice, refresh: loadAuthStatus, signOut } = useAuth()
@@ -48,8 +56,8 @@ export default function App() {
   )
   const [panelCollapsed, setPanelCollapsed] = usePersistedState(PANEL_COLLAPSED_KEY, darEkranVarsayilani, boolStorage)
   const [activeSeriesId, setActiveSeriesId] = useState(null)
-  const [searchedSeriesId, setSearchedSeriesId] = useState(null)
-  const [view, setView] = useState('map')
+  const [seriesPageId, setSeriesPageId] = useState(seriesIdFromUrl)
+  const [view, setView] = useState(() => (seriesIdFromUrl() != null ? 'series' : 'map'))
   const [reportIso2, setReportIso2] = useState(null)
   const [mapView, setMapView] = usePersistedState(MAP_VIEW_STORAGE_KEY, '2d', {
     parse: (s) => (s === '3d' ? '3d' : '2d'),
@@ -104,7 +112,21 @@ export default function App() {
   const handleCloseSelection = useCallback(() => {
     setSelected(null)
     setSelectedActorId(null)
-    setSearchedSeriesId(null)
+  }, [])
+
+  // Tarayıcının geri/ileri tuşu: adreste ?dizi= varsa dizi sayfası, yoksa (dizi sayfasındaysak) harita.
+  useEffect(() => {
+    const onPopState = () => {
+      const id = seriesIdFromUrl()
+      if (id != null) {
+        setSeriesPageId(id)
+        setView('series')
+      } else {
+        setView((v) => (v === 'series' ? 'map' : v))
+      }
+    }
+    window.addEventListener('popstate', onPopState)
+    return () => window.removeEventListener('popstate', onPopState)
   }, [])
 
   useEffect(() => {
@@ -112,15 +134,13 @@ export default function App() {
       if (e.key !== 'Escape') return
       if (selectedActorId != null) {
         setSelectedActorId(null)
-      } else if (searchedSeriesId != null) {
-        setSearchedSeriesId(null)
       } else if (selected) {
         handleCloseSelection()
       }
     }
     document.addEventListener('keydown', handleKeyDown)
     return () => document.removeEventListener('keydown', handleKeyDown)
-  }, [selected, selectedActorId, searchedSeriesId, handleCloseSelection])
+  }, [selected, selectedActorId, handleCloseSelection])
 
   const activeSeries = selected?.seriesList?.find((s) => s.id === activeSeriesId) ?? selected?.seriesList?.[0] ?? null
 
@@ -136,7 +156,6 @@ export default function App() {
       setSelected(country)
       setActorHighlight(null)
       setActiveSeriesId(null)
-      setSearchedSeriesId(null)
       setPanelCollapsed(false)
     },
     [setPanelCollapsed]
@@ -149,33 +168,25 @@ export default function App() {
       setSelected({ ...country, name: countryNames[iso2]?.name || iso2 })
       setActorHighlight(null)
       setActiveSeriesId(null)
-      setSearchedSeriesId(null)
       setPanelCollapsed(false)
       setView('map')
     },
     [countries, setPanelCollapsed]
   )
 
-  const handleSelectSeries = useCallback((seriesId) => {
-    setActiveSeriesId(seriesId)
+  // Herhangi bir yerde diziye tıklamak dizi sayfasını açar (sağ panel yalnızca kısa özet).
+  const handleOpenSeriesPage = useCallback((seriesId) => {
+    if (seriesId == null) return
+    if (seriesIdFromUrl() !== seriesId) window.history.pushState(null, '', `?dizi=${seriesId}`)
+    setSeriesPageId(seriesId)
+    setView('series')
+    window.scrollTo?.(0, 0)
   }, [])
 
-  const handleSelectSeriesGlobal = useCallback(
-    (seriesId) => {
-      setSearchedSeriesId(seriesId)
-      setSelectedActorId(null)
-      setPanelCollapsed(false)
-    },
-    [setPanelCollapsed]
-  )
-
-  const handleViewSeriesOnMap = useCallback(
-    (seriesId) => {
-      setView('map')
-      handleSelectSeriesGlobal(seriesId)
-    },
-    [handleSelectSeriesGlobal]
-  )
+  const handleBackToMap = useCallback(() => {
+    if (seriesIdFromUrl() != null) window.history.pushState(null, '', window.location.pathname)
+    setView('map')
+  }, [])
 
   const handleSelectActor = useCallback(
     (personId) => {
@@ -183,6 +194,15 @@ export default function App() {
       setPanelCollapsed(false)
     },
     [setPanelCollapsed]
+  )
+
+  // Dizi sayfasından oyuncuya tıklayınca haritaya dönülür, oyuncu sağ panelde açılır.
+  const handleSelectActorFromSeriesPage = useCallback(
+    (personId) => {
+      handleBackToMap()
+      handleSelectActor(personId)
+    },
+    [handleBackToMap, handleSelectActor]
   )
 
   const handleSelectCountryGlobal = handleSelectCountryFromReport
@@ -231,25 +251,26 @@ export default function App() {
     setSeriesFilter(null)
   }, [])
 
-  const handleShowSeriesOnMap = useCallback(
-    (result) => {
-      setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
-      setHighlightFilter(null)
-      setActorHighlight(null)
-      setView('map')
-      if (result.seriesId != null) {
-        setSearchedSeriesId(result.seriesId)
-        setSelectedActorId(null)
-        setPanelCollapsed(false)
-      }
-    },
-    [setPanelCollapsed]
-  )
+  const handleShowSeriesOnMap = useCallback((result) => {
+    setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
+    setHighlightFilter(null)
+    setActorHighlight(null)
+    setView('map')
+  }, [])
 
   const handleGoToSeriesAnalysis = useCallback((seriesName) => {
     window.history.pushState(null, '', `?series=${encodeURIComponent(seriesName)}`)
     setView('trends')
   }, [])
+
+  // Dizi sayfasındaki "Haritada göster": listeye girdiği ülkeleri işaretleyip haritaya döner.
+  const handleShowSeriesFromPage = useCallback(
+    (seriesName, countryEntries) => {
+      handleShowSeriesAvailability(seriesName, countryEntries)
+      handleBackToMap()
+    },
+    [handleShowSeriesAvailability, handleBackToMap]
+  )
 
   const clearSeriesFilter = useCallback(() => {
     setSeriesFilter(null)
@@ -405,7 +426,7 @@ export default function App() {
         <ErrorBoundary name="görünüm" resetKey={view}>
           <Suspense fallback={<div className="status">Yükleniyor…</div>}>
             {view === 'dashboard' && user?.isAdmin && (
-              <AnalystDashboard canEdit={Boolean(user?.isAdmin)} onViewSeriesOnMap={handleViewSeriesOnMap} />
+              <AnalystDashboard canEdit={Boolean(user?.isAdmin)} onViewSeriesOnMap={handleOpenSeriesPage} />
             )}
             {view === 'trends' && <TrendsExplorer onShowOnMap={handleShowSeriesOnMap} />}
             {view === 'impact' && user?.isAdmin && (
@@ -419,6 +440,22 @@ export default function App() {
                 onBack={() => setView('map')}
               />
             )}
+            {view === 'series' && (
+              <>
+                {status === 'loading' && <div className="status">Veri yükleniyor…</div>}
+                {status === 'error' && <div className="status status--error">Veri alınamadı: {error}</div>}
+                {status === 'ready' && seriesPageId != null && (
+                  <SeriesPage
+                    seriesId={seriesPageId}
+                    allCountries={countries}
+                    onBack={handleBackToMap}
+                    onShowOnMap={handleShowSeriesFromPage}
+                    onSelectActor={handleSelectActorFromSeriesPage}
+                    onAnalyze={handleGoToSeriesAnalysis}
+                  />
+                )}
+              </>
+            )}
             {view === 'map' && (
               <>
                 {status === 'loading' && <div className="status">Veri yükleniyor…</div>}
@@ -428,7 +465,7 @@ export default function App() {
                     <ContinentSidebar
                       countries={countries}
                       onSelectCountry={handleSelectCountryFromReport}
-                      onSelectSeries={handleSelectSeriesGlobal}
+                      onSelectSeries={handleOpenSeriesPage}
                       onFocusContinent={handleFocusContinent}
                       collapsed={sidebarCollapsed}
                       onToggleCollapsed={() => setSidebarCollapsed((v) => !v)}
@@ -504,19 +541,13 @@ export default function App() {
                         allCountries={countries}
                         onClose={handleCloseSelection}
                         onSelectActor={handleSelectActor}
-                        onSelectSeries={handleSelectSeries}
-                        onSelectSeriesGlobal={handleSelectSeriesGlobal}
+                        onSelectSeriesGlobal={handleOpenSeriesPage}
                         onSelectCountry={handleSelectCountryGlobal}
-                        activeSeriesId={activeSeries?.id}
                         collapsed={panelCollapsed}
                         onToggleCollapsed={() => setPanelCollapsed((v) => !v)}
                         activeActorId={selectedActorId}
                         onCloseActor={() => setSelectedActorId(null)}
                         onShowActorNetwork={handleShowActorNetwork}
-                        activeSeriesGlobalId={searchedSeriesId}
-                        onCloseSeriesGlobal={() => setSearchedSeriesId(null)}
-                        onShowSeriesOnMap={handleShowSeriesAvailability}
-                        onGoToSeriesAnalysis={handleGoToSeriesAnalysis}
                         onOpenReport={handleOpenReport}
                       />
                     </div>

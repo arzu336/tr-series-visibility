@@ -34,9 +34,9 @@ export function MagazineList({ items, limit = 5 }) {
   )
 }
 
-export default function MagazineNews({ seriesId }) {
+export default function MagazineNews({ seriesId, limit = 5 }) {
   const { status, data } = useAsync(() => fetchMagazineNews(seriesId), [seriesId], { enabled: seriesId != null })
   if (status === 'loading' || status === 'idle') return <p className="dashboard__empty">Haberler yükleniyor…</p>
   if (status === 'error' || !data) return <p className="dashboard__empty">Haberler şu an alınamadı.</p>
-  return <MagazineList items={data.items} />
+  return <MagazineList items={data.items} limit={limit} />
 }

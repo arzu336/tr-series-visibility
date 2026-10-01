@@ -10,6 +10,9 @@ export default defineConfig({
   },
   build: {
     chunkSizeWarningLimit: 2000,
+    // Bayrak SVG'leri (flag-icons) CSS'e gömülmesin: gömülünce dizi sayfası açılırken ~270 bayrağın hepsi
+    // iner (~420 KB CSS). Ayrı dosya olunca tarayıcı yalnızca ekranda görünen bayrakları ister.
+    assetsInlineLimit: (filePath) => (filePath.includes('flag-icons') ? false : undefined),
   },
   test: {
     fileParallelism: false,

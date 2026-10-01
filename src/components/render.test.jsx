@@ -3,7 +3,8 @@ import { renderToString } from 'react-dom/server'
 import ErrorBoundary from './ErrorBoundary.jsx'
 import CountryLeaderboard from './CountryLeaderboard.jsx'
 import { HybridScoreTag } from './MediaSentimentCard.jsx'
-import SeriesPanel from './SeriesPanel.jsx'
+import SeriesPage, { seriesFromCountries } from './SeriesPage.jsx'
+import Flag from './Flag.jsx'
 import CountryPanel, { WatchLists } from './CountryPanel.jsx'
 import ChartList from './ChartList.jsx'
 import { MagazineList } from './MagazineNews.jsx'
@@ -43,13 +44,62 @@ describe('useAsync tabanlı bileşenler ilk render', () => {
     expect(renderToString(<HybridScoreTag seriesName="Terzi" iso2="DE" />)).toContain('Yerel skor hesaplanıyor')
   })
 
-  it('SeriesPanel dizi bulunamazsa mesaj basar', () => {
-    expect(renderToString(<SeriesPanel seriesId={99} allCountries={[]} />)).toContain('veri bulunamadı')
+  it('SeriesPage dizi bulunamazsa mesaj ve haritaya dönüş basar', () => {
+    const html = renderToString(<SeriesPage seriesId={99} allCountries={[]} />)
+    expect(html).toContain('veri bulunamadı')
+    expect(html).toContain('Haritaya dön')
   })
 
-  it('SeriesPanel dizi varsa adını basar', () => {
-    const allCountries = [{ iso2: 'DE', score: 10, seriesList: [{ id: 1, name: 'Terzi', cast: [] }] }]
-    expect(renderToString(<SeriesPanel seriesId={1} allCountries={allCountries} />)).toContain('Terzi')
+  it('SeriesPage dizi adını, bölümleri ve yayında olduğu ülkeleri bayrak ve platformla basar', () => {
+    const allCountries = [
+      { iso2: 'DE', score: 10, seriesList: [{ id: 1, name: 'Terzi', cast: [], platforms: ['Netflix'] }] },
+      { iso2: 'SA', score: 5, seriesList: [{ id: 1, name: 'Terzi', cast: [], platforms: ['Shahid VIP', 'Netflix'] }] },
+    ]
+    const html = renderToString(<SeriesPage seriesId={1} allCountries={allCountries} />)
+    expect(html).toContain('Terzi')
+    for (const baslik of ['Listeler', 'Nerede yayında', 'Magazin', 'Basın &amp; medya algısı'])
+      expect(html).toContain(baslik)
+    expect(html).toContain('fi fi-de')
+    expect(html).toContain('fi fi-sa')
+    expect(html).toContain('Shahid VIP · Netflix')
+    expect(html).toMatch(/2(<!-- -->)? ülkede yayında/)
+  })
+
+  it('seriesFromCountries ülkeleri Türkçe ada göre sıralar ve platformları taşır', () => {
+    const s = seriesFromCountries(
+      [
+        { iso2: 'DE', seriesList: [{ id: 1, name: 'Terzi', platforms: ['Netflix'] }] },
+        { iso2: 'AR', seriesList: [{ id: 1, name: 'Terzi' }] },
+      ],
+      1
+    )
+    // Almanya < Arjantin (Türkçe ada göre), ISO koduna göre değil
+    expect(s.availability.map((c) => [c.iso2, c.platforms])).toEqual([
+      ['DE', ['Netflix']],
+      ['AR', []],
+    ])
+    expect(seriesFromCountries([], 1)).toBeNull()
+  })
+
+  it('Flag iki harfli ISO kodu için bayrak, geçersiz kodda hiçbir şey basmaz', () => {
+    expect(renderToString(<Flag iso2="TR" />)).toContain('fi fi-tr')
+    expect(renderToString(<Flag iso2="TR" title="Türkiye" />)).toContain('aria-label="Türkiye"')
+    expect(renderToString(<Flag iso2="XWW" />)).toBe('')
+    expect(renderToString(<Flag iso2={null} />)).toBe('')
+  })
+
+  it('CountryPanel yayındaki dizi satırı dizi sayfasını açar (açılır ayrıntı yok)', () => {
+    const country = {
+      iso2: 'DE',
+      name: 'Almanya',
+      seriesCount: 1,
+      dataSource: 'tmdb',
+      seriesList: [{ id: 1, name: 'Terzi', cast: [], platforms: ['Netflix'], overview: 'özet metni' }],
+    }
+    const html = renderToString(<CountryPanel country={country} allCountries={[country]} />)
+    expect(html).toContain('Terzi — dizi sayfasını aç')
+    expect(html).not.toContain('aria-expanded')
+    expect(html).not.toContain('özet metni')
   })
 
   it('CountryPanel ülke seçilmemişken yönlendirme metni basar', () => {
@@ -510,7 +560,7 @@ describe('Kilit test — kaldırılan gösterge adları', () => {
       renderToString(<ContinentSidebar countries={[de, xx]} onSelectCountry={() => {}} onSelectSeries={() => {}} />),
       renderToString(<CountryPanel country={de} allCountries={[de, xx]} />),
       renderToString(<CountryPanel country={xx} allCountries={[de, xx]} />),
-      renderToString(<SeriesPanel seriesId={1} allCountries={[de]} />),
+      renderToString(<SeriesPage seriesId={1} allCountries={[de]} />),
     ]
     for (const html of ciktilar) expect(html).not.toMatch(YASAKLI)
   })

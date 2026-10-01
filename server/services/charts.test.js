@@ -10,6 +10,7 @@ import {
   buildCountryLists,
   weekEndOf,
   collapseSeasons,
+  seriesListings,
 } from './charts.js'
 
 const row = (period_date, rank, series_id, title_raw, extra = {}) => ({
@@ -250,6 +251,31 @@ describe('trend — tekrar giriş', () => {
     expect(liste.map((i) => [i.name, i.trend])).toEqual([
       ['Enfes Bir Akşam', 'yeni'],
       ['Adım Farah', 'tekrar'],
+    ])
+  })
+})
+
+describe('seriesListings — dizinin tüm listeleri, ülke × platform', () => {
+  it('Netflix, FlixPatrol platformları ve Türkiye TV; hafta tekil, en son girilen önce', () => {
+    const flix = (d, iso2, segment, rank) =>
+      row(d, rank, 3, 'Far Away', { provider: 'flixpatrol', country_iso2: iso2, segment })
+    const sonuc = seriesListings({
+      netflixRows: [
+        row('2026-09-20', 6, 3, 'Far Away', { country_iso2: 'SA' }),
+        row('2026-09-27', 2, 3, 'Far Away', { country_iso2: 'SA' }),
+      ],
+      flixRows: [
+        flix('2026-09-30', 'SA', 'shahid', 4),
+        flix('2026-10-01', 'SA', 'shahid', 3),
+        flix('2026-09-30', 'IQ', 'shahid', 5),
+      ],
+      tvRows: [row('2026-08-23', 1, 3, 'UZAK ŞEHİR', { provider: 'reytingtv', country_iso2: 'TR', segment: 'Total' })],
+    })
+    expect(sonuc.map((l) => [l.iso2, l.platform, l.weeks, l.bestRank, l.lastDate])).toEqual([
+      ['SA', 'Shahid', 1, 3, '2026-10-01'],
+      ['IQ', 'Shahid', 1, 5, '2026-09-30'],
+      ['SA', 'Netflix', 2, 2, '2026-09-27'],
+      ['TR', 'TV', 1, 1, '2026-08-23'],
     ])
   })
 })

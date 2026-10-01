@@ -14,7 +14,7 @@ import { cacheFirstSerpApi, serpapiGet } from './serpApiCache.js'
 // ayrıntısı açıldığında çağrılır. Aylık bütçe ve kullanıcı kotası serpapiGet içinde uygulanır.
 
 export const MAGAZINE_TTL_MS = 2 * 24 * 60 * 60 * 1000
-export const MAX_ITEMS = 5 // panelde gösterilen sayı; dizi/oyuncu dengesi bu sayı üzerinden kurulur
+export const MAX_ITEMS = 10 // dizi sayfasında gösterilen sayı; dizi/oyuncu dengesi bu sayı üzerinden kurulur
 export const LEAD_CAST_COUNT = 3
 
 export const TRUSTED_NEWS_DOMAINS = [
