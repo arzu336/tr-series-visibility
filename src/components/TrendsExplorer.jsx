@@ -20,6 +20,7 @@ function ulkeAdi(deger) {
   return countryNames[iso2]?.name || deger
 }
 import SeriesTrendChart from './SeriesTrendChart.jsx'
+import { IconBack, IconMap, IconSearch, IconGlobe, IconSparkle, IconStar } from './Icons.jsx'
 import CastBar from './CastBar.jsx'
 import ComparisonView from './ComparisonView.jsx'
 import { EMPTY } from '../lib/emptyStates.js'
@@ -72,12 +73,17 @@ function SeriesHeaderBlock({ meta, metaStatus, imdb, imdbStatus, social }) {
               {imdbStatus === 'loading' && 'Puan yükleniyor…'}
               {imdbStatus === 'ready' && imdb?.rating != null && (
                 <>
-                  ⭐ <strong>{imdb.rating.toFixed(1)}/10</strong> ({formatViews(imdb.votes)} oy)
+                  <IconStar /> <strong>{imdb.rating.toFixed(1)}/10</strong> ({formatViews(imdb.votes)} oy)
                 </>
               )}
               {imdbStatus === 'ready' && imdb?.rating == null && 'Puan verisi yok'}
               {imdbStatus === 'unavailable' && 'Puan verisi yok'}
             </span>
+            {imdbStatus === 'ready' && imdb?.votesGrowth?.d7?.votes > 0 && (
+              <span className="series-header__growth">
+                +{formatViews(imdb.votesGrowth.d7.votes)} oy (son {imdb.votesGrowth.d7.days} gün)
+              </span>
+            )}
             {hasUserReviews && (
               <span>
                 İzleyici Beğenisi: <strong>%{kg.userReviewsPct}</strong>
@@ -148,8 +154,13 @@ function GlobalFootprintCard({ result, seriesId, onShowOnMap }) {
             <strong>{withInterest.length} ülkede arama ilgisi ölçüldü</strong>
             <span>Haritayı bu dizinin ilgi dağılımına göre boyar, sağ panelde kadro/yayın bilgisini açar.</span>
           </div>
-          <button className="map-cta__btn" onClick={() => onShowOnMap?.({ ...result, seriesId })}>
-            🗺️ Haritada Göster
+          <button
+            type="button"
+            className="ui-btn ui-btn--primary map-cta__btn"
+            onClick={() => onShowOnMap?.({ ...result, seriesId })}
+          >
+            <IconMap />
+            Haritada göster
           </button>
         </div>
       )}
@@ -214,7 +225,14 @@ function MediaSentimentSummaryCard({ summary, status, onScanAll, scanStatus, sca
           <span>En görünür 15 ülkede basın + sosyal/YouTube verisini birlikte tazeler.</span>
         </div>
         <button className="scan-cta__btn" onClick={onScanAll} disabled={scanStatus === 'running'}>
-          {scanStatus === 'running' ? 'Taranıyor…' : '🔎 Tüm Ülkeleri Tara'}
+          {scanStatus === 'running' ? (
+            'Taranıyor…'
+          ) : (
+            <>
+              <IconSearch size={15} inline />
+              Tüm ülkeleri tara
+            </>
+          )}
         </button>
       </div>
 
@@ -287,7 +305,8 @@ function TimeSeriesScopePicker({ byCountry, value, onChange, disabled }) {
           disabled={disabled}
           aria-pressed={value === null}
         >
-          🌍 Küresel
+          <IconGlobe size={13} inline />
+          Küresel
         </button>
         {ulkeler.map((row) => (
           <button
@@ -581,7 +600,10 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
                 )}
                 {insightStatus === 'ready' && insight?.insightText && (
                   <div className="theme-insight__ai-box" style={{ marginTop: '0.8rem' }}>
-                    <span className="theme-insight__ai-label">🤖 Yapay Zeka</span>
+                    <span className="theme-insight__ai-label">
+                      <IconSparkle size={12} inline />
+                      Yapay Zeka
+                    </span>
                     <p>{insight.insightText}</p>
                   </div>
                 )}
@@ -594,7 +616,7 @@ function SingleSeriesMode({ seriesList, onShowOnMap }) {
   )
 }
 
-export default function TrendsExplorer({ onShowOnMap }) {
+export default function TrendsExplorer({ onShowOnMap, backLabel, onBack }) {
   const [seriesList, setSeriesList] = useState([])
   const [listStatus, setListStatus] = useState('loading')
   const [listError, setListError] = useState(null)
@@ -614,6 +636,13 @@ export default function TrendsExplorer({ onShowOnMap }) {
 
   return (
     <div className="dashboard">
+      {/* Dizi sayfasından "Arama ilgisi analizi" ile gelindiyse o diziye dönüş */}
+      {onBack && (
+        <button type="button" className="series-page__back" onClick={onBack}>
+          <IconBack />
+          {backLabel}
+        </button>
+      )}
       <h2>Dizi Derin Analiz &amp; Karşılaştırma Laboratuvarı</h2>
       <p className="dashboard__hint">Talep üzerine sorgulanır, sonuç kalıcı olarak önbelleklenir.</p>
 

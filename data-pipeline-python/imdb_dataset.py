@@ -35,6 +35,10 @@ DATASET_FILES = {
     "basics": "title.basics.tsv.gz",
     "akas": "title.akas.tsv.gz",
     "ratings": "title.ratings.tsv.gz",
+    # imdb_sync.py haftalık ayrıntı aşaması (bölüm puanları, yönetmen/senarist):
+    "episode": "title.episode.tsv.gz",
+    "crew": "title.crew.tsv.gz",
+    "names": "name.basics.tsv.gz",
 }
 RELEVANT_TITLE_TYPES = {"tvSeries", "tvMiniSeries"}
 

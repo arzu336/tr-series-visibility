@@ -5,6 +5,7 @@ import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
 import { EMPTY } from '../lib/emptyStates.js'
+import { IconGlobe } from './Icons.jsx'
 
 function displayName(feat) {
   return featureDisplayName(feat, turkishNames)
@@ -129,8 +130,9 @@ export default function Map2D({
 
   return (
     <div className="map2d" ref={containerRef} onMouseMove={handleMouseMove}>
-      <button className="globe__reset-btn" onClick={handleResetView}>
-        🌐 Genel Görünüm
+      <button type="button" className="globe__reset-btn" onClick={handleResetView}>
+        <IconGlobe size={15} />
+        Genel görünüm
       </button>
       {/* Ülkeye tıklamak artık haritanın üzerinde bir bilgi kartı açmıyor — tüm detaylar
           sadece sağ çekmecede (CountryPanel.jsx) gösterilir; harita SADECE seçili ülkeyi

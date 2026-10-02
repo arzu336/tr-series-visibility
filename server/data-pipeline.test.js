@@ -59,7 +59,7 @@ vi.mock('./aggregate.js', async (orig) => {
   return { ...gercek, mergeProxyFallback: (c) => c, attachPerCapitaScores: (c) => c }
 })
 
-const { getEnrichedVisibility } = await import('./data-pipeline.js')
+const { getEnrichedVisibility, sameSupplement } = await import('./data-pipeline.js')
 
 beforeEach(() => {
   siniflandirma.mockClear()
@@ -108,5 +108,14 @@ describe('getEnrichedVisibility — sınıflandırmayı beklemez', () => {
     siniflandirmaCoz()
     await soz
     expect(bitti).toBe(true)
+  })
+})
+
+describe('sameSupplement — katalog tamamlama listesi değişince katalog yeniden kurulur', () => {
+  it('aynı kimlikler (sıra fark etmez) aynı sayılır; ekleme/çıkarma farklıdır', () => {
+    expect(sameSupplement([3, 1, 2], [1, 2, 3])).toBe(true)
+    expect(sameSupplement(undefined, [])).toBe(true) // eski önbellekte alan yok, ek liste de boş
+    expect(sameSupplement([1, 2], [1, 2, 3])).toBe(false)
+    expect(sameSupplement(undefined, [5])).toBe(false)
   })
 })

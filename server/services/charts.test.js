@@ -8,6 +8,7 @@ import {
   addDays,
   isRecap,
   buildCountryLists,
+  mergeAcrossPlatforms,
   weekEndOf,
   collapseSeasons,
   seriesListings,
@@ -155,6 +156,34 @@ describe('özet yayını', () => {
   })
 })
 
+describe('mergeAcrossPlatforms — aynı dizi birden çok platformda', () => {
+  it('tek satır, en iyi sıra; platformlar en iyi sıradan başlayarak; en uzun hafta sayısı', () => {
+    const it = (rank, platform, weeksInList, extra = {}) => ({
+      rank,
+      seriesId: 9,
+      name: 'Eşref Rüya',
+      titleRaw: 'Esref Ruya',
+      weeksInList,
+      trend: 'yeni',
+      platform,
+      ...extra,
+    })
+    const merged = mergeAcrossPlatforms([
+      it(10, 'Shahid', 1),
+      it(7, 'Prime Video', 2),
+      it(3, 'Netflix', 1, { seriesId: 5, name: 'Başka' }),
+    ])
+    expect(merged).toHaveLength(2)
+    expect(merged[0]).toMatchObject({ name: 'Başka', platform: 'Netflix' })
+    expect(merged[1]).toMatchObject({
+      rank: 7,
+      platforms: ['Prime Video', 'Shahid'],
+      platform: 'Prime Video · Shahid',
+      weeksInList: 2,
+    })
+  })
+})
+
 describe('buildCountryLists — tüm platformlar birlikte', () => {
   const flix = (period_date, segment, rank, series_id, title_raw) =>
     row(period_date, rank, series_id, title_raw, { provider: 'flixpatrol', period_type: 'day', segment })
@@ -176,10 +205,10 @@ describe('buildCountryLists — tüm platformlar birlikte', () => {
   })
 
   it('şu an: her platformun güncel listesi, gerçek sıra ve platform adıyla; yabancı ve bayat satır yok', () => {
+    // Adım Farah hem Shahid (4.) hem Netflix (5.) listesinde: tek satır, en iyi sıra, iki platform birlikte
     expect(sonuc.now.map((i) => [i.rank, i.name, i.platform, i.trend])).toEqual([
       [2, 'Seni Tanıyorum', 'Disney+', '↑5'],
-      [4, 'Adım Farah', 'Shahid', 'yeni'],
-      [5, 'Adım Farah', 'Netflix', '↑1'],
+      [4, 'Adım Farah', 'Shahid · Netflix', 'yeni'],
     ])
   })
 

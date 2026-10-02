@@ -52,14 +52,14 @@ describe('GDELT kuyruğu — öncelik', () => {
   })
 
   it('aynı öncelikte FIFO korunur', async () => {
-    const sozler = ['a', 'b', 'c'].map((q) => fetchNewsArticlesGdelt(q, 'FR'))
+    const sozler = ['dizi-a', 'dizi-b', 'dizi-c'].map((q) => fetchNewsArticlesGdelt(q, 'FR'))
     await hepsiniAkit()
     await Promise.all(sozler)
-    expect(cagrilar.map((q) => q.split('"')[1])).toEqual(['a', 'b', 'c'])
+    expect(cagrilar.map((q) => q.split('"')[1])).toEqual(['dizi-a', 'dizi-b', 'dizi-c'])
   })
 
   it('istekler arasında en az 20 sn bırakılır', async () => {
-    const sozler = [fetchNewsArticlesGdelt('x', 'DE'), fetchNewsArticlesGdelt('y', 'DE')]
+    const sozler = [fetchNewsArticlesGdelt('dizi-x', 'DE'), fetchNewsArticlesGdelt('dizi-y', 'DE')]
     await vi.advanceTimersByTimeAsync(0)
     expect(cagrilar).toHaveLength(1)
     await vi.advanceTimersByTimeAsync(19_000)

@@ -6,6 +6,7 @@ import {
   isGdeltSupportedCountry,
   fetchNewsArticlesGdelt,
   ISO2_TO_FIPS,
+  isQueryTooShort,
 } from './gdeltNews.js'
 
 const CANLI_ORNEK = [
@@ -26,6 +27,24 @@ const CANLI_ORNEK = [
     sourcecountry: 'Egypt',
   },
 ]
+
+describe('isQueryTooShort — GDELT 5 karakterden kısa ifadeleri reddeder', () => {
+  it('kısa adlar sorgulanmaz, 5+ karakter sorgulanır', () => {
+    expect(isQueryTooShort('Daha')).toBe(true)
+    expect(isQueryTooShort('  Ezel ')).toBe(true)
+    expect(isQueryTooShort('')).toBe(true)
+    expect(isQueryTooShort('Terim')).toBe(false)
+    expect(isQueryTooShort('Kuruluş Osman')).toBe(false)
+  })
+
+  it('kısa adda ağa çıkmadan desteklenmiyor döner', async () => {
+    await expect(fetchNewsArticlesGdelt('Daha', 'CR')).resolves.toEqual({
+      unsupported: true,
+      reason: 'kisa-ad',
+      news: [],
+    })
+  })
+})
 
 describe('seendateToIso', () => {
   it('GDELT damgasını ISO 8601 e çevirir', () => {
@@ -154,6 +173,7 @@ describe('GDELT ülke kapsamı (Y-2)', () => {
   it('desteklenmeyen ülke için DIŞ ÇAĞRI YAPILMADAN unsupported döner', async () => {
     await expect(fetchNewsArticlesGdelt('herhangi bir dizi', 'PS')).resolves.toEqual({
       unsupported: true,
+      reason: 'ulke',
       news: [],
     })
   })

@@ -1,5 +1,8 @@
 import { useEffect, useMemo, useState } from 'react'
 import ActorPanel from './ActorPanel.jsx'
+import Avatar from './Avatar.jsx'
+import Flag from './Flag.jsx'
+import { IconReport } from './Icons.jsx'
 import { fetchRegionalInterest, fetchCountryCharts } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import PeriodChart from './PeriodChart.jsx'
@@ -122,7 +125,7 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
               }}
             >
               <span className="panel-search__result-flag" aria-hidden="true">
-                🌐
+                <Flag iso2={c.iso2} />
               </span>
               <span className="panel-search__result-info">
                 <span className="panel-search__result-name">{c.name}</span>
@@ -139,11 +142,11 @@ function PanelSearch({ allCountries, onSelectActor, onSelectSeriesGlobal, onSele
                 setQuery('')
               }}
             >
-              {a.profilePath ? (
-                <img className="panel-search__result-photo" src={`${PROFILE_BASE}${a.profilePath}`} alt="" />
-              ) : (
-                <span className="panel-search__result-photo panel-search__result-photo--empty" aria-hidden="true" />
-              )}
+              <Avatar
+                className="panel-search__result-photo"
+                src={a.profilePath ? `${PROFILE_BASE}${a.profilePath}` : null}
+                name={a.name}
+              />
               <span className="panel-search__result-info">
                 <span className="panel-search__result-name">{a.name}</span>
                 <span className="panel-search__result-meta">{Array.from(a.seriesNames).slice(0, 2).join(', ')}</span>
@@ -208,7 +211,7 @@ export function WatchLists({ charts, onSelectSeries }) {
             onSelect={onSelectSeries}
           />
         </div>
-        {charts.turkeyTv && !lists.now.some((it) => it.platform === 'TV') && (
+        {charts.turkeyTv && !lists.now.some((it) => (it.platforms ?? [it.platform]).includes('TV')) && (
           <>
             <h3>Türkiye TV — {fmtDateTr(charts.turkeyTv.date)}</h3>
             <ChartList
@@ -335,7 +338,8 @@ export default function CountryPanel({
                   onClick={() => onOpenReport(country.iso2)}
                   aria-label={`${country.name} için ülke raporunu aç`}
                 >
-                  📄 Rapor
+                  <IconReport size={14} inline />
+                  Rapor
                 </button>
               )}
               {/* "✓ Resmi Veri" rozeti daha önce kaldırılmıştı; proxy (tahmini) veri rozeti de

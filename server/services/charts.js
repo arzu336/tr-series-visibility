@@ -254,7 +254,7 @@ export function buildCountryLists({
     for (const it of chartForPeriod(series, last, { prevPeriodDate: dates.at(-2) ?? null, nameOf }))
       now.push({ ...it, platform: platformLabel(slug) })
   }
-  now.sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'tr'))
+  const merged = mergeAcrossPlatforms(now)
 
   const to = [latestWeek, flixLatest].filter(Boolean).sort().at(-1) ?? null
   const from = to ? addDays(to, -(WINDOW_WEEKS * 7 - 1)) : null
@@ -285,7 +285,28 @@ export function buildCountryLists({
     .sort((a, b) => b.periods - a.periods || a.bestRank - b.bestRank || a.name.localeCompare(b.name, 'tr'))
     .slice(0, 10)
 
-  return { now, top, window: to ? { from, to, weeks: WINDOW_WEEKS } : null }
+  return { now: merged, top, window: to ? { from, to, weeks: WINDOW_WEEKS } : null }
+}
+
+/**
+ * Aynı dizi aynı anda birden çok platformun listesindeyse (ör. Eşref Rüya hem Prime Video hem Shahid'de 10.)
+ * tek satır: en iyi sıradaki kayıt esas alınır, platformlar en iyi sıradan başlayarak birlikte yazılır,
+ * "kaç haftadır listede" en uzunu. Özet yayını farklı ad taşıdığı için ayrı kalır.
+ */
+export function mergeAcrossPlatforms(items) {
+  const sorted = [...items].sort((a, b) => a.rank - b.rank || a.name.localeCompare(b.name, 'tr'))
+  const byKey = new Map()
+  for (const it of sorted) {
+    const k = `${it.seriesId ?? `raw:${it.titleRaw}`}|${it.name}`
+    const cur = byKey.get(k)
+    if (!cur) {
+      byKey.set(k, { ...it, platforms: [it.platform] })
+      continue
+    }
+    if (!cur.platforms.includes(it.platform)) cur.platforms.push(it.platform)
+    cur.weeksInList = Math.max(cur.weeksInList ?? 0, it.weeksInList ?? 0)
+  }
+  return [...byKey.values()].map((it) => ({ ...it, platform: it.platforms.join(' · ') }))
 }
 
 // ---------------------------------------------------------------- okuyucular
@@ -423,7 +444,7 @@ export async function getTurkeyTv({ date, segment = 'Total', onlySeries = true }
 
 /** Ülke paneli: kaynak sırasına göre gerçekler + liste + 1 yıl önce + zaman çizelgesi. */
 export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
-  const cacheKey = `charts:country:v5:${iso2}:${week ?? 'latest'}:${range}`
+  const cacheKey = `charts:country:v6:${iso2}:${week ?? 'latest'}:${range}`
   const cached = getCached(cacheKey)
   if (cached) return cached
   const conn = getPipelineDb()

@@ -1,6 +1,6 @@
 # Türk Dizileri — İzlenme Haritası
 
-(Kültürel Görünürlük Platformu.) Türk dizilerinin ülke ülke **nerede, ne izlendiğini** gösteren karar destek uygulaması: Netflix Top 10 listeleri, Türkiye TV reyting listeleri, Wikipedia okunması ve arama ilgisi tek haritada; yayın varlığı (hangi dizi hangi platformda), tema dağılımı, basın algısı ve turizm göstergeleri yanında.
+(Türk Dizileri Küresel Görünürlük Platformu.) Türk dizilerinin ülke ülke **nerede, ne izlendiğini** gösteren karar destek uygulaması: Netflix Top 10 listeleri, Türkiye TV reyting listeleri, Wikipedia okunması ve arama ilgisi tek haritada; yayın varlığı (hangi dizi hangi platformda), tema dağılımı, basın algısı ve turizm göstergeleri yanında.
 
 ## Ne yapar
 
@@ -88,7 +88,7 @@ npm install
 cp server/.env.example server/.env   # değerleri doldurun
 ```
 
-Zorunlu anahtarlar: `TMDB_API_KEY`, `SERPAPI_API_KEY`, `OMDB_API_KEY`, `APP_PASSWORD`, `ADMIN_EMAIL`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`. Diğer ayarlar ve açıklamaları `server/.env.example` içinde.
+Zorunlu anahtarlar: `TMDB_API_KEY`, `SERPAPI_API_KEY`, `APP_PASSWORD`, `ADMIN_EMAIL`, `LLM_BASE_URL`, `LLM_API_KEY`, `LLM_MODEL`. Diğer ayarlar ve açıklamaları `server/.env.example` içinde.
 
 Python hattı için (sürümler `pyproject.toml` ile pin'li):
 

@@ -133,6 +133,62 @@ CREATE TABLE IF NOT EXISTS chart_entries (
 CREATE INDEX IF NOT EXISTS idx_chart_entries_series ON chart_entries (series_id, period_date);
 CREATE INDEX IF NOT EXISTS idx_chart_entries_period ON chart_entries (provider, period_date);
 
+-- Katalog tamamlama (catalog_supplement.py): listelere girmiş ama Node kataloğunda (popülerliğe göre ilk
+-- 400 Türk dizisi + Netflix Türk yapımları) olmayan Türk dizileri. Node bunları kataloğa SABİT ekler
+-- (server/data-pipeline.js); popülerlikleri düşse de katalogdan çıkmazlar. Yalnızca TMDB'de origin TR ve
+-- adı birebir tutan TEK aday yazılır; belirsizler unresolved_queue'ya gider. already_in_catalog=1: dizi
+-- zaten katalogda, liste başlığı yalnızca farklı yazılmış (eşleştirmede takma ad olarak kullanılır).
+CREATE TABLE IF NOT EXISTS catalog_supplement (
+    tmdb_id INTEGER PRIMARY KEY,
+    name TEXT NOT NULL,
+    original_name TEXT,
+    first_air_date TEXT,
+    list_title TEXT NOT NULL,
+    source TEXT NOT NULL,
+    already_in_catalog INTEGER NOT NULL DEFAULT 0,
+    added_at TEXT NOT NULL
+);
+
+-- IMDb puan/oy senkronu (imdb_sync.py, günlük): TMDB → IMDb kimliği eşlemesi yalnızca TMDB external_ids
+-- alanından (isimden tahmin yok); tconst NULL = TMDB'de IMDb kimliği yok (30 günde bir yeniden sorulur).
+CREATE TABLE IF NOT EXISTS imdb_title_map (
+    tmdb_id INTEGER PRIMARY KEY,
+    tconst TEXT,
+    resolved_at TEXT NOT NULL
+);
+
+-- Günlük puan/oy anlık görüntüsü (title.ratings) — "son 7/30 günde kaç oy aldı" ölçüsünün kaynağı.
+-- snapshot_date: IMDb dosyasının indirildiği gün.
+CREATE TABLE IF NOT EXISTS imdb_rating_history (
+    tconst TEXT NOT NULL,
+    snapshot_date TEXT NOT NULL,
+    average_rating REAL,
+    num_votes INTEGER,
+    PRIMARY KEY (tconst, snapshot_date)
+);
+
+-- IMDb bölümleri (title.episode, haftalık) ve bölüm puanları (title.ratings, günlük güncellenir).
+CREATE TABLE IF NOT EXISTS imdb_episodes (
+    tconst TEXT PRIMARY KEY,
+    parent_tconst TEXT NOT NULL,
+    season INTEGER,
+    episode INTEGER,
+    average_rating REAL,
+    num_votes INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_imdb_episodes_parent ON imdb_episodes (parent_tconst);
+
+-- IMDb yönetmen/senarist (title.crew + name.basics, haftalık). episode_count: kişinin yönettiği/yazdığı
+-- bölüm sayısı (dizinin kendi kaydında geçip bölüm bazında geçmeyenler 0).
+CREATE TABLE IF NOT EXISTS imdb_crew (
+    parent_tconst TEXT NOT NULL,
+    role TEXT NOT NULL,
+    nconst TEXT NOT NULL,
+    name TEXT,
+    episode_count INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (parent_tconst, role, nconst)
+);
+
 -- Hattın kendi üst verisi (Node salt okunur okur): kaynak dosyanın kapsadığı hafta aralığı,
 -- dosyanın tam mı kısmi mi olduğu, son senkron zamanı. Rapor bunlarla "ülkenin son kaydı" ile
 -- "dosyanın son haftası" farkını ayırt eder (yoksa 'veri yok' ile 'dizi girmedi' karışır).

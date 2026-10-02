@@ -6,6 +6,7 @@ import countryNames from '../data/country-centroids.json'
 import { WATCH_LEVELS, WATCH_LEVEL_COLORS } from '../lib/scale.js'
 import { EMPTY } from '../lib/emptyStates.js'
 import { ChartSource, fmtDateTr } from './ChartList.jsx'
+import { IconTv, IconTrophy, IconLuggage, IconGlobe } from './Icons.jsx'
 
 // Kıtasal analiz — düzen aynı; içerik izlenmeye göre: lider = en yüksek izlenme düzeyi, en çok izlenen dizi =
 // kıtada son 52 haftada en çok ülke-hafta toplayan Netflix Top 10 dizisi. Skor/ortalama yok.
@@ -38,7 +39,8 @@ function ExportTourismStats({ tourismItems, continentCountries }) {
   return (
     <div className="sidebar__stat">
       <div className="sidebar__stat-label" title="YİGM Sınır İstatistikleri Bülteni'nden otomatik.">
-        🧳 Turizm Rakamları ⓘ
+        <IconLuggage size={13} inline />
+        Turizm Rakamları ⓘ
       </div>
       {matched.length === 0 ? (
         <p className="sidebar__stat-note">{EMPTY.continentNoTourism}</p>
@@ -181,7 +183,10 @@ export default function ContinentSidebar({
               title="Haritada göster"
               disabled={!chart?.leader}
             >
-              <div className="sidebar__big-card-label">🏆 Kıta Lideri</div>
+              <div className="sidebar__big-card-label">
+                <IconTrophy size={13} inline />
+                Kıta Lideri
+              </div>
               {chartsReq.status === 'loading' ? (
                 <div className="sidebar__big-card-value sidebar__big-card-value--muted">Yükleniyor…</div>
               ) : chart?.leader ? (
@@ -198,7 +203,10 @@ export default function ContinentSidebar({
 
             {/* En Çok İzlenen Dizi — Netflix Top 10, son 52 hafta */}
             <div className="sidebar__big-card">
-              <div className="sidebar__big-card-label">📺 En Çok İzlenen Dizi</div>
+              <div className="sidebar__big-card-label">
+                <IconTv size={13} inline />
+                En Çok İzlenen Dizi
+              </div>
               {chartsReq.status === 'loading' && (
                 <div className="sidebar__big-card-value sidebar__big-card-value--muted">Yükleniyor…</div>
               )}
@@ -243,7 +251,8 @@ export default function ContinentSidebar({
               )}
               {globalMomentum && (
                 <div className="sidebar__big-card-meta">
-                  🌍 Küresel Dil Öğrenim İvmesi: {globalMomentum.changePct > 0 ? '+' : ''}
+                  <IconGlobe size={13} inline />
+                  Küresel Dil Öğrenim İvmesi: {globalMomentum.changePct > 0 ? '+' : ''}
                   {globalMomentum.changePct}% (son {globalMomentum.windowDays} gün)
                 </div>
               )}

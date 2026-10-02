@@ -158,6 +158,23 @@ describe('excludedReason — yayın rehberi ve hukuki süreç haberleri gösteri
     expect(excludedReason('Uzak Şehir oyuncuları setten paylaştı')).toBeNull()
   })
 
+  it('market kataloğu / alışveriş haberleri ("Kirli Sepeti" bir ürün adı da)', () => {
+    expect(
+      excludedReason(
+        "13 Kasım A101 aktüel kataloğu yayında! Kondisyon bisikleti, kirli sepeti, halı yıkama makinesi... Bu hafta A101'de neler var?"
+      )
+    ).toBe('alisveris')
+    expect(
+      excludedReason("BİM 21-24-26 Temmuz aktüel katalogları yayımlandı! BİM'e Borcam, kirli sepeti geliyor")
+    ).toBe('alisveris')
+    expect(excludedReason('Bu hafta A101 aktüel 13 Kasım: çöp kovası, kirli sepeti, waffle makinesi')).toBe('alisveris')
+    // "| Aktüel Haberleri" bölüm adı taşıyan gerçek magazin haberi süzülmez
+    expect(
+      excludedReason('Erkan Kolçak Köstendil ve Cansu Tosun ayrıldı | MAGAZİN HABERLERİ | Aktüel Haberleri')
+    ).toBeNull()
+    expect(excludedReason("Kirli Sepeti'nde final tarihi belli oldu")).toBeNull()
+  })
+
   it('süzgeç buildMagazineItems içinde uygulanır', () => {
     const items = buildMagazineItems(
       [

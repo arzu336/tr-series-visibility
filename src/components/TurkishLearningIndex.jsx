@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { fetchTurkishLearningIndex, fetchDuolingoStats } from '../lib/api.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import countryNames from '../data/country-centroids.json'
+import { IconGlobe } from './Icons.jsx'
 
 function displayName(entry) {
   const iso2 = resolveIso2FromLabel(entry.country)
@@ -41,7 +42,10 @@ function GlobalDuolingoCard() {
 
   return (
     <div className="global-stat-card">
-      <div className="global-stat-card__label">🌍 Küresel Türkçe Öğrencisi</div>
+      <div className="global-stat-card__label">
+        <IconGlobe size={13} inline />
+        Küresel Türkçe Öğrencisi
+      </div>
       <div className="global-stat-card__value">{new Intl.NumberFormat('tr-TR').format(data.totalLearners)}</div>
       <div className="global-stat-card__trend">{trendText}</div>
       <p className="dashboard__hint" style={{ margin: '0.4rem 0 0' }}>

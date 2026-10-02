@@ -5,11 +5,12 @@ import TourismImpactTab from './TourismImpactTab.jsx'
 import ExportImpactTab from './ExportImpactTab.jsx'
 import ImpactStats from './ImpactStats.jsx'
 import CountryConvergencePanel from './CountryConvergencePanel.jsx'
+import { IconLandmark, IconPlane, IconTrend, IconPrint } from './Icons.jsx'
 
 const TABS = [
-  { key: 'cultural', label: '🏛️ Kültürel Etki & Kamu Diplomasisi' },
-  { key: 'tourism', label: '✈️ Turizm & Destinasyon Etkisi' },
-  { key: 'export', label: '📈 İhracat & Ticari Etki' },
+  { key: 'cultural', label: 'Kültürel Etki & Kamu Diplomasisi', Icon: IconLandmark },
+  { key: 'tourism', label: 'Turizm & Destinasyon Etkisi', Icon: IconPlane },
+  { key: 'export', label: 'İhracat & Ticari Etki', Icon: IconTrend },
 ]
 
 const PRINT_TITLES = {
@@ -42,7 +43,14 @@ export default function ImpactAnalysisTabs({ onSelectCountry }) {
             onClick={requestPrint}
             disabled={yazdiriliyor}
           >
-            {yazdiriliyor ? 'Rapor hazırlanıyor…' : '🖨 PDF Olarak Yazdır'}
+            {yazdiriliyor ? (
+              'Rapor hazırlanıyor…'
+            ) : (
+              <>
+                <IconPrint size={15} inline />
+                PDF olarak yazdır
+              </>
+            )}
           </button>
         </div>
       </div>
@@ -51,7 +59,7 @@ export default function ImpactAnalysisTabs({ onSelectCountry }) {
       <div className="dashboard__print-header">
         <h1>Türk Dizileri — Ekonomik, Kültürel ve İhracat Etkisi Raporu</h1>
         <p>
-          T.C. Cumhurbaşkanlığı İletişim Başkanlığı · Kültürel Görünürlük Platformu ·{' '}
+          T.C. Cumhurbaşkanlığı İletişim Başkanlığı · Türk Dizileri Küresel Görünürlük Platformu ·{' '}
           {new Date().toLocaleDateString('tr-TR', { day: 'numeric', month: 'long', year: 'numeric' })}
         </p>
       </div>
@@ -67,9 +75,11 @@ export default function ImpactAnalysisTabs({ onSelectCountry }) {
         {TABS.map((t) => (
           <button
             key={t.key}
+            type="button"
             className={tab === t.key ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
             onClick={() => setTab(t.key)}
           >
+            <t.Icon size={15} inline />
             {t.label}
           </button>
         ))}

@@ -6,6 +6,7 @@ import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
 import { EMPTY } from '../lib/emptyStates.js'
+import { IconGlobe } from './Icons.jsx'
 
 function displayName(feat) {
   return featureDisplayName(feat, turkishNames)
@@ -257,8 +258,9 @@ export default function Globe3D({
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
-      <button className="globe__reset-btn" onClick={handleReset}>
-        🌐 Genel Görünüm
+      <button type="button" className="globe__reset-btn" onClick={handleReset}>
+        <IconGlobe size={15} />
+        Genel görünüm
       </button>
     </div>
   )

@@ -1,4 +1,4 @@
-import { getRawSeriesData } from './tmdb.js'
+import { getRawSeriesData, CAST_SOURCE } from './tmdb.js'
 import { getCached, setCached } from './cache.js'
 import { ensureClassified, getThemeStore } from './themes.js'
 import { ensureDetected, getDestinationStore } from './destinations.js'
@@ -7,19 +7,29 @@ import { getCountryDemographics } from './services/countryDemographics.js'
 import { getTrend, maybeRecordSnapshot, loadHistoryStore } from './history.js'
 import { getFallbackInterestScores } from './services/proxyScore.js'
 import { maybeRecordSeriesSnapshot } from './series-period-history.js'
+import { getCatalogSupplementIds } from './services/pipelineData.js'
 
 const RAW_CACHE_KEY = 'raw-series-providers'
 const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
 let rawFetchInFlight = null
 
+/** Önbellekteki katalog, güncel katalog tamamlama listesiyle mi kurulmuş? Değiştiyse katalog yeniden kurulur. */
+export function sameSupplement(cachedIds = [], currentIds = []) {
+  const a = [...cachedIds].sort((x, y) => x - y)
+  const b = [...currentIds].sort((x, y) => x - y)
+  return a.length === b.length && a.every((v, i) => v === b[i])
+}
+
 export async function getRawSeriesDataCached() {
+  const supplementIds = getCatalogSupplementIds()
   const cached = getCached(RAW_CACHE_KEY)
-  if (cached) return cached
+  // Ek dizi listesi ya da kadro kaynağı değiştiyse katalog yeniden kurulur (24 saat beklenmez).
+  if (cached && sameSupplement(cached.supplementIds, supplementIds) && cached.castSource === CAST_SOURCE) return cached
   if (rawFetchInFlight) return rawFetchInFlight
 
   rawFetchInFlight = (async () => {
-    const data = await getRawSeriesData()
+    const data = await getRawSeriesData({ supplementIds })
     setCached(RAW_CACHE_KEY, data, RAW_CACHE_TTL_MS)
     return data
   })().finally(() => {

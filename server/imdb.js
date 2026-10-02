@@ -1,119 +1,84 @@
-import db from './db.js'
-import { getExternalIds } from './tmdb.js'
-import { getCached, setCached } from './cache.js'
+import { getPipelineDb } from './services/pipelineDb.js'
 
-const EXTERNAL_TIMEOUT_MS = 15000
+// IMDb puanı, oy sayısı ve oy artışı — IMDb'nin resmî Non-Commercial Datasets dosyalarından
+// (data-pipeline-python/imdb_sync.py günlük yazar, burada salt okunur okunur). Önceden OMDb'den
+// sayfa açıldıkça tek tek çekiliyordu (anahtar + günlük kota; katalogdaki dizilerin ~%20'sinde puan
+// vardı). Kimlik eşlemesi (TMDB → tconst) yalnızca TMDB external_ids'ten gelir, isimden tahmin yok.
 
-const EXTERNAL_IDS_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
-const IMDB_CACHE_TTL_MS = 30 * 24 * 60 * 60 * 1000
+const GROWTH_WINDOWS = { d7: 7, d30: 30 }
+const DAY_MS = 24 * 60 * 60 * 1000
 
-const OMDB_BASE = 'https://www.omdbapi.com/'
+function daysBetween(a, b) {
+  return Math.round((Date.parse(b) - Date.parse(a)) / DAY_MS)
+}
 
-const getImdbCacheStmt = db.prepare('SELECT * FROM imdb_cache WHERE imdb_id = ?')
-const upsertImdbCacheStmt = db.prepare(`
-  INSERT INTO imdb_cache (imdb_id, rating, votes, top_cast, updated_at)
-  VALUES (?, ?, ?, ?, ?)
-  ON CONFLICT(imdb_id) DO UPDATE SET
-    rating = excluded.rating,
-    votes = excluded.votes,
-    top_cast = excluded.top_cast,
-    updated_at = excluded.updated_at
-`)
-
-function rowToResult(row) {
+/**
+ * Oy artışı: en son anlık görüntü ile en az `windowDays` gün önceki en yakın anlık görüntü arasındaki
+ * fark. Yeterince eski kayıt yoksa (ölçüm yeni başladıysa) null — tahmin edilmez.
+ * `history`: tarihe göre artan [{ snapshot_date, num_votes }].
+ */
+export function votesGrowth(history, windowDays) {
+  const valid = (history || []).filter((h) => h.num_votes != null)
+  if (valid.length < 2) return null
+  const latest = valid[valid.length - 1]
+  const base = [...valid].reverse().find((h) => daysBetween(h.snapshot_date, latest.snapshot_date) >= windowDays)
+  if (!base) return null
   return {
-    status: 'ready',
-    imdbId: row.imdb_id,
-    rating: row.rating,
-    votes: row.votes,
-    topCast: JSON.parse(row.top_cast || '[]'),
-    updatedAt: row.updated_at,
+    votes: latest.num_votes - base.num_votes,
+    days: daysBetween(base.snapshot_date, latest.snapshot_date),
+    since: base.snapshot_date,
   }
 }
 
-function isFresh(updatedAt) {
-  return Date.now() - new Date(updatedAt).getTime() < IMDB_CACHE_TTL_MS
-}
-
-async function resolveImdbId(tmdbId) {
-  const cacheKey = `external-ids-${tmdbId}`
-  const cached = getCached(cacheKey)
-  if (cached) return cached.imdbId
-  const { imdbId } = await getExternalIds(tmdbId)
-  setCached(cacheKey, { imdbId }, EXTERNAL_IDS_CACHE_TTL_MS)
-  return imdbId
-}
-
-function parseTopCast(actors) {
-  if (!actors || actors === 'N/A') return []
-  return actors
-    .split(',')
-    .map((name) => name.trim())
-    .filter(Boolean)
-}
-
-function parseVotes(votes) {
-  if (!votes || votes === 'N/A') return null
-  const n = Number(votes.replace(/,/g, ''))
-  return Number.isFinite(n) ? n : null
-}
-
-function parseRating(rating) {
-  if (!rating || rating === 'N/A') return null
-  const n = Number(rating)
-  return Number.isFinite(n) ? n : null
-}
-
-async function fetchFromOmdb(imdbId) {
-  const apiKey = process.env.OMDB_API_KEY
-  if (!apiKey) {
-    throw new Error('OMDB_API_KEY tanımlı değil (.env dosyasını kontrol et)')
+function lookupTconst(conn, tmdbId) {
+  try {
+    const row = conn.prepare('SELECT tconst FROM imdb_title_map WHERE tmdb_id = ?').get(tmdbId)
+    if (row) return row.tconst
+  } catch {
+    // imdb_sync.py henüz hiç çalışmadı (tablo yok) — eski eşlemeye düş
   }
-  const url = new URL(OMDB_BASE)
-  url.searchParams.set('i', imdbId)
-  url.searchParams.set('apikey', apiKey)
-
-  const res = await fetch(url, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
-  if (!res.ok) {
-    throw new Error(`Veri isteği başarısız (${res.status})`)
-  }
-  const data = await res.json()
-  if (data.Response === 'False') {
+  try {
+    return conn.prepare('SELECT imdb_id FROM series_mapping WHERE tmdb_id = ?').get(tmdbId)?.imdb_id ?? null
+  } catch {
     return null
   }
-  return {
-    rating: parseRating(data.imdbRating),
-    votes: parseVotes(data.imdbVotes),
-    topCast: parseTopCast(data.Actors),
+}
+
+function readHistory(conn, tconst) {
+  try {
+    return conn
+      .prepare(
+        `SELECT snapshot_date, num_votes FROM imdb_rating_history
+         WHERE tconst = ? AND snapshot_date >= date((SELECT MAX(snapshot_date) FROM imdb_rating_history WHERE tconst = ?), '-45 days')
+         ORDER BY snapshot_date`
+      )
+      .all(tconst, tconst)
+  } catch {
+    return []
   }
 }
 
-export async function getImdbDataForTmdbSeries(tmdbId) {
-  const imdbId = await resolveImdbId(tmdbId)
-  if (!imdbId) {
-    return { status: 'unavailable' }
+/** { status: 'ready', imdbId, rating, votes, votesGrowth: { d7, d30 }, updatedAt } | { status: 'unavailable' } */
+export async function getImdbDataForTmdbSeries(tmdbId, { conn = getPipelineDb() } = {}) {
+  if (!conn) return { status: 'unavailable' }
+  const imdbId = lookupTconst(conn, Number(tmdbId))
+  if (!imdbId) return { status: 'unavailable' }
+
+  let row
+  try {
+    row = conn.prepare('SELECT average_rating, num_votes, fetched_at FROM imdb_series WHERE tconst = ?').get(imdbId)
+  } catch {
+    row = null
   }
+  if (!row || row.average_rating == null) return { status: 'unavailable', imdbId }
 
-  const row = getImdbCacheStmt.get(imdbId)
-  if (row && isFresh(row.updated_at)) {
-    return { ...rowToResult(row), fromCache: true }
-  }
-
-  const omdbData = await fetchFromOmdb(imdbId)
-  if (!omdbData) {
-    return { status: 'unavailable', imdbId }
-  }
-
-  const updatedAt = new Date().toISOString()
-  upsertImdbCacheStmt.run(imdbId, omdbData.rating, omdbData.votes, JSON.stringify(omdbData.topCast), updatedAt)
-
+  const history = readHistory(conn, imdbId)
   return {
     status: 'ready',
     imdbId,
-    rating: omdbData.rating,
-    votes: omdbData.votes,
-    topCast: omdbData.topCast,
-    updatedAt,
-    fromCache: false,
+    rating: row.average_rating,
+    votes: row.num_votes,
+    votesGrowth: Object.fromEntries(Object.entries(GROWTH_WINDOWS).map(([k, d]) => [k, votesGrowth(history, d)])),
+    updatedAt: row.fetched_at,
   }
 }

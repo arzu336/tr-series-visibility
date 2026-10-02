@@ -33,6 +33,15 @@ export function gdeltNewsCacheKey(query, iso2) {
 // önüne geçer, BACKGROUND (zamanlanmış tarama) kalanı alır. Aralık kuralı her ikisi için aynı.
 export const GDELT_PRIORITY = { INTERACTIVE: 0, BACKGROUND: 1 }
 
+// GDELT DOC 2.0, 4 karakter ve altındaki ifadeleri reddediyor ("The specified phrase is too short"):
+// "Daha", "Ezel" gibi adlar hiçbir zaman sonuç vermez. Bunlar hiç sorgulanmaz — aksi hâlde her istek
+// 3 deneme + 30/60 sn bekleme ile GDELT kuyruğunu boşuna meşgul ediyordu.
+export const MIN_PHRASE_LENGTH = 5
+
+export function isQueryTooShort(query) {
+  return String(query || '').trim().length < MIN_PHRASE_LENGTH
+}
+
 const bekleyenler = []
 let calisiyor = false
 let sonIstekZamani = 0
@@ -102,8 +111,13 @@ async function gdeltGet(query, priority) {
       if (text.trim().startsWith('{')) {
         return JSON.parse(text)
       }
+      // Kalıcı ret: yeniden denemek aynı yanıtı döndürür.
+      if (/phrase is too short/i.test(text)) {
+        throw Object.assign(new Error('GDELT: arama ifadesi çok kısa'), { permanent: true })
+      }
       sonHata = new Error(`GDELT hız sınırı veya beklenmeyen yanıt (${res.status})`)
     } catch (err) {
+      if (err.permanent) throw err
       sonHata = err
     }
     if (deneme < BACKOFF_MS.length) {
@@ -416,7 +430,10 @@ export async function fetchNewsArticlesGdelt(query, countryIso2, { priority = GD
   const fips = ISO2_TO_FIPS[iso2]
 
   if (!fips) {
-    return { unsupported: true, news: [] }
+    return { unsupported: true, reason: 'ulke', news: [] }
+  }
+  if (isQueryTooShort(query)) {
+    return { unsupported: true, reason: 'kisa-ad', news: [] }
   }
 
   const data = await gdeltGet(`"${String(query).trim()}" sourcecountry:${fips}`, priority)

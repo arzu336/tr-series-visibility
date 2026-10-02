@@ -11,6 +11,9 @@ import { getCached, setCached } from '../cache.js'
 //   4. Yayın rehberi / arama motoru içerikleri ("full izle", "saat kaçta", "kimdir, kaç yaşında") ve
 //      hukuki süreç haberleri (gözaltı, soruşturma, dava…) gösterilmez: ilki magazin değil, ikincisi
 //      gerçek kişiler hakkında kesinleşmemiş iddia — resmî bir platformda itibar riski (kullanıcı kararı).
+//   5. Market kataloğu / alışveriş haberleri gösterilmez: günlük nesne adı taşıyan diziler ("Kirli Sepeti")
+//      "A101 aktüel kataloğu: … kirli sepeti …" gibi başlıklarla eşleşiyordu. ("Aktüel" tek başına
+//      süzülmez — gerçek magazin başlıklarında "| Aktüel Haberleri" bölüm adı olarak geçiyor.)
 // Maliyet: dizi başına 2 arama (dizi adı + başrol oyuncuları), 2 gün önbellek; yalnızca dizi
 // ayrıntısı açıldığında çağrılır. Aylık bütçe ve kullanıcı kotası serpapiGet içinde uygulanır.
 
@@ -75,10 +78,13 @@ const GUIDE_RE =
   /(^| )(izle|izleme|canli|full|tek parca|saat kacta|ne zaman basliyor|var mi|yayin akisi|tv rehberi|fragman\w*|reyting\w*|kimdir|kac yasinda|\d+ bolum\w*)( |$)/
 const LEGAL_RE =
   /(^| )(gozalti\w*|tutuklan\w*|tutuklama\w*|sorusturma\w*|uyusturucu\w*|operasyon\w*|dava\w*|mahkeme\w*|savcilik\w*|ifade\w*|hapis\w*|saliverildi|cikis yasag\w*|sucla\w*|iddianame\w*)( |$)/
+const SHOPPING_RE =
+  /(^| )(katalog\w*|brosur\w*|a101\w*|bim|migros\w*|carrefour\w*|sok market\w*|indirim\w*|kampanya\w*|aktuel urun\w*)( |$)/
 
-/** Başlık yayın rehberi / SEO içeriği ya da hukuki süreç haberi mi (gösterilmez). */
+/** Başlık yayın rehberi / SEO içeriği, hukuki süreç ya da alışveriş haberi mi (gösterilmez). */
 export function excludedReason(title) {
   const t = normalizeText(title)
+  if (SHOPPING_RE.test(t)) return 'alisveris'
   if (LEGAL_RE.test(t)) return 'hukuki'
   if (GUIDE_RE.test(t)) return 'rehber'
   return null
@@ -217,11 +223,11 @@ export async function getMagazineNews(series) {
   return { ...meta, items: buildMagazineItems(raw, series.name, leadCastNames(series.cast)) }
 }
 
-// --- Haber özeti (okuma penceresi) --------------------------------------------------------------
-// Kart tıklanınca haber sitesine gidilmez; platform içindeki pencerede büyük görsel, başlık, tarih ve
-// özet gösterilir. Özet, sitenin kendi yayımladığı paylaşım özetidir (JSON-LD NewsArticle.description,
+// --- Haber özeti (magazin kaydırıcısı) ------------------------------------------------------------
+// Kaydırıcıda her haber büyük görsel, başlık, tarih ve özetle görünür; haber açılmaz, haber sitesine
+// gidilmez. Özet, sitenin kendi yayımladığı paylaşım özetidir (JSON-LD NewsArticle.description,
 // og:description …) — bağlantı paylaşılınca sosyal ağlarda görünen metin; uydurma/yapay özet yok.
-// Haber metninin tamamı alınmaz. Yalnızca izinli kaynaklar, yalnızca pencere açılınca, 7 gün önbellek.
+// Haber metninin tamamı alınmaz. Yalnızca izinli kaynaklar, yalnızca haber görünürken, 7 gün önbellek.
 
 export const PREVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const PREVIEW_TIMEOUT_MS = 12000
@@ -367,7 +373,7 @@ export async function fetchArticlePreview(url, fetchImpl = fetch) {
   return { url, ...extractArticlePreview(html, res.url || url) }
 }
 
-/** Önbellekli özet. Başarısızlık önbelleğe yazılmaz; pencere "özet alınamadı" gösterir. */
+/** Önbellekli özet. Başarısızlık önbelleğe yazılmaz; kaydırıcı o haberde özetsiz görünür. */
 export async function getArticlePreview(url, fetchImpl = fetch) {
   const key = `magazine:preview:${url}`
   const cached = getCached(key)

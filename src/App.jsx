@@ -24,6 +24,7 @@ const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
 import { fetchVisibility, logout, fetchAdminUsers, fetchImdbData } from './lib/api.js'
 import { continentCentroid } from './lib/continents.js'
 import countryNames from './data/country-centroids.json'
+import { IconClose } from './components/Icons.jsx'
 const SIDEBAR_COLLAPSED_KEY = 'gp_sidebar_collapsed'
 const PANEL_COLLAPSED_KEY = 'gp_panel_collapsed'
 
@@ -258,10 +259,18 @@ export default function App() {
     setView('map')
   }, [])
 
-  const handleGoToSeriesAnalysis = useCallback((seriesName) => {
-    window.history.pushState(null, '', `?series=${encodeURIComponent(seriesName)}`)
-    setView('trends')
-  }, [])
+  // Dizi sayfasından "Arama ilgisi analizi"ne geçilince analiz sayfasında dizi sayfasına dönüş düğmesi çıkar.
+  // Üst menüden "Arama İlgisi"ne doğrudan gelindiğinde temizlenir (bkz. menü düğmesi).
+  const [analysisReturn, setAnalysisReturn] = useState(null) // { id, name } | null
+
+  const handleGoToSeriesAnalysis = useCallback(
+    (seriesName) => {
+      window.history.pushState(null, '', `?series=${encodeURIComponent(seriesName)}`)
+      setAnalysisReturn(view === 'series' && seriesPageId != null ? { id: seriesPageId, name: seriesName } : null)
+      setView('trends')
+    },
+    [view, seriesPageId]
+  )
 
   // Dizi sayfasındaki "Haritada göster": listeye girdiği ülkeleri işaretleyip haritaya döner.
   const handleShowSeriesFromPage = useCallback(
@@ -321,8 +330,7 @@ export default function App() {
             <img src="/ib-logo.png" alt="T.C. Cumhurbaşkanlığı İletişim Başkanlığı" className="app__brand-logo" />
             <div className="app__brand-divider" />
             <div>
-              <h1 title="Türk Dizileri — İzlenme Haritası">Türk Dizileri — İzlenme Haritası</h1>
-              <p className="app__brand-sub">Nerede, ne izleniyor · Netflix Top 10, Türkiye TV, ilgi sinyalleri</p>
+              <h1 title="Türk Dizileri Küresel Görünürlük Platformu">Türk Dizileri Küresel Görünürlük Platformu</h1>
               {meta && (
                 <p className="app__meta">
                   {meta.seriesCount} dizi · {countries.length} ülke · güncelleme:{' '}
@@ -348,7 +356,10 @@ export default function App() {
             )}
             <button
               className={view === 'trends' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
-              onClick={() => setView('trends')}
+              onClick={() => {
+                setAnalysisReturn(null)
+                setView('trends')
+              }}
             >
               Arama İlgisi
             </button>
@@ -428,7 +439,13 @@ export default function App() {
             {view === 'dashboard' && user?.isAdmin && (
               <AnalystDashboard canEdit={Boolean(user?.isAdmin)} onViewSeriesOnMap={handleOpenSeriesPage} />
             )}
-            {view === 'trends' && <TrendsExplorer onShowOnMap={handleShowSeriesOnMap} />}
+            {view === 'trends' && (
+              <TrendsExplorer
+                onShowOnMap={handleShowSeriesOnMap}
+                backLabel={analysisReturn ? `${analysisReturn.name} sayfasına dön` : null}
+                onBack={analysisReturn ? () => handleOpenSeriesPage(analysisReturn.id) : null}
+              />
+            )}
             {view === 'impact' && user?.isAdmin && (
               <ImpactAnalysisTabs onSelectCountry={handleSelectCountryFromReport} />
             )}
@@ -479,7 +496,10 @@ export default function App() {
                           <span>
                             Gösterilen Veri: <strong>{seriesFilter.seriesName}</strong> Küresel İlgi Dağılımı
                           </span>
-                          <button onClick={clearSeriesFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
+                          <button type="button" onClick={clearSeriesFilter}>
+                            <IconClose size={13} inline />
+                            Filtreyi temizle
+                          </button>
                         </div>
                       )}
                       {highlightFilter && (
@@ -495,7 +515,10 @@ export default function App() {
                               </>
                             )}
                           </span>
-                          <button onClick={clearHighlightFilter}>✕ Filtreyi Temizle / Genel Görünüm</button>
+                          <button type="button" onClick={clearHighlightFilter}>
+                            <IconClose size={13} inline />
+                            Filtreyi temizle
+                          </button>
                         </div>
                       )}
                       {mapView === '3d' ? (

@@ -75,15 +75,53 @@ export async function getWatchProviders(seriesId) {
 
 const CAST_LIMIT = 5
 
-export async function getCredits(seriesId) {
-  const data = await tmdbGet(`/tv/${seriesId}/credits`, { language: 'tr-TR' })
-  const cast = (data.cast || []).sort((a, b) => a.order - b.order).slice(0, CAST_LIMIT)
-  return cast.map((c) => ({
+// Kadro kaynağı: /aggregate_credits (TÜM sezonlar, oyuncu başına bölüm sayısıyla). /credits yalnızca son
+// sezonu veriyordu — uzun süren dizilerde ana kadro eksik kalıyordu (ör. Kuruluş Osman'da 194 bölümlük
+// Yiğit Uçan yoktu). Sıra: bölüm sayısı çok olan önce; eşitlikte TMDB sırası (başroller önde).
+export const CAST_SOURCE = 'aggregate'
+export const FULL_CAST_MAX = 60
+const MAIN_CAST_SHARE = 0.15 // dizinin bölümlerinin en az %15'inde oynayan = ana kadro
+const MAIN_CAST_MIN = 8
+
+export function rankCast(cast = []) {
+  return [...cast].sort(
+    (a, b) => (b.total_episode_count || 0) - (a.total_episode_count || 0) || (a.order ?? 999) - (b.order ?? 999)
+  )
+}
+
+export function toCastMember(c) {
+  const role = [...(c.roles || [])].sort((a, b) => (b.episode_count || 0) - (a.episode_count || 0))[0]
+  return {
     id: c.id,
     name: c.name,
-    character: c.character || '',
+    character: role?.character || c.character || '',
     profilePath: c.profile_path || null,
-  }))
+    episodes: c.total_episode_count ?? null,
+  }
+}
+
+/** Ana kadro: en az %15 bölümde oynayanlar (en az 8 kişi, en fazla FULL_CAST_MAX), sıralı. */
+export function mainCast(cast = []) {
+  const ranked = rankCast(cast)
+  const max = ranked[0]?.total_episode_count || 0
+  const threshold = Math.max(2, Math.round(max * MAIN_CAST_SHARE))
+  const regulars = ranked.filter((c) => (c.total_episode_count || 0) >= threshold)
+  const list = regulars.length >= MAIN_CAST_MIN ? regulars : ranked.slice(0, MAIN_CAST_MIN)
+  return list.slice(0, FULL_CAST_MAX).map(toCastMember)
+}
+
+/** Katalog kaydındaki kısa kadro (harita yükünde ülke başına kopyalandığı için CAST_LIMIT kişi). */
+export async function getCredits(seriesId) {
+  const data = await tmdbGet(`/tv/${seriesId}/aggregate_credits`, { language: 'tr-TR' })
+  return rankCast(data.cast || [])
+    .slice(0, CAST_LIMIT)
+    .map(toCastMember)
+}
+
+/** Dizi sayfası için ana kadronun tamamı. */
+export async function getFullCast(seriesId) {
+  const data = await tmdbGet(`/tv/${seriesId}/aggregate_credits`, { language: 'tr-TR' })
+  return { cast: mainCast(data.cast || []), total: (data.cast || []).length }
 }
 
 export async function getExternalIds(seriesId) {
@@ -138,12 +176,41 @@ export function mergeSeriesLists(primary, extra) {
   return out
 }
 
-export async function getRawSeriesDataForOrigin(originCountry, originalLanguage, n = TOP_N_SERIES) {
+/** Tek dizinin katalog kaydı (keşif sonuçlarıyla aynı biçim) — katalog tamamlama için. */
+export async function getSeriesDetails(seriesId) {
+  const show = await tmdbGet(`/tv/${seriesId}`, { language: 'tr-TR' })
+  return {
+    id: show.id,
+    name: show.original_name || show.name,
+    popularity: show.popularity,
+    posterPath: show.poster_path,
+    firstAirDate: show.first_air_date || null,
+    overview: show.overview || '',
+    catalogSupplement: true,
+  }
+}
+
+/**
+ * Katalog: popülerliğe göre ilk N + Netflix Türk yapımları + `supplementIds` (listelere girmiş ama ilk N'in
+ * dışında kalan diziler; bkz. data-pipeline-python/catalog_supplement.py). Ek dizi TMDB'de bulunamazsa atlanır.
+ */
+export async function getRawSeriesDataForOrigin(
+  originCountry,
+  originalLanguage,
+  n = TOP_N_SERIES,
+  { supplementIds = [] } = {}
+) {
   const [top, netflix] = await Promise.all([
     getTopSeriesByOrigin(originCountry, originalLanguage, n),
     originCountry === 'TR' ? getNetflixSeriesByOrigin(originCountry) : Promise.resolve([]),
   ])
-  const series = mergeSeriesLists(top, netflix)
+  const discovered = mergeSeriesLists(top, netflix)
+  const have = new Set(discovered.map((s) => s.id))
+  const missing = supplementIds.filter((id) => !have.has(id))
+  const extra = (
+    await mapWithConcurrency(missing, FETCH_CONCURRENCY, (id) => getSeriesDetails(id).catch(() => null))
+  ).filter(Boolean)
+  const series = mergeSeriesLists(discovered, extra)
 
   const [providerResults, castResults] = await Promise.all([
     mapWithConcurrency(series, FETCH_CONCURRENCY, (s) => getWatchProviders(s.id).catch(() => ({}))),
@@ -156,9 +223,9 @@ export async function getRawSeriesDataForOrigin(originCountry, originalLanguage,
     s.cast = castResults[idx]
   })
 
-  return { series, providersById }
+  return { series, providersById, supplementIds: [...supplementIds].sort((a, b) => a - b), castSource: CAST_SOURCE }
 }
 
-export async function getRawSeriesData() {
-  return getRawSeriesDataForOrigin('TR', 'tr')
+export async function getRawSeriesData({ supplementIds = [] } = {}) {
+  return getRawSeriesDataForOrigin('TR', 'tr', TOP_N_SERIES, { supplementIds })
 }

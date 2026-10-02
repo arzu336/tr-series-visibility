@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { fetchThemeInsight } from '../lib/api.js'
+import { IconSparkle } from './Icons.jsx'
 
 export default function ThemeInsight() {
   const [data, setData] = useState(null)
@@ -43,7 +44,10 @@ export default function ThemeInsight() {
       </div>
       {data.insightText ? (
         <div className="theme-insight__ai-box">
-          <span className="theme-insight__ai-label">🤖 Yapay Zeka</span>
+          <span className="theme-insight__ai-label">
+            <IconSparkle size={12} inline />
+            Yapay Zeka
+          </span>
           <p>{data.insightText}</p>
         </div>
       ) : (

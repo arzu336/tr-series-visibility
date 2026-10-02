@@ -8,6 +8,7 @@ import {
 } from '../lib/api.js'
 import MultiSeriesTrendChart from './MultiSeriesTrendChart.jsx'
 import { EMPTY } from '../lib/emptyStates.js'
+import { IconStar } from './Icons.jsx'
 
 const MAX_COMPARE = 3
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w185'
@@ -42,7 +43,14 @@ function Head2HeadCard({ card, isRatingLeader, isShareLeader, isCountryLeader })
         <div className="h2h-card__metric">
           <span className="h2h-card__metric-label">IMDb Puanı</span>
           <span className="h2h-card__metric-value">
-            {card.imdbRating != null ? `⭐ ${card.imdbRating.toFixed(1)}` : '—'}
+            {card.imdbRating != null ? (
+              <>
+                <IconStar />
+                {card.imdbRating.toFixed(1)}
+              </>
+            ) : (
+              '—'
+            )}
             {isRatingLeader && <span className="h2h-card__leader">▲ Lider</span>}
           </span>
         </div>

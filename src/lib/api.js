@@ -162,6 +162,10 @@ export async function fetchSeriesMeta(tmdbId) {
   return handle(await fetch(`/api/series/${tmdbId}`))
 }
 
+export async function fetchSeriesCast(tmdbId) {
+  return handle(await fetch(`/api/series/${tmdbId}/cast`))
+}
+
 export async function fetchMagazineNews(tmdbId) {
   return handle(await fetch(`/api/series/${tmdbId}/magazine`))
 }

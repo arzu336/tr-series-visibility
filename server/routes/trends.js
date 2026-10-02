@@ -21,7 +21,8 @@ import { getSeriesTrendInsight } from '../services/seriesTrendInsight.js'
 import { enrichSeriesNewsNow } from '../services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from '../services/socialEnricher.js'
 import { getMagazineNews, getArticlePreview, isTrustedSource } from '../services/magazineNews.js'
-import { getCached } from '../cache.js'
+import { getCached, setCached } from '../cache.js'
+import { getFullCast } from '../tmdb.js'
 import {
   isValidIso2,
   normalizeIso2,
@@ -246,9 +247,26 @@ trendsRouter.get(
       firstAirDate: series.firstAirDate || null,
       overview: series.overview || '',
       theme: themeEntry ? effectiveTheme(themeEntry) : null,
-      totalEpisodes: enrichment?.dizilah?.totalEpisodes ?? null,
+      totalEpisodes: enrichment?.dizilah?.totalEpisodes ?? enrichment?.imdb?.episodeCount ?? null,
       cast: series.cast || [],
     })
+  })
+)
+
+// Dizi sayfasındaki ana kadronun tamamı (tüm sezonlar, bölüm sayısına göre sıralı). 7 gün önbellek.
+const SERIES_CAST_TTL_MS = 7 * 24 * 60 * 60 * 1000
+trendsRouter.get(
+  '/api/series/:tmdbId/cast',
+  upstream('series-cast', async (req, res) => {
+    const series = liveSeriesOr404(res, Number(req.params.tmdbId))
+    if (!series) return
+    const key = `series-cast:v1:${series.id}`
+    let data = getCached(key)
+    if (!data) {
+      data = await getFullCast(series.id)
+      setCached(key, data, SERIES_CAST_TTL_MS)
+    }
+    res.json(data)
   })
 )
 

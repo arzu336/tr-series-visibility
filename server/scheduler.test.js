@@ -33,6 +33,7 @@ vi.mock('./services/actorTrendsCollector.js', () => ({ runActorTrendsCollectionI
 vi.mock('./services/netflixPipelineRunner.js', () => ({ runNetflixSyncIfNeeded: kaydet('zincir:netflix') }))
 vi.mock('./services/reytingtvRunner.js', () => ({ runReytingtvSyncIfNeeded: kaydet('zincir:reytingtv') }))
 vi.mock('./services/flixpatrolRunner.js', () => ({ runFlixpatrolSyncIfNeeded: kaydet('zincir:flixpatrol') }))
+vi.mock('./services/imdbRunner.js', () => ({ runImdbSyncIfNeeded: kaydet('zincir:imdb') }))
 
 const { runScheduledRefreshInner, startScheduler, META_KEY } = await import('./scheduler.js')
 
@@ -101,7 +102,12 @@ describe('zamanlanmış tetikleme', () => {
     const netflixSira = cagriSirasi.indexOf('zincir:netflix')
     expect(netflixSira).toBeGreaterThan(cagriSirasi.indexOf('zincir:news'))
     expect(netflixSira).toBeGreaterThan(cagriSirasi.indexOf('zincir:tourismTrends'))
-    expect(cagriSirasi.slice(netflixSira)).toEqual(['zincir:netflix', 'zincir:reytingtv', 'zincir:flixpatrol'])
+    expect(cagriSirasi.slice(netflixSira)).toEqual([
+      'zincir:netflix',
+      'zincir:reytingtv',
+      'zincir:imdb',
+      'zincir:flixpatrol',
+    ])
   })
 
   it('Türkiye TV ve FlixPatrol, Netflix başarılı olduğunda da çalışır (catch içine düşme regresyonu)', async () => {

@@ -4,6 +4,7 @@ import { useAsync } from '../../lib/useAsync.js'
 import { usePrintWhenReady } from '../../lib/usePrintWhenReady.js'
 import ProfilePicker from './ProfilePicker.jsx'
 import CountryReportDocument from './CountryReportDocument.jsx'
+import { IconPrint } from '../Icons.jsx'
 
 // Ülke raporu görünümü: profil seçimi (yetki sunucudan gelir), rapor çekimi, "PDF olarak indir".
 // Baskı: usePrintWhenReady yükleme göstergesi (.report__loading) kalmayınca window.print() çağırır;
@@ -52,7 +53,14 @@ export default function CountryReportView({ iso2, countryName, onBack }) {
           disabled={printing || !hazir}
           aria-label="Raporu PDF olarak indir (yazdırma önizlemesi açılır)"
         >
-          {printing ? 'Önizleme hazırlanıyor…' : '🖨 PDF olarak indir'}
+          {printing ? (
+            'Önizleme hazırlanıyor…'
+          ) : (
+            <>
+              <IconPrint size={15} inline />
+              PDF olarak indir
+            </>
+          )}
         </button>
       </div>
 

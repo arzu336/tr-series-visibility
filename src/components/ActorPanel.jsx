@@ -1,14 +1,14 @@
 import { useEffect, useState } from 'react'
 import { fetchPersonImpact, fetchImdbData } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
+import Avatar from './Avatar.jsx'
+import { IconMap, IconStar } from './Icons.jsx'
 
 const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185'
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 
 export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlobal }) {
   const [imdbBySeriesId, setImdbBySeriesId] = useState({})
-  const [photoFailed, setPhotoFailed] = useState(false)
-  const [photoLoaded, setPhotoLoaded] = useState(false)
 
   const personReq = useAsync(() => fetchPersonImpact(personId), [personId], { enabled: personId != null })
   const data = personReq.status === 'ready' ? personReq.data : null
@@ -17,8 +17,6 @@ export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlob
 
   useEffect(() => {
     setImdbBySeriesId({})
-    setPhotoFailed(false)
-    setPhotoLoaded(false)
   }, [personId])
 
   useEffect(() => {
@@ -37,8 +35,6 @@ export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlob
     }
   }, [status, data])
 
-  const showPhoto = data?.person?.profilePath && !photoFailed
-
   return (
     <>
       {status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
@@ -50,27 +46,22 @@ export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlob
       {status === 'ready' && data && (
         <>
           <div className="actor-modal__header">
-            {showPhoto ? (
-              <img
-                key={data.person.profilePath}
-                className={photoLoaded ? 'actor-modal__photo actor-modal__photo--loaded' : 'actor-modal__photo'}
-                src={`${PROFILE_BASE}${data.person.profilePath}`}
-                alt=""
-                onLoad={() => setPhotoLoaded(true)}
-                onError={() => setPhotoFailed(true)}
-              />
-            ) : (
-              <span className="actor-modal__photo actor-modal__photo--empty" aria-hidden="true" />
-            )}
+            <Avatar
+              className="actor-modal__photo"
+              src={data.person.profilePath ? `${PROFILE_BASE}${data.person.profilePath}` : null}
+              name={data.person.name}
+            />
             <h2>{data.person.name}</h2>
           </div>
 
           <button
-            className="actor-modal__network-btn"
+            type="button"
+            className="ui-btn ui-btn--block actor-modal__network-btn"
             onClick={() => onShowNetwork?.(data.person.name, data.series)}
             title="Yayınlandığı ülkeleri haritada işaretle"
           >
-            🌐 Bu Oyuncunun Tüm Projelerini Haritada Göster
+            <IconMap />
+            Tüm dizilerini haritada göster
           </button>
 
           <h3>Diğer Yapımlar ve Öne Çıktığı Ülkeler</h3>
@@ -95,7 +86,8 @@ export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlob
                         {s.name}
                         {imdb?.status === 'ready' && imdb.rating != null && (
                           <span className="panel__series-imdb" title="Puan">
-                            ⭐ {imdb.rating.toFixed(1)}
+                            <IconStar size={11} />
+                            {imdb.rating.toFixed(1)}
                           </span>
                         )}
                       </span>

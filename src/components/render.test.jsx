@@ -5,9 +5,10 @@ import CountryLeaderboard from './CountryLeaderboard.jsx'
 import { HybridScoreTag } from './MediaSentimentCard.jsx'
 import SeriesPage, { seriesFromCountries } from './SeriesPage.jsx'
 import Flag from './Flag.jsx'
+import TrendsExplorer from './TrendsExplorer.jsx'
 import CountryPanel, { WatchLists } from './CountryPanel.jsx'
 import ChartList from './ChartList.jsx'
-import { MagazineList, MagazineReader } from './MagazineNews.jsx'
+import { MagazineCarousel, visibleMagazineItems } from './MagazineNews.jsx'
 import CountryReportDocument from './report/CountryReportDocument.jsx'
 import CountryReportView from './report/CountryReportView.jsx'
 import ProfilePicker from './report/ProfilePicker.jsx'
@@ -44,9 +45,9 @@ describe('useAsync tabanlı bileşenler ilk render', () => {
     expect(renderToString(<HybridScoreTag seriesName="Terzi" iso2="DE" />)).toContain('Yerel skor hesaplanıyor')
   })
 
-  it('SeriesPage dizi bulunamazsa mesaj ve haritaya dönüş basar', () => {
+  it('SeriesPage dizi yayın listelerinde yoksa katalog kaydını bekler (yükleniyor) ve haritaya dönüş basar', () => {
     const html = renderToString(<SeriesPage seriesId={99} allCountries={[]} />)
-    expect(html).toContain('veri bulunamadı')
+    expect(html).toContain('Yükleniyor')
     expect(html).toContain('Haritaya dön')
   })
 
@@ -658,68 +659,54 @@ describe('ChartList trend işaretleri (Spotify tarzı)', () => {
   })
 })
 
-describe('MagazineList', () => {
-  it('kart: görsel, başlık ve tarih; kaynak adı yok; haber sitesine bağlantı yok (pencere açar); güvensiz bağlantı elenir', () => {
-    const html = renderToString(
-      <MagazineList
-        items={[
-          {
-            title: 'Yalı Çapkını final yaptı',
-            source: 'Sabah',
-            link: 'https://www.sabah.com.tr/a',
-            date: '2026-09-28T10:00:00.000Z',
-            about: 'dizi',
-          },
-          {
-            title: 'Afra Saraçoğlu tatilde',
-            source: 'Milliyet',
-            link: 'https://www.milliyet.com.tr/b',
-            date: null,
-            about: 'Afra Saraçoğlu',
-          },
-          { title: 'Zararlı', source: 'X', link: 'javascript:alert(1)', date: null, about: 'dizi' },
-        ]}
-      />
-    )
-    expect(html).not.toContain('href=')
-    expect(html).not.toContain('target="_blank"')
-    expect(html).toMatch(/<button type="button" class="magazine-list__link"/)
-    expect(html).toContain('Yalı Çapkını final yaptı')
-    expect(html).toContain('Afra Saraçoğlu tatilde')
-    expect(html).not.toContain('Sabah')
-    expect(html).not.toContain('Milliyet')
+describe('MagazineCarousel (dizilah düzeni)', () => {
+  const haberler = [
+    {
+      title: 'Yalı Çapkını final yaptı',
+      source: 'Sabah',
+      link: 'https://www.sabah.com.tr/a',
+      date: '2026-09-28T10:00:00.000Z',
+      thumbnail: 'https://img.sabah.com.tr/a.jpg',
+      about: 'dizi',
+    },
+    {
+      title: 'Afra Saraçoğlu tatilde',
+      source: 'Milliyet',
+      link: 'https://www.milliyet.com.tr/b',
+      date: null,
+      about: 'Afra Saraçoğlu',
+    },
+    { title: 'Zararlı', source: 'X', link: 'javascript:alert(1)', date: null, about: 'dizi' },
+  ]
+
+  it('dizilah düzeni: solda tek büyük haber (görsel, tarih, başlık, özet), sağda haber listesi; haber açılmaz', () => {
+    const html = renderToString(<MagazineCarousel items={visibleMagazineItems(haberler)} />)
+    expect(html).toContain('aria-roledescription="carousel"')
+    expect(html).toMatch(/<h3 class="magazine-carousel__title">Yalı Çapkını final yaptı<\/h3>/)
     expect(html).toContain('28 Eyl 2026')
+    expect(html).toContain('Özet yükleniyor')
+    // sağ liste: iki haber, etkin olan vurgulu ve dolum çubuklu
+    expect((html.match(/class="magazine-carousel__item( magazine-carousel__item--active)?"/g) || []).length).toBe(2)
+    expect(html).toMatch(/magazine-carousel__item--active"[^>]*aria-current="true"/)
+    expect(html).toContain('magazine-carousel__fill')
+    expect(html).toContain('Afra Saraçoğlu tatilde')
     expect(html).not.toContain('Zararlı')
+    expect(html).not.toContain('Sabah')
+    expect(html).not.toContain('href=')
   })
 
-  it('haber yoksa boş durum metni', () => {
-    expect(renderToString(<MagazineList items={[]} />)).toContain('güncel haber bulunamadı')
+  it('tek haberde liste yok; haber yoksa boş durum metni', () => {
+    const tek = renderToString(<MagazineCarousel items={visibleMagazineItems(haberler).slice(0, 1)} />)
+    expect(tek).not.toContain('magazine-carousel__list')
+    expect(renderToString(<MagazineCarousel items={[]} />)).toContain('güncel haber bulunamadı')
   })
 })
 
-describe('MagazineReader', () => {
-  it('haberler alt alta: başlık, tarih ve özet yükleniyor; kaynak adı yok; diyalog erişilebilir', () => {
-    const html = renderToString(
-      <MagazineReader
-        items={[
-          {
-            title: 'Uzak Şehir sette',
-            source: 'Sözcü',
-            link: 'https://www.sozcu.com.tr/a',
-            date: '2026-09-28T10:00:00.000Z',
-          },
-          { title: 'Sinem Ünsal tatilde', source: 'Milliyet', link: 'https://www.milliyet.com.tr/b', date: null },
-        ]}
-        onClose={() => {}}
-      />
-    )
-    expect(html).toContain('role="dialog"')
-    expect(html).toContain('aria-modal="true"')
-    expect(html).toContain('Uzak Şehir sette')
-    expect(html).toContain('Sinem Ünsal tatilde')
-    expect(html).toContain('28 Eyl 2026')
-    expect(html).toContain('Özet yükleniyor')
-    expect(html).not.toContain('Sözcü')
-    expect(html).not.toContain('href=')
+describe('TrendsExplorer — dizi sayfasından gelindiyse dönüş düğmesi', () => {
+  it('onBack verilince düğme görünür, verilmezse görünmez', () => {
+    const ile = renderToString(<TrendsExplorer onBack={() => {}} backLabel="Uzak Şehir sayfasına dön" />)
+    expect(ile).toContain('Uzak Şehir sayfasına dön')
+    expect(ile).toContain('series-page__back')
+    expect(renderToString(<TrendsExplorer />)).not.toContain('series-page__back')
   })
 })

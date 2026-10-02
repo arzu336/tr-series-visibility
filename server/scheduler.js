@@ -12,6 +12,7 @@ import { runActorTrendsCollectionIfNeeded } from './services/actorTrendsCollecto
 import { runNetflixSyncIfNeeded } from './services/netflixPipelineRunner.js'
 import { runReytingtvSyncIfNeeded } from './services/reytingtvRunner.js'
 import { runFlixpatrolSyncIfNeeded } from './services/flixpatrolRunner.js'
+import { runImdbSyncIfNeeded } from './services/imdbRunner.js'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -114,6 +115,14 @@ async function runZenginlestirmeZinciri() {
     await runReytingtvSyncIfNeeded()
   } catch (err) {
     console.error('[scheduler] Türkiye TV listesi çekimi başarısız:', err.message)
+  }
+
+  // IMDb puan/oy senkronu günlük ve kısa (~1 dk); oy artışı ölçüsü gün atlamamalı, bu yüzden 2,5 saate
+  // kadar sürebilen FlixPatrol'dan ÖNCE çalışır.
+  try {
+    await runImdbSyncIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] IMDb senkronizasyonu başarısız:', err.message)
   }
 
   // FlixPatrol bağımsız çalışır (Netflix/reyting sonucundan etkilenmez); haftalık kapı

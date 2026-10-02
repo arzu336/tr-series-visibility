@@ -73,18 +73,27 @@ body {
   position: absolute;
   top: 1rem;
   left: 1rem;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
   background: rgba(10, 14, 24, 0.75);
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  color: #f1f3f8;
-  border-radius: 8px;
-  padding: 0.4rem 0.9rem;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  color: #c9cfdb;
+  border-radius: 999px;
+  padding: 0.4rem 0.95rem 0.4rem 0.75rem;
+  font: inherit;
   font-size: 0.8rem;
+  font-weight: 600;
   cursor: pointer;
   backdrop-filter: blur(6px);
+  transition:
+    border-color 150ms ease,
+    color 150ms ease;
 }
 
 .globe__reset-btn:hover {
-  background: rgba(20, 26, 40, 0.9);
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #fff;
 }
 
 .legend {
@@ -329,10 +338,6 @@ body {
   object-fit: cover;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.06);
-}
-
-.panel-search__result-photo--empty {
-  display: inline-block;
 }
 
 .panel-search__result-flag {
@@ -2011,21 +2016,8 @@ body {
 }
 
 .map-cta__btn {
-  background: #0e7490;
-  border: none;
-  color: #fff;
-  border-radius: 8px;
-  padding: 0.5rem 1.1rem;
-  font-size: 0.83rem;
-  font-weight: 600;
-  cursor: pointer;
   white-space: nowrap;
   flex-shrink: 0;
-  transition: background 150ms ease;
-}
-
-.map-cta__btn:hover {
-  background: #0891b2;
 }
 
 @media (max-width: 480px) {
@@ -3667,6 +3659,42 @@ button.sidebar__big-card:hover {
   display: none; /* Chrome/Safari/Edge (Chromium) */
 }
 
+/* Dizi sayfasında ana kadro: tek satır, yatay kaydırma; çubuk yalnızca üzerine gelince belirir (hayalet) */
+.cast-bar--scroll {
+  gap: 0.7rem;
+  padding-bottom: 0.55rem;
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+.cast-bar--scroll:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.18) transparent;
+}
+
+.cast-bar--scroll::-webkit-scrollbar {
+  display: block;
+  height: 6px;
+}
+
+.cast-bar--scroll::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+.cast-bar--scroll:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.cast-bar--scroll .cast-bar__item {
+  width: 76px;
+}
+
+.series-page__count {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: #8792a8;
+}
+
 .cast-bar__item {
   display: flex;
   flex-direction: column;
@@ -3692,10 +3720,6 @@ button.sidebar__big-card:hover {
 
 .cast-bar__item:hover .cast-bar__photo {
   border-color: #ee3135;
-}
-
-.cast-bar__photo--empty {
-  display: inline-block;
 }
 
 .cast-bar__name {
@@ -3739,37 +3763,14 @@ button.sidebar__big-card:hover {
   object-fit: cover;
   flex-shrink: 0;
   background: rgba(255, 255, 255, 0.06);
-  /* TMDB CDN'den yüklenirken aniden belirmek yerine yumuşakça açılsın — opacity gerçek
-     <img> onLoad olayına bağlı (bkz. ActorPanel.jsx __photo-loaded), sabit bir süreye değil. */
-  opacity: 0;
-  transition: opacity 200ms ease;
 }
 
-.actor-modal__photo--loaded {
-  opacity: 1;
-}
-
-.actor-modal__photo--empty {
-  display: inline-block;
-  /* Fotoğrafsız yer tutucu bir <span>, onLoad tetiklenmez — hemen görünür kalmalı. */
-  opacity: 1;
+.actor-modal__photo.avatar--initials {
+  font-size: 1.05rem;
 }
 
 .actor-modal__network-btn {
-  width: 100%;
-  margin-bottom: 1rem;
-  padding: 0.55rem 0.8rem;
-  background: rgba(240, 173, 78, 0.12);
-  border: 1px solid rgba(240, 173, 78, 0.4);
-  border-radius: 8px;
-  color: #f0ad4e;
-  font-size: 0.85rem;
-  font-weight: 600;
-  cursor: pointer;
-}
-
-.actor-modal__network-btn:hover {
-  background: rgba(240, 173, 78, 0.2);
+  margin-bottom: 1.1rem;
 }
 
 /* --- Küresel Duolingo kartı (TurkishLearningIndex.jsx) --- */
@@ -5201,68 +5202,244 @@ button.sidebar__big-card:hover {
   text-decoration: underline;
 }
 
-.app__brand-sub {
-  margin: 0;
-  color: #8792a8;
-  font-size: 0.78rem;
+/* Magazin kaydırıcısı (dizilah düzeni): solda büyük haber, sağda haber listesi */
+/* Düzen ekran genişliğine değil bölümün genişliğine göre seçilir (sağ sütunda dar, tek sütunda geniş) */
+.series-page__section--magazine {
+  container-type: inline-size;
 }
 
-/* Magazin haberleri: görsel + başlık kartları */
-.magazine-list {
-  list-style: none;
-  margin: 0.25rem 0 0.25rem;
-  padding: 0;
+.magazine-carousel {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-  gap: 0.75rem;
+  grid-template-columns: minmax(0, 2.3fr) minmax(240px, 1fr);
+  gap: 0.9rem;
 }
 
-.magazine-list__link {
-  display: flex;
-  flex-direction: column;
-  gap: 0.45rem;
-  width: 100%;
-  height: 100%;
-  padding: 0.4rem;
-  border: none;
-  border-radius: 10px;
-  background: none;
-  color: inherit;
-  font: inherit;
-  text-align: left;
-  cursor: pointer;
+.magazine-carousel__hero {
+  position: relative;
+  border-radius: 14px;
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.06);
+  color: #fff;
 }
 
-.magazine-list__date {
-  font-size: 0.72rem;
-  color: #8792a8;
-}
-
-.magazine-list__link:hover,
-.magazine-list__link:focus-visible {
-  background: rgba(255, 255, 255, 0.05);
-  outline: none;
-}
-
-.magazine-list__thumb {
+.magazine-carousel__image {
+  display: block;
   width: 100%;
   aspect-ratio: 16 / 9;
   object-fit: cover;
-  border-radius: 8px;
-  background: rgba(255, 255, 255, 0.06);
 }
 
-.magazine-list__thumb--empty {
+.magazine-carousel__image--empty {
   display: block;
 }
 
-.magazine-list__title {
-  font-size: 0.85rem;
-  line-height: 1.35;
+.magazine-carousel__overlay {
+  position: absolute;
+  inset: auto 0 0 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.45rem;
+  padding: 4rem 1.5rem 1.4rem;
+  background: linear-gradient(to top, rgba(5, 7, 13, 0.92) 0%, rgba(5, 7, 13, 0.6) 55%, transparent 100%);
+}
+
+.magazine-carousel__date {
+  font-size: 0.75rem;
+  color: #c9cfdb;
+}
+
+.magazine-carousel__title {
+  margin: 0;
+  font-size: 1.7rem;
+  font-weight: 800;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.magazine-carousel__summary {
+  margin: 0;
+  font-size: 0.95rem;
+  line-height: 1.5;
+  color: #eef0f5;
   display: -webkit-box;
   -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
+}
+
+.magazine-carousel__summary--muted {
+  color: #c9cfdb;
+  font-style: italic;
+}
+
+/* Sağdaki liste büyük haberle aynı yükseklikte kalır, fazlası listenin içinde kayar */
+.magazine-carousel__aside {
+  position: relative;
+  min-height: 0;
+}
+
+.magazine-carousel__list {
+  position: absolute;
+  inset: 0;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.55rem;
+}
+
+.magazine-carousel__item {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+  width: 100%;
+  padding: 0.55rem;
+  border: none;
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: #c9cfdb;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  overflow: hidden;
+  transition: background 200ms ease;
+}
+
+.magazine-carousel__item:hover,
+.magazine-carousel__item:focus-visible {
+  background: rgba(255, 255, 255, 0.09);
+  outline: none;
+}
+
+.magazine-carousel__item--active {
+  color: #fff;
+  background: rgba(255, 255, 255, 0.09);
+}
+
+/* Etkin haberin arka planı süre boyunca soldan sağa dolar */
+.magazine-carousel__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  width: 0;
+  background: rgba(142, 197, 255, 0.16);
+  animation: magazine-progress linear forwards;
+  pointer-events: none;
+}
+
+.magazine-carousel__fill--paused {
+  animation-play-state: paused;
+}
+
+@keyframes magazine-progress {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.magazine-carousel__thumb {
+  position: relative;
+  width: 104px;
+  aspect-ratio: 16 / 10;
+  object-fit: cover;
+  border-radius: 7px;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.magazine-carousel__thumb--empty {
+  display: inline-block;
+}
+
+.magazine-carousel__item-title {
+  position: relative;
+  font-size: 0.82rem;
+  font-weight: 700;
+  line-height: 1.3;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* Orta genişlik (sağ sütun): liste yine sağda, görseller ve yazılar küçülür */
+@container (max-width: 820px) {
+  .magazine-carousel {
+    grid-template-columns: minmax(0, 1.75fr) minmax(180px, 1fr);
+    gap: 0.7rem;
+  }
+
+  .magazine-carousel__item {
+    gap: 0.55rem;
+    padding: 0.4rem;
+  }
+
+  .magazine-carousel__thumb {
+    width: 72px;
+  }
+
+  .magazine-carousel__item-title {
+    font-size: 0.74rem;
+  }
+
+  .magazine-carousel__title {
+    font-size: 1.2rem;
+  }
+
+  .magazine-carousel__summary {
+    font-size: 0.82rem;
+    -webkit-line-clamp: 2;
+  }
+
+  .magazine-carousel__overlay {
+    padding: 3rem 1rem 0.9rem;
+  }
+}
+
+/* Çok dar (telefon): liste büyük haberin altına, yatay kayan şerit */
+@container (max-width: 480px) {
+  .magazine-carousel {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .magazine-carousel__aside {
+    position: static;
+  }
+
+  .magazine-carousel__list {
+    position: static;
+    flex-direction: row;
+    overflow-x: auto;
+    overflow-y: hidden;
+  }
+
+  .magazine-carousel__list > li {
+    flex: 0 0 240px;
+  }
+
+  .magazine-carousel__title {
+    font-size: 1.25rem;
+  }
+
+  .magazine-carousel__overlay {
+    padding: 3rem 1rem 1rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .magazine-carousel__fill {
+    animation: none;
+    width: 100%;
+  }
 }
 
 /* Küçük ülke bayrağı (flag-icons) */
@@ -5283,27 +5460,207 @@ button.sidebar__big-card:hover {
   color: #f1f3f8;
 }
 
-.series-page__back {
-  background: none;
-  border: none;
-  color: #8ec5ff;
+/* Ortak düğme dili (dizi sayfası, oyuncu paneli, analiz): yuvarlak, ince çerçeveli; simgeler ince çizgili SVG */
+.series-page__back,
+.series-page__btn,
+.ui-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45rem;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  background: rgba(255, 255, 255, 0.04);
+  color: #c9cfdb;
+  font: inherit;
+  font-weight: 600;
   cursor: pointer;
-  font-size: 0.9rem;
-  padding: 0.25rem 0;
-  margin-bottom: 1rem;
+  transition:
+    border-color 150ms ease,
+    color 150ms ease,
+    background 150ms ease;
+}
+
+.series-page__back {
+  padding: 0.35rem 0.9rem 0.35rem 0.6rem;
+  font-size: 0.8rem;
+  margin-bottom: 1.25rem;
+}
+
+.series-page__btn,
+.ui-btn {
+  padding: 0.55rem 1.15rem;
+  font-size: 0.88rem;
+}
+
+.ui-btn--block {
+  width: 100%;
+  justify-content: center;
+  padding: 0.6rem 1rem;
+  font-size: 0.85rem;
 }
 
 .series-page__back:hover,
-.series-page__back:focus-visible {
-  text-decoration: underline;
-  outline: none;
+.series-page__btn:hover,
+.ui-btn:hover {
+  border-color: rgba(255, 255, 255, 0.32);
+  color: #fff;
+}
+
+.series-page__btn--primary,
+.ui-btn--primary {
+  background: #ee3135;
+  border-color: #ee3135;
+  color: #fff;
+}
+
+.series-page__btn--primary:hover,
+.ui-btn--primary:hover {
+  background: #d4272b;
+  border-color: #d4272b;
+}
+
+.series-page__back:focus-visible,
+.series-page__btn:focus-visible,
+.ui-btn:focus-visible,
+.globe__reset-btn:focus-visible {
+  outline: 2px solid #8ec5ff;
+  outline-offset: 2px;
+}
+
+.ui-icon {
+  flex-shrink: 0;
+}
+
+/* IMDb oy artışı: trend işaretleriyle aynı yeşil */
+.series-page__pill--up {
+  color: #4ec27a;
+  border-color: rgba(78, 194, 122, 0.35);
+}
+
+.series-page__crew {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.25rem 1.1rem;
+  margin: 0.15rem 0 0.6rem;
+  font-size: 0.82rem;
+  color: #aab3c5;
+}
+
+.series-page__crew strong {
+  color: #8792a8;
+  font-weight: 600;
+}
+
+.series-page__row--title {
+  align-items: flex-start;
+}
+
+.series-page__aka {
+  color: #e6e9f0;
+}
+
+.series-page__aka-flags {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.3rem;
+  flex-shrink: 0;
+  max-width: 50%;
+}
+
+/* Bölüm puanı ısı haritası (EpisodeHeatmap.jsx) */
+.episode-map__summary {
+  margin: 0 0 0.75rem;
+  font-size: 0.78rem;
+  color: #8792a8;
+}
+
+.episode-map__row {
+  display: grid;
+  grid-template-columns: 4.2rem 1fr 2rem;
+  align-items: start;
+  gap: 0.6rem;
+  margin-bottom: 0.45rem;
+}
+
+.episode-map__label,
+.episode-map__avg {
+  font-size: 0.75rem;
+  color: #8792a8;
+  line-height: 14px;
+  white-space: nowrap;
+}
+
+.episode-map__avg {
+  text-align: right;
+  color: #c9cfdb;
+  font-weight: 600;
+}
+
+.episode-map__cells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+}
+
+.episode-map__cell {
+  width: 14px;
+  height: 14px;
+  border-radius: 3px;
+  background: rgba(255, 255, 255, 0.07);
+  display: inline-block;
+}
+
+.episode-map__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem 0.8rem;
+  margin-top: 0.8rem;
+  font-size: 0.7rem;
+  color: #8792a8;
+}
+
+.episode-map__legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.series-header__growth {
+  color: #4ec27a;
+}
+
+/* Fotoğrafı olmayan oyuncu: baş harfler (Avatar.jsx); boyut, birlikte verilen sınıftan gelir */
+.avatar--initials {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, #2a3142, #1a1f2b);
+  color: #aab3c5;
+  font-weight: 700;
+  font-size: 0.95rem;
+  letter-spacing: 0.02em;
+  user-select: none;
+}
+
+.panel-search__result-photo.avatar--initials {
+  font-size: 0.72rem;
+}
+
+.ui-icon--inline {
+  vertical-align: -0.17em;
+  margin-right: 0.35rem;
+}
+
+.ui-star {
+  color: #f5c518;
+  margin-right: 0.2rem;
 }
 
 .series-page__header {
   display: flex;
   gap: 1.5rem;
   align-items: flex-start;
-  max-width: 1100px;
   margin-bottom: 1.75rem;
 }
 
@@ -5355,11 +5712,11 @@ button.sidebar__big-card:hover {
   align-items: center;
 }
 
+/* Sayfa tüm genişliği kullanır (geniş ekranda sağ taraf boş kalmasın) */
 .series-page__grid {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
   gap: 1.5rem;
-  max-width: 1100px;
 }
 
 .series-page__section {
@@ -5476,11 +5833,6 @@ button.sidebar__big-card:hover {
   }
 }
 
-.series-page__actions .actor-modal__network-btn {
-  width: auto;
-  margin: 0;
-}
-
 /* Hayalet kaydırma çubukları (kullanıcı talebi): çubuk normalde görünmez, yalnızca kaydırılabilir alanın
    üzerine gelince belli belirsiz belirir. Firefox ve yeni Chromium standart özellikleri, Safari -webkit-
    kurallarını kullanır. .panel/.sidebar'daki eski (her zaman görünen) ince çubuk kurallarını da ezer. */
@@ -5517,102 +5869,4 @@ button.sidebar__big-card:hover {
 .panel:hover::-webkit-scrollbar-thumb,
 .sidebar:hover::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
-}
-
-/* Magazin okuma penceresi: haberler alt alta, kaydırarak okunur */
-.magazine-reader__overlay {
-  padding: 2vh 1rem;
-}
-
-.magazine-reader {
-  display: flex;
-  flex-direction: column;
-  width: 100%;
-  max-width: 760px;
-  max-height: 96vh;
-  background: #0a0e18;
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  border-radius: 16px;
-  color: #f1f3f8;
-  overflow: hidden;
-}
-
-.magazine-reader__bar {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0.85rem 1.25rem;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-.magazine-reader__heading {
-  margin: 0;
-  font-size: 1.05rem;
-}
-
-.magazine-reader__close {
-  background: none;
-  border: none;
-  color: #c9cfdb;
-  font-size: 1.1rem;
-  cursor: pointer;
-  padding: 0.25rem 0.5rem;
-  border-radius: 6px;
-}
-
-.magazine-reader__close:hover,
-.magazine-reader__close:focus-visible {
-  background: rgba(255, 255, 255, 0.08);
-  outline: none;
-}
-
-.magazine-reader__feed {
-  overflow-y: auto;
-  padding: 1.25rem;
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-}
-
-.magazine-reader__entry {
-  scroll-margin-top: 1rem;
-}
-
-.magazine-reader__image {
-  display: block;
-  width: 100%;
-  aspect-ratio: 16 / 9;
-  object-fit: cover;
-  border-radius: 12px;
-  background: rgba(255, 255, 255, 0.06);
-}
-
-.magazine-reader__title {
-  margin: 0.9rem 0 0.3rem;
-  font-size: 1.25rem;
-  line-height: 1.35;
-}
-
-.magazine-reader__date {
-  margin: 0 0 0.6rem;
-  font-size: 0.8rem;
-  color: #8792a8;
-}
-
-.magazine-reader__summary {
-  margin: 0;
-  font-size: 0.98rem;
-  line-height: 1.6;
-  color: #d5dae4;
-}
-
-.magazine-reader__summary--muted {
-  color: #8792a8;
-  font-style: italic;
-}
-
-@media (max-width: 900px) {
-  .magazine-reader__title {
-    font-size: 1.1rem;
-  }
 }

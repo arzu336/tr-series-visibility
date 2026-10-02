@@ -49,6 +49,17 @@ export default function MediaSentimentCard({ seriesId, iso2 }) {
     )
   }
 
+  if (state.status === 'unsupported' && state.data?.unsupportedReason === 'kisa-ad') {
+    return (
+      <div className="media-sentiment media-sentiment--empty">
+        <p className="dashboard__empty">
+          Dizi adı (“{state.data.queryUsed}”) basın taraması için çok kısa — haber kaynağımız (GDELT) 5 harften kısa
+          adları aramıyor.
+        </p>
+      </div>
+    )
+  }
+
   if (state.status === 'unsupported') {
     return (
       <div className="media-sentiment media-sentiment--empty">
