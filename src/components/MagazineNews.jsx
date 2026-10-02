@@ -1,10 +1,10 @@
 import { fetchMagazineNews } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
 import { safeExternalUrl } from '../lib/safeUrl.js'
-import { fmtDateTr } from './ChartList.jsx'
 
-// Dizi ve başrol oyuncuları hakkında güncel magazin haberleri. Haber değiştirilmeden gösterilir:
-// başlık, yayın kuruluşu, tarih ve haberin kendi sitesine bağlantı (bkz. server/services/magazineNews.js).
+// Dizi ve başrol oyuncuları hakkında güncel magazin haberleri: görsel + başlık kartları (kullanıcı talebi:
+// kaynak adı ve tarih gösterilmez). Kart haberin kendi sitesine gider; başlık değiştirilmez
+// (bkz. server/services/magazineNews.js — izinli kaynaklar, süzgeçler).
 
 export function MagazineList({ items, limit = 5 }) {
   const shown = (items || []).filter((it) => safeExternalUrl(it.link)).slice(0, limit)
@@ -19,14 +19,7 @@ export function MagazineList({ items, limit = 5 }) {
             ) : (
               <span className="magazine-list__thumb magazine-list__thumb--empty" aria-hidden="true" />
             )}
-            <span className="magazine-list__body">
-              <span className="magazine-list__title">{it.title}</span>
-              <span className="magazine-list__meta">
-                {it.source}
-                {it.date ? ` · ${fmtDateTr(it.date)}` : ''}
-                {it.about && it.about !== 'dizi' ? ` · ${it.about}` : ''}
-              </span>
-            </span>
+            <span className="magazine-list__title">{it.title}</span>
           </a>
         </li>
       ))}

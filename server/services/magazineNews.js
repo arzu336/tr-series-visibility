@@ -71,7 +71,7 @@ export function isTrustedSource(link, domains = TRUSTED_NEWS_DOMAINS) {
 
 // normalizeText sonrası (küçük harf, aksansız) başlıkta aranır; kelime başından eşleşir.
 const GUIDE_RE =
-  /(^| )(izle|izleme|canli|full|tek parca|saat kacta|var mi|yayin akisi|tv rehberi|fragman\w*|reyting\w*|kimdir|kac yasinda|\d+ bolum\w*)( |$)/
+  /(^| )(izle|izleme|canli|full|tek parca|saat kacta|ne zaman basliyor|var mi|yayin akisi|tv rehberi|fragman\w*|reyting\w*|kimdir|kac yasinda|\d+ bolum\w*)( |$)/
 const LEGAL_RE =
   /(^| )(gozalti\w*|tutuklan\w*|tutuklama\w*|sorusturma\w*|uyusturucu\w*|operasyon\w*|dava\w*|mahkeme\w*|savcilik\w*|ifade\w*|hapis\w*|saliverildi|cikis yasag\w*|sucla\w*|iddianame\w*)( |$)/
 

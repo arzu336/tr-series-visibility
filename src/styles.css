@@ -5207,22 +5207,23 @@ button.sidebar__big-card:hover {
   font-size: 0.78rem;
 }
 
-/* Magazin haberleri (dizi ayrıntısı) */
+/* Magazin haberleri: görsel + başlık kartları */
 .magazine-list {
   list-style: none;
-  margin: 0.25rem 0 0.75rem;
+  margin: 0.25rem 0 0.25rem;
   padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.2rem;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 0.75rem;
 }
 
 .magazine-list__link {
   display: flex;
-  gap: 0.6rem;
-  align-items: flex-start;
-  padding: 0.4rem 0.2rem;
-  border-radius: 8px;
+  flex-direction: column;
+  gap: 0.45rem;
+  height: 100%;
+  padding: 0.4rem;
+  border-radius: 10px;
   color: inherit;
   text-decoration: none;
 }
@@ -5234,37 +5235,24 @@ button.sidebar__big-card:hover {
 }
 
 .magazine-list__thumb {
-  width: 64px;
-  height: 42px;
+  width: 100%;
+  aspect-ratio: 16 / 9;
   object-fit: cover;
-  border-radius: 4px;
-  flex-shrink: 0;
+  border-radius: 8px;
   background: rgba(255, 255, 255, 0.06);
 }
 
 .magazine-list__thumb--empty {
-  display: inline-block;
-}
-
-.magazine-list__body {
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  gap: 0.15rem;
+  display: block;
 }
 
 .magazine-list__title {
   font-size: 0.85rem;
-  line-height: 1.3;
+  line-height: 1.35;
   display: -webkit-box;
-  -webkit-line-clamp: 2;
+  -webkit-line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-
-.magazine-list__meta {
-  font-size: 0.72rem;
-  color: #8792a8;
 }
 
 /* Küçük ülke bayrağı (flag-icons) */
@@ -5481,4 +5469,42 @@ button.sidebar__big-card:hover {
 .series-page__actions .actor-modal__network-btn {
   width: auto;
   margin: 0;
+}
+
+/* Hayalet kaydırma çubukları (kullanıcı talebi): çubuk normalde görünmez, yalnızca kaydırılabilir alanın
+   üzerine gelince belli belirsiz belirir. Firefox ve yeni Chromium standart özellikleri, Safari -webkit-
+   kurallarını kullanır. .panel/.sidebar'daki eski (her zaman görünen) ince çubuk kurallarını da ezer. */
+*,
+.panel,
+.sidebar {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+
+*:hover,
+.panel:hover,
+.sidebar:hover {
+  scrollbar-color: rgba(255, 255, 255, 0.14) transparent;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb,
+.panel::-webkit-scrollbar-thumb,
+.sidebar::-webkit-scrollbar-thumb {
+  background: transparent;
+  border-radius: 999px;
+}
+
+:hover::-webkit-scrollbar-thumb,
+.panel:hover::-webkit-scrollbar-thumb,
+.sidebar:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.14);
 }

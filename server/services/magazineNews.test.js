@@ -139,6 +139,7 @@ describe('excludedReason — yayın rehberi ve hukuki süreç haberleri gösteri
     expect(excludedReason('Uzak Şehir 29 Eylül - Saat Kaçta Başlıyor? - TV Rehberi')).toBe('rehber')
     expect(excludedReason('Burak Deniz kimdir, nereli, kaç yaşında?')).toBe('rehber')
     expect(excludedReason('Yalı Çapkını yeni sezon fragmanı yayınlandı')).toBe('rehber')
+    expect(excludedReason("Uzak Şehir ne zaman başlıyor? Kanal D'de yeni sezon")).toBe('rehber')
   })
 
   it('hukuki süreç haberleri', () => {

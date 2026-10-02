@@ -31,7 +31,9 @@ app.use(
         defaultSrc: ["'self'"],
         scriptSrc: ["'self'"],
         styleSrc: ["'self'", "'unsafe-inline'"],
-        imgSrc: ["'self'", 'data:', 'blob:', 'https://image.tmdb.org'],
+        // Magazin kartlarının görselleri haber sitelerinin farklı CDN'lerinden gelir (alan adı listesi
+        // tutulamaz); https görsellerine izin verilir. Görseller betik çalıştıramaz; script/connect kısıtlı kalır.
+        imgSrc: ["'self'", 'data:', 'blob:', 'https:'],
         connectSrc: ["'self'"],
         workerSrc: ["'self'", 'blob:'],
         objectSrc: ["'none'"],

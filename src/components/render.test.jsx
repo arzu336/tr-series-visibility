@@ -659,7 +659,7 @@ describe('ChartList trend işaretleri (Spotify tarzı)', () => {
 })
 
 describe('MagazineList', () => {
-  it('başlık, kaynak, tarih ve yeni sekmede açılan bağlantı; güvensiz bağlantı gösterilmez', () => {
+  it('yalnızca görsel ve başlık (kaynak adı, tarih yok); yeni sekmede açılır; güvensiz bağlantı gösterilmez', () => {
     const html = renderToString(
       <MagazineList
         items={[
@@ -684,8 +684,11 @@ describe('MagazineList', () => {
     expect(html).toContain('href="https://www.sabah.com.tr/a"')
     expect(html).toContain('target="_blank"')
     expect(html).toContain('rel="noopener noreferrer"')
-    expect(html).toMatch(/Sabah(<!-- -->)? · 28 Eyl 2026/)
-    expect(html).toContain('Afra Saraçoğlu')
+    expect(html).toContain('Yalı Çapkını final yaptı')
+    expect(html).toContain('Afra Saraçoğlu tatilde')
+    expect(html).not.toContain('Sabah')
+    expect(html).not.toContain('Milliyet')
+    expect(html).not.toContain('28 Eyl 2026')
     expect(html).not.toContain('Zararlı')
   })
 
