@@ -5221,11 +5221,21 @@ button.sidebar__big-card:hover {
   display: flex;
   flex-direction: column;
   gap: 0.45rem;
+  width: 100%;
   height: 100%;
   padding: 0.4rem;
+  border: none;
   border-radius: 10px;
+  background: none;
   color: inherit;
-  text-decoration: none;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.magazine-list__date {
+  font-size: 0.72rem;
+  color: #8792a8;
 }
 
 .magazine-list__link:hover,
@@ -5507,4 +5517,102 @@ button.sidebar__big-card:hover {
 .panel:hover::-webkit-scrollbar-thumb,
 .sidebar:hover::-webkit-scrollbar-thumb {
   background: rgba(255, 255, 255, 0.14);
+}
+
+/* Magazin okuma penceresi: haberler alt alta, kaydırarak okunur */
+.magazine-reader__overlay {
+  padding: 2vh 1rem;
+}
+
+.magazine-reader {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 760px;
+  max-height: 96vh;
+  background: #0a0e18;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 16px;
+  color: #f1f3f8;
+  overflow: hidden;
+}
+
+.magazine-reader__bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.magazine-reader__heading {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.magazine-reader__close {
+  background: none;
+  border: none;
+  color: #c9cfdb;
+  font-size: 1.1rem;
+  cursor: pointer;
+  padding: 0.25rem 0.5rem;
+  border-radius: 6px;
+}
+
+.magazine-reader__close:hover,
+.magazine-reader__close:focus-visible {
+  background: rgba(255, 255, 255, 0.08);
+  outline: none;
+}
+
+.magazine-reader__feed {
+  overflow-y: auto;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
+}
+
+.magazine-reader__entry {
+  scroll-margin-top: 1rem;
+}
+
+.magazine-reader__image {
+  display: block;
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  object-fit: cover;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.magazine-reader__title {
+  margin: 0.9rem 0 0.3rem;
+  font-size: 1.25rem;
+  line-height: 1.35;
+}
+
+.magazine-reader__date {
+  margin: 0 0 0.6rem;
+  font-size: 0.8rem;
+  color: #8792a8;
+}
+
+.magazine-reader__summary {
+  margin: 0;
+  font-size: 0.98rem;
+  line-height: 1.6;
+  color: #d5dae4;
+}
+
+.magazine-reader__summary--muted {
+  color: #8792a8;
+  font-style: italic;
+}
+
+@media (max-width: 900px) {
+  .magazine-reader__title {
+    font-size: 1.1rem;
+  }
 }

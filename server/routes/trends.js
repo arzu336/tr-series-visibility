@@ -20,7 +20,7 @@ import { getEnrichmentTargets } from '../services/enrichmentTargets.js'
 import { getSeriesTrendInsight } from '../services/seriesTrendInsight.js'
 import { enrichSeriesNewsNow } from '../services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from '../services/socialEnricher.js'
-import { getMagazineNews } from '../services/magazineNews.js'
+import { getMagazineNews, getArticlePreview, isTrustedSource } from '../services/magazineNews.js'
 import { getCached } from '../cache.js'
 import {
   isValidIso2,
@@ -259,6 +259,16 @@ trendsRouter.get(
     const series = liveSeriesOr404(res, Number(req.params.tmdbId))
     if (!series) return
     res.json(await getMagazineNews(series))
+  })
+)
+
+// Magazin okuma penceresi: haber sayfasının paylaşım özeti (yalnızca izinli kaynaklar, 7 gün önbellek).
+trendsRouter.get(
+  '/api/magazine/preview',
+  upstream('magazine-preview', async (req, res) => {
+    const url = typeof req.query.url === 'string' ? req.query.url : ''
+    if (!isTrustedSource(url)) return res.status(400).json({ error: 'Bu kaynak için özet alınamaz' })
+    res.json(await getArticlePreview(url))
   })
 )
 

@@ -1,4 +1,5 @@
 import { cacheFirstSerpApi, serpapiGet } from './serpApiCache.js'
+import { getCached, setCached } from '../cache.js'
 
 // Dizi ayrıntısındaki "Magazin" bölümü: dizi ve başrol oyuncuları hakkında güncel haber başlıkları
 // (SerpApi Google News motoru). Yanlış haber riskini azaltan üç kural:
@@ -214,4 +215,170 @@ export async function getMagazineNews(series) {
   )
   const { raw = [], ...meta } = cached
   return { ...meta, items: buildMagazineItems(raw, series.name, leadCastNames(series.cast)) }
+}
+
+// --- Haber özeti (okuma penceresi) --------------------------------------------------------------
+// Kart tıklanınca haber sitesine gidilmez; platform içindeki pencerede büyük görsel, başlık, tarih ve
+// özet gösterilir. Özet, sitenin kendi yayımladığı paylaşım özetidir (JSON-LD NewsArticle.description,
+// og:description …) — bağlantı paylaşılınca sosyal ağlarda görünen metin; uydurma/yapay özet yok.
+// Haber metninin tamamı alınmaz. Yalnızca izinli kaynaklar, yalnızca pencere açılınca, 7 gün önbellek.
+
+export const PREVIEW_TTL_MS = 7 * 24 * 60 * 60 * 1000
+const PREVIEW_TIMEOUT_MS = 12000
+const MIN_SUMMARY_LEN = 40
+export const MAX_SUMMARY_LEN = 420
+
+const NAMED_ENTITIES = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ' }
+
+export function decodeEntities(text) {
+  return String(text || '').replace(/&(#x[0-9a-f]+|#\d+|[a-z]+);/gi, (m, e) => {
+    if (e[0] === '#') {
+      const n = e[1].toLowerCase() === 'x' ? parseInt(e.slice(2), 16) : parseInt(e.slice(1), 10)
+      return Number.isFinite(n) && n > 0 ? String.fromCodePoint(n) : m
+    }
+    return NAMED_ENTITIES[e.toLowerCase()] ?? m
+  })
+}
+
+function cleanText(text) {
+  const t = decodeEntities(text)
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  return t || null
+}
+
+/** Uzun özeti cümle sonunda (yoksa kelime sınırında) keser. */
+export function trimSummary(text, max = MAX_SUMMARY_LEN) {
+  if (!text || text.length <= max) return text
+  const cut = text.slice(0, max)
+  const sentence = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('! '), cut.lastIndexOf('? '))
+  if (sentence > max * 0.5) return cut.slice(0, sentence + 1)
+  return `${cut.slice(0, cut.lastIndexOf(' ')).trim()}…`
+}
+
+function escapeRegExp(text) {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+}
+
+function metaContent(html, names) {
+  for (const name of names) {
+    const n = escapeRegExp(name)
+    const patterns = [
+      new RegExp(`<meta[^>]+(?:property|name)=["']${n}["'][^>]*content="([^"]*)"`, 'i'),
+      new RegExp(`<meta[^>]+(?:property|name)=["']${n}["'][^>]*content='([^']*)'`, 'i'),
+      new RegExp(`<meta[^>]+content="([^"]*)"[^>]*(?:property|name)=["']${n}["']`, 'i'),
+      new RegExp(`<meta[^>]+content='([^']*)'[^>]*(?:property|name)=["']${n}["']`, 'i'),
+    ]
+    for (const re of patterns) {
+      const m = html.match(re)
+      if (m && m[1].trim()) return m[1].trim()
+    }
+  }
+  return null
+}
+
+const ARTICLE_TYPES = new Set(['NewsArticle', 'Article', 'ReportageNewsArticle', 'BlogPosting'])
+
+/** Sayfadaki JSON-LD bloklarından haber nesnesini bulur (dizi, @graph ve iç içe yapıları tarar). */
+function jsonLdArticle(html) {
+  for (const m of html.matchAll(/<script[^>]*application\/ld\+json[^>]*>([\s\S]*?)<\/script>/gi)) {
+    let data
+    try {
+      data = JSON.parse(m[1].trim())
+    } catch {
+      continue
+    }
+    const stack = [data]
+    while (stack.length) {
+      const node = stack.pop()
+      if (Array.isArray(node)) {
+        stack.push(...node)
+        continue
+      }
+      if (!node || typeof node !== 'object') continue
+      const types = [].concat(node['@type'] || [])
+      if (types.some((t) => ARTICLE_TYPES.has(t))) return node
+      if (node['@graph']) stack.push(node['@graph'])
+    }
+  }
+  return null
+}
+
+function imageUrlOf(value, baseUrl) {
+  const raw = Array.isArray(value) ? value[0] : value && typeof value === 'object' ? value.url : value
+  if (typeof raw !== 'string' || !raw.trim()) return null
+  try {
+    const u = new URL(decodeEntities(raw.trim()), baseUrl)
+    return u.protocol === 'https:' || u.protocol === 'http:' ? u.href : null
+  } catch {
+    return null
+  }
+}
+
+function isoOrNull(value) {
+  if (!value) return null
+  const d = new Date(value)
+  return Number.isNaN(d.getTime()) ? null : d.toISOString()
+}
+
+/**
+ * Haber sayfasından özet, büyük görsel ve yayın tarihi. Özet sırası: JSON-LD description (Milliyet gibi
+ * siteler meta açıklamaya yalnızca etiket koyuyor), og:description, twitter:description, description;
+ * en az MIN_SUMMARY_LEN karakter olan ilk aday alınır.
+ */
+export function extractArticlePreview(html, baseUrl) {
+  const ld = jsonLdArticle(html)
+  const candidates = [
+    ld?.description,
+    metaContent(html, ['og:description']),
+    metaContent(html, ['twitter:description']),
+    metaContent(html, ['description']),
+  ].map(cleanText)
+  const summary = candidates.find((c) => c && c.length >= MIN_SUMMARY_LEN) ?? null
+  return {
+    summary: trimSummary(summary),
+    image:
+      imageUrlOf(metaContent(html, ['og:image', 'og:image:url']), baseUrl) ??
+      imageUrlOf(metaContent(html, ['twitter:image']), baseUrl) ??
+      imageUrlOf(ld?.image, baseUrl),
+    publishedAt: isoOrNull(metaContent(html, ['article:published_time']) ?? ld?.datePublished),
+  }
+}
+
+/** İzinli bir haber sayfasını çekip özetini çıkarır; yönlendirme sonrası adres de izinli olmalı. */
+export async function fetchArticlePreview(url, fetchImpl = fetch) {
+  if (!isTrustedSource(url)) {
+    const err = new Error('Bu kaynak için özet alınamaz')
+    err.status = 400
+    throw err
+  }
+  const res = await fetchImpl(url, {
+    headers: {
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/128.0 Safari/537.36',
+      'Accept-Language': 'tr-TR,tr;q=0.9',
+    },
+    redirect: 'follow',
+    signal: AbortSignal.timeout(PREVIEW_TIMEOUT_MS),
+  })
+  if (res.url && !isTrustedSource(res.url)) throw new Error('Haber izinli olmayan bir adrese yönlendirdi')
+  if (!res.ok) throw new Error(`Haber sayfası alınamadı (${res.status})`)
+  const html = (await res.text()).slice(0, 3_000_000)
+  return { url, ...extractArticlePreview(html, res.url || url) }
+}
+
+/** Önbellekli özet. Başarısızlık önbelleğe yazılmaz; pencere "özet alınamadı" gösterir. */
+export async function getArticlePreview(url, fetchImpl = fetch) {
+  const key = `magazine:preview:${url}`
+  const cached = getCached(key)
+  if (cached) return cached
+  try {
+    const preview = await fetchArticlePreview(url, fetchImpl)
+    setCached(key, preview, PREVIEW_TTL_MS)
+    return preview
+  } catch (err) {
+    if (err.status === 400) throw err
+    console.error(`[magazineNews] özet alınamadı (${url}): ${err.message}`)
+    return { url, summary: null, image: null, publishedAt: null, unavailable: true }
+  }
 }

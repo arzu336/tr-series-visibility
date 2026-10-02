@@ -7,7 +7,7 @@ import SeriesPage, { seriesFromCountries } from './SeriesPage.jsx'
 import Flag from './Flag.jsx'
 import CountryPanel, { WatchLists } from './CountryPanel.jsx'
 import ChartList from './ChartList.jsx'
-import { MagazineList } from './MagazineNews.jsx'
+import { MagazineList, MagazineReader } from './MagazineNews.jsx'
 import CountryReportDocument from './report/CountryReportDocument.jsx'
 import CountryReportView from './report/CountryReportView.jsx'
 import ProfilePicker from './report/ProfilePicker.jsx'
@@ -659,7 +659,7 @@ describe('ChartList trend işaretleri (Spotify tarzı)', () => {
 })
 
 describe('MagazineList', () => {
-  it('yalnızca görsel ve başlık (kaynak adı, tarih yok); yeni sekmede açılır; güvensiz bağlantı gösterilmez', () => {
+  it('kart: görsel, başlık ve tarih; kaynak adı yok; haber sitesine bağlantı yok (pencere açar); güvensiz bağlantı elenir', () => {
     const html = renderToString(
       <MagazineList
         items={[
@@ -681,18 +681,45 @@ describe('MagazineList', () => {
         ]}
       />
     )
-    expect(html).toContain('href="https://www.sabah.com.tr/a"')
-    expect(html).toContain('target="_blank"')
-    expect(html).toContain('rel="noopener noreferrer"')
+    expect(html).not.toContain('href=')
+    expect(html).not.toContain('target="_blank"')
+    expect(html).toMatch(/<button type="button" class="magazine-list__link"/)
     expect(html).toContain('Yalı Çapkını final yaptı')
     expect(html).toContain('Afra Saraçoğlu tatilde')
     expect(html).not.toContain('Sabah')
     expect(html).not.toContain('Milliyet')
-    expect(html).not.toContain('28 Eyl 2026')
+    expect(html).toContain('28 Eyl 2026')
     expect(html).not.toContain('Zararlı')
   })
 
   it('haber yoksa boş durum metni', () => {
     expect(renderToString(<MagazineList items={[]} />)).toContain('güncel haber bulunamadı')
+  })
+})
+
+describe('MagazineReader', () => {
+  it('haberler alt alta: başlık, tarih ve özet yükleniyor; kaynak adı yok; diyalog erişilebilir', () => {
+    const html = renderToString(
+      <MagazineReader
+        items={[
+          {
+            title: 'Uzak Şehir sette',
+            source: 'Sözcü',
+            link: 'https://www.sozcu.com.tr/a',
+            date: '2026-09-28T10:00:00.000Z',
+          },
+          { title: 'Sinem Ünsal tatilde', source: 'Milliyet', link: 'https://www.milliyet.com.tr/b', date: null },
+        ]}
+        onClose={() => {}}
+      />
+    )
+    expect(html).toContain('role="dialog"')
+    expect(html).toContain('aria-modal="true"')
+    expect(html).toContain('Uzak Şehir sette')
+    expect(html).toContain('Sinem Ünsal tatilde')
+    expect(html).toContain('28 Eyl 2026')
+    expect(html).toContain('Özet yükleniyor')
+    expect(html).not.toContain('Sözcü')
+    expect(html).not.toContain('href=')
   })
 })

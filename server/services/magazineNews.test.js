@@ -10,6 +10,10 @@ import {
   buildMagazineItems,
   fetchMagazineNewsRaw,
   excludedReason,
+  extractArticlePreview,
+  trimSummary,
+  decodeEntities,
+  fetchArticlePreview,
 } from './magazineNews.js'
 
 const haber = (title, link, date = '10/01/2026, 07:12 AM, +0000 UTC', extra = {}) => ({
@@ -209,5 +213,96 @@ describe('buildMagazineItems — kaynak adı ve dizi/oyuncu dengesi', () => {
     )
     expect(dengeli.filter((i) => i.about === 'dizi')).toHaveLength(3)
     expect(excludedReason('28 Eylül reyting sonuçları açıklandı')).toBe('rehber')
+  })
+})
+
+describe('extractArticlePreview — haber sayfasının paylaşım özeti', () => {
+  const sayfa = (head, body = '') => `<html><head>${head}</head><body>${body}</body></html>`
+
+  it('og:description, og:image ve yayın tarihi', () => {
+    const p = extractArticlePreview(
+      sayfa(
+        '<meta property="og:description" content="Uzak Şehir&#x27;in yıldızı Budapeşte&#39;den paylaştı, pozlarına beğeni yağdı.">' +
+          '<meta property="og:image" content="https://i.sozcu.com.tr/a.jpg">' +
+          '<meta property="article:published_time" content="2026-09-17T10:00:00+03:00">'
+      ),
+      'https://www.sozcu.com.tr/x'
+    )
+    expect(p.summary).toBe("Uzak Şehir'in yıldızı Budapeşte'den paylaştı, pozlarına beğeni yağdı.")
+    expect(p.image).toBe('https://i.sozcu.com.tr/a.jpg')
+    expect(p.publishedAt).toBe('2026-09-17T07:00:00.000Z')
+  })
+
+  it('JSON-LD NewsArticle açıklaması önce; etiket gibi kısa meta açıklamalar atlanır (Milliyet)', () => {
+    const ld = JSON.stringify({
+      '@context': 'https://schema.org',
+      '@graph': [
+        { '@type': 'WebPage' },
+        {
+          '@type': 'NewsArticle',
+          description:
+            "Kanal D'nin reyting rekortmeni dizisi Uzak Şehir'de Alya karakterini oynayan Sinem Ünsal yeni paylaşım yaptı.",
+          image: { url: '/img/b.jpg' },
+          datePublished: '2026-09-17T08:00:00Z',
+        },
+      ],
+    })
+    const p = extractArticlePreview(
+      sayfa(`<meta name="description" content="Kanal D"><script type="application/ld+json">${ld}</script>`),
+      'https://www.milliyet.com.tr/magazin/x'
+    )
+    expect(p.summary).toMatch(/^Kanal D'nin reyting rekortmeni/)
+    expect(p.image).toBe('https://www.milliyet.com.tr/img/b.jpg')
+    expect(p.publishedAt).toBe('2026-09-17T08:00:00.000Z')
+  })
+
+  it('özet yoksa ya da hepsi çok kısaysa null; bozuk JSON-LD çökertmez', () => {
+    const p = extractArticlePreview(
+      sayfa('<meta name="description" content="Uzak Şehir"><script type="application/ld+json">{bozuk</script>'),
+      'https://www.ntv.com.tr/x'
+    )
+    expect(p).toEqual({ summary: null, image: null, publishedAt: null })
+  })
+
+  it('uzun özet cümle sonunda kesilir; özel karakterler çözülür', () => {
+    const uzun = 'Birinci cümle burada bitiyor ve oldukça uzun bir açıklama içeriyor. ' + 'kelime '.repeat(80)
+    expect(trimSummary(uzun, 100)).toBe('Birinci cümle burada bitiyor ve oldukça uzun bir açıklama içeriyor.')
+    expect(trimSummary('kısa', 100)).toBe('kısa')
+    expect(decodeEntities('&quot;Aşk&quot; &amp; &#8217;ya&#x27;')).toBe(`"Aşk" & ’ya'`)
+  })
+})
+
+describe('fetchArticlePreview — yalnızca izinli kaynaklar', () => {
+  it('izinsiz kaynağa istek atılmaz (400)', async () => {
+    let cagrildi = false
+    await expect(
+      fetchArticlePreview('https://magazinhaber.xyz/a', async () => {
+        cagrildi = true
+      })
+    ).rejects.toMatchObject({ status: 400 })
+    expect(cagrildi).toBe(false)
+  })
+
+  it('izinsiz adrese yönlendiren sayfa reddedilir', async () => {
+    const sahte = async () => ({
+      url: 'https://kotu-site.example/a',
+      ok: true,
+      status: 200,
+      text: async () => '<html></html>',
+    })
+    await expect(fetchArticlePreview('https://www.sabah.com.tr/a', sahte)).rejects.toThrow('izinli olmayan')
+  })
+
+  it('izinli sayfadan özet döner', async () => {
+    const sahte = async (url) => ({
+      url,
+      ok: true,
+      status: 200,
+      text: async () =>
+        '<meta property="og:description" content="Afra Saraçoğlu Paris moda haftasında şık tarzıyla dikkat çekti.">',
+    })
+    const p = await fetchArticlePreview('https://www.sabah.com.tr/a', sahte)
+    expect(p.url).toBe('https://www.sabah.com.tr/a')
+    expect(p.summary).toMatch(/Paris moda haftasında/)
   })
 })
