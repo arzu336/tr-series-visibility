@@ -5,9 +5,9 @@ export const ACCESS_LABELS = {
 }
 
 const PROFILE_DESCRIPTIONS = {
-  executive: 'Skor, ülkeler arası konum, trend ve bulgular — tek sayfa.',
-  marketing: 'Diziler, tema dağılımı, arama ilgisi ve basın tonu.',
-  producer: 'Yayın varlığı, Netflix geçmişi, boşluk ve turizm sinyali.',
+  executive: 'İzlenme düzeyi, platform listeleri, ülkeler arası konum, trend ve bulgular.',
+  marketing: 'Platform listeleri, öne çıkan diziler, tema dağılımı, arama ilgisi ve basın tonu.',
+  producer: 'Platform listeleri, yayın varlığı, Netflix geçmişi, boşluk analizi ve turizm sinyali.',
 }
 
 // Üç profil kartı, radyo grubu gibi davranır: Tab ile gruba girilir, ok tuşları erişilebilir

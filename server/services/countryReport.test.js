@@ -3,6 +3,7 @@ import { DatabaseSync } from 'node:sqlite'
 import {
   buildCountryReport,
   buildRanking,
+  buildPlatformLists,
   selectProfile,
   SECTION_KEYS,
   SECTION_NOTES,
@@ -144,6 +145,25 @@ const SIGNALS = {
   },
 }
 
+const CHARTS = {
+  lists: {
+    now: [
+      {
+        seriesId: 1,
+        name: 'Eşref Rüya',
+        rank: 4,
+        platform: 'Prime Video · Shahid',
+        platforms: ['Prime Video', 'Shahid'],
+        weeksInList: 2,
+        trend: 'yeni',
+        posterPath: '/p.jpg',
+      },
+    ],
+    top: [{ seriesId: 1, name: 'Eşref Rüya', periods: 2, bestRank: 4, platforms: ['Prime Video', 'Shahid'] }],
+    window: { from: '2025-10-06', to: '2026-10-04', weeks: 52 },
+  },
+}
+
 function deps(over = {}) {
   const cacheStore = new Map()
   return {
@@ -168,6 +188,7 @@ function deps(over = {}) {
     }),
     readNetflixSyncError: () => null,
     getWatchSignals: async () => SIGNALS,
+    getCountryCharts: async () => CHARTS,
     cache: { get: (k) => cacheStore.get(k) ?? null, set: (k, v) => cacheStore.set(k, v), store: cacheStore },
     now: () => new Date('2026-09-30T12:00:00.000Z'),
     ...over,
@@ -623,5 +644,41 @@ describe('bölüm ↔ not ↔ profil eşleşmesi', () => {
 
   it('yetki matrisi: executive viewer+, marketing analyst+, producer admin', () => {
     expect(PROFILE_MIN_ACCESS).toEqual({ executive: 'viewer', marketing: 'analyst', producer: 'admin' })
+  })
+})
+
+describe('platformLists — tüm platformların Top 10 listeleri', () => {
+  it('panel ile aynı veri: şu an listede olanlar platformlarıyla, 52 haftanın kalıcıları, poster vb. taşınmaz', () => {
+    const s = buildPlatformLists(CHARTS)
+    expect(s.status).toBe('hesaplandi')
+    expect(s.data.now).toEqual([
+      { seriesId: 1, name: 'Eşref Rüya', rank: 4, platforms: ['Prime Video', 'Shahid'], weeksInList: 2, trend: 'yeni' },
+    ])
+    expect(s.data.top[0]).toMatchObject({ name: 'Eşref Rüya', weeks: 2, bestRank: 4 })
+    expect(s.data.platformsNow).toEqual(['Prime Video', 'Shahid'])
+  })
+
+  it('Türk dizisi girmemesi gerçek sonuç (boş liste); hiç kayıt yoksa hesaplanamaz', () => {
+    const bos = buildPlatformLists({ lists: { now: [], top: [], window: { from: 'a', to: 'b', weeks: 52 } } })
+    expect(bos).toMatchObject({ status: 'hesaplandi', data: { now: [], top: [] } })
+    expect(buildPlatformLists({ lists: { now: [], top: [], window: null } }).status).toBe('hesaplanamaz')
+    expect(buildPlatformLists(null).status).toBe('hesaplanamaz')
+  })
+
+  it('üç profilde de yer alır; liste okunamazsa rapor çökmez', async () => {
+    for (const keys of Object.values(PROFILES)) expect(keys[1]).toBe('platformLists')
+    const r = await buildCountryReport('DE', { useCache: false, deps: deps() })
+    expect(r.sections.platformLists.status).toBe('hesaplandi')
+    expect(r.dataCutoffs.listsLastDate).toBe('2026-10-04')
+    const hatali = await buildCountryReport('DE', {
+      useCache: false,
+      deps: deps({
+        getCountryCharts: async () => {
+          throw new Error('pipeline.db kilitli')
+        },
+      }),
+    })
+    expect(hatali.sections.platformLists).toMatchObject({ status: 'hesaplanamaz' })
+    expect(hatali.dataGaps.map((g) => g.section)).toContain('platformLists')
   })
 })

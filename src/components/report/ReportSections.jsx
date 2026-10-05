@@ -1,6 +1,7 @@
 import countryNames from '../../data/country-centroids.json'
 import { fmtDate, fmtNum, fmtPct, fmtPeriod, fmtSignedPct, fmtWeek } from './format.js'
 import { EMPTY } from '../../lib/emptyStates.js'
+import { TrendBadge } from '../ChartList.jsx'
 
 // Bölüm görünümleri: yalnızca sunucudan gelen `data`yı basar, hiçbir sayı burada türetilmez
 // (rapor sözleşmesi ulke-raporu-v1). Grafikler saf SVG — SSR ve baskıda aynı çıktı.
@@ -396,6 +397,80 @@ function AvailabilitySection({ data }) {
   )
 }
 
+function PlatformListsSection({ data }) {
+  const { now = [], top = [], window: win, platformsNow = [] } = data
+  return (
+    <>
+      <dl className="report__kpis">
+        <Kpi
+          label="Şu an Top 10'da"
+          value={`${now.length} dizi`}
+          hint={platformsNow.join(' · ') || 'hiçbir platformda'}
+        />
+        {win && (
+          <Kpi
+            label={`Son ${win.weeks} haftada listeye giren`}
+            value={`${top.length}${top.length === 10 ? '+' : ''} dizi`}
+            hint={`${fmtDate(win.from)} – ${fmtDate(win.to)}`}
+          />
+        )}
+      </dl>
+      {now.length === 0 ? (
+        <p className="report__lead">Şu an hiçbir platformun Top 10 listesinde Türk dizisi yok.</p>
+      ) : (
+        <table className="dashboard__table dashboard__table--compact report__table">
+          <caption className="report__caption">Şu an listede</caption>
+          <thead>
+            <tr>
+              <th scope="col">Sıra</th>
+              <th scope="col">Dizi</th>
+              <th scope="col">Platform</th>
+              <th scope="col">Listede</th>
+              <th scope="col">Değişim</th>
+            </tr>
+          </thead>
+          <tbody>
+            {now.map((r) => (
+              <tr key={`${r.seriesId ?? r.name}`}>
+                <td>{r.rank}</td>
+                <td>{r.name}</td>
+                <td>{r.platforms.join(' · ')}</td>
+                <td>{r.weeksInList != null ? `${r.weeksInList} hafta` : '—'}</td>
+                <td>
+                  <TrendBadge trend={r.trend} />
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {top.length > 0 && (
+        <table className="dashboard__table dashboard__table--compact report__table">
+          <caption className="report__caption">Son {win?.weeks ?? 52} haftanın en kalıcıları</caption>
+          <thead>
+            <tr>
+              <th scope="col">Dizi</th>
+              <th scope="col">Listede kaldığı hafta</th>
+              <th scope="col">En iyi sıra</th>
+              <th scope="col">Platformlar</th>
+            </tr>
+          </thead>
+          <tbody>
+            {top.map((r) => (
+              <tr key={`${r.seriesId ?? r.name}`}>
+                <td>{r.name}</td>
+                <td>{r.weeks}</td>
+                <td>{r.bestRank}</td>
+                <td>{r.platforms.join(' · ')}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
+  )
+}
+
 function NetflixHistorySection({ data }) {
   const src = data.sourceCoverage
   if (data.zeroRecords) {
@@ -594,6 +669,7 @@ function TourismSignalSection({ data }) {
 
 export const SECTION_COMPONENTS = {
   scores: ScoresSection,
+  platformLists: PlatformListsSection,
   ranking: RankingSection,
   trend: TrendSection,
   findings: FindingsSection,

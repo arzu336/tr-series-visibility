@@ -25,6 +25,13 @@ export const NETFLIX_RANK_NOTE =
   "haftalık sıra (1-10) ve Top 10'da kalınan hafta sayısı vardır. Netflix'in hizmet vermediği ya da " +
   'çekildiği pazarlarda (ör. Rusya, 2022) liste yayımlanmaz; panel bunu açıkça yazar.'
 
+/** Platform listeleri (ülke raporu + ülke paneli "Şu an listede"). */
+export const PLATFORM_LISTS_NOTE =
+  'Netflix için resmî haftalık Top 10; Disney+, Prime Video, HBO Max, Apple TV+ ve Shahid için platformların ' +
+  'günlük Top 10 listelerinden haftada bir alınan anlık görüntüler. Bu listelerde izlenme saati yoktur, ' +
+  'yalnızca sıra vardır. Aynı dizi birden çok platformun listesindeyse tek satırda, en iyi sırasıyla ' +
+  'gösterilir. Netflix dışı platformların geçmişi, takibin başladığı tarihten itibaren birikir.'
+
 /** Yayın varlığı — sayılabilir gerçek, izlenme değil. */
 export const AVAILABILITY_NOTE =
   'Hangi dizinin bu ülkede hangi platformda (abonelik, ücretsiz, reklamlı, kiralama, satın alma) ' +

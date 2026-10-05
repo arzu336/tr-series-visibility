@@ -34,7 +34,7 @@ const TREND_LABELS = {
   '=': 'sıra değişmedi',
 }
 
-function TrendBadge({ trend }) {
+export function TrendBadge({ trend }) {
   if (!trend) return null
   const up = trend.startsWith('↑')
   const down = trend.startsWith('↓')

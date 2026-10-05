@@ -14,8 +14,8 @@ export default function CountryReportDocument({ report, countryName }) {
         <h1>{countryName}</h1>
         <p className="report__meta">
           Üretim: {fmtDateTime(report.generatedAt)} · Yayın verisi: {fmtDateTime(cut.visibilityUpdatedAt)} · Netflix Top
-          10 son hafta: {cut.netflixLastWeek ? fmtWeek(cut.netflixLastWeek) : 'kayıt yok'} · Demografi:{' '}
-          {cut.demographicsYear ?? '—'}
+          10 son hafta: {cut.netflixLastWeek ? fmtWeek(cut.netflixLastWeek) : 'kayıt yok'} · Platform listeleri:{' '}
+          {cut.listsLastDate ? fmtWeek(cut.listsLastDate) : 'kayıt yok'} · Demografi: {cut.demographicsYear ?? '—'}
         </p>
       </header>
 
@@ -52,7 +52,8 @@ export default function CountryReportDocument({ report, countryName }) {
       </aside>
 
       <footer className="report__footer">
-        Rapor yalnızca önbellekteki veriden üretildi; ücretli dış sorgu yapılmadı. Sözleşme: {report.contract}
+        Rapor, platformda kayıtlı veriden üretilir; rapor için ücretli sorgu yapılmaz. Hesaplanamayan bölümler
+        nedenleriyle birlikte "Eksik veri" kutusunda yer alır.
       </footer>
     </article>
   )

@@ -9,6 +9,7 @@ import { getPipelineDb } from './pipelineDb.js'
 import { readCachedSerpApi, timeSeriesCacheKey } from './serpApiCache.js'
 import { findSimilarCountries } from './similarCountries.js'
 import { getWatchSignals } from './watchSignal.js'
+import { getCountryCharts } from './charts.js'
 import { generateFindings } from './reportFindings.js'
 import * as notes from '../../src/lib/methodologyNotes.js'
 import { EMPTY } from '../../src/lib/emptyStates.js'
@@ -28,6 +29,7 @@ const HIGHLIGHTED_MAX = 3
 
 export const SECTION_KEYS = [
   'scores',
+  'platformLists',
   'ranking',
   'trend',
   'findings',
@@ -44,6 +46,7 @@ export const SECTION_KEYS = [
 
 export const SECTION_TITLES = {
   scores: 'İzlenme düzeyi ve yayın varlığı',
+  platformLists: 'Platform listeleri (Top 10)',
   ranking: 'Ülkeler arası izlenme sırası',
   trend: 'Trend',
   findings: 'Öne çıkan bulgular',
@@ -60,6 +63,7 @@ export const SECTION_TITLES = {
 
 export const SECTION_NOTES = {
   scores: `${notes.WATCH_LEVEL_NOTE} ${notes.AVAILABILITY_NOTE}`,
+  platformLists: notes.PLATFORM_LISTS_NOTE,
   ranking: notes.RANKING_NOTE,
   trend: notes.TREND_NOTE,
   findings: notes.FINDINGS_NOTE,
@@ -76,9 +80,9 @@ export const SECTION_NOTES = {
 }
 
 export const PROFILES = {
-  executive: ['scores', 'ranking', 'trend', 'findings'],
-  marketing: ['scores', 'topSeries', 'themes', 'searchTrend', 'pressTone', 'highlightedSeries'],
-  producer: ['scores', 'availability', 'netflixHistory', 'gapAnalysis', 'tourismSignal'],
+  executive: ['scores', 'platformLists', 'ranking', 'trend', 'findings'],
+  marketing: ['scores', 'platformLists', 'topSeries', 'themes', 'searchTrend', 'pressTone', 'highlightedSeries'],
+  producer: ['scores', 'platformLists', 'availability', 'netflixHistory', 'gapAnalysis', 'tourismSignal'],
 }
 
 export const PROFILE_MIN_ACCESS = { executive: 'viewer', marketing: 'analyst', producer: 'admin' }
@@ -540,6 +544,39 @@ function buildTourismSignal(convergence) {
  *   calculateCountryCompositeScore, pipelineDb (null = yok), getMonthlyPeriods, readCachedSerpApi,
  *   findSimilarCountries, similarOpts, readNetflixSyncError, cache {get,set}, now
  */
+/**
+ * Ülkede Türk dizilerinin şu an hangi platformun Top 10'unda olduğu ve son 52 haftanın en kalıcıları. Ülke
+ * panelindeki "Şu an listede" ile AYNI veri (getCountryCharts → buildCountryLists): rapor ile panel aynı
+ * sayıyı gösterir. Hiç Türk dizisi girmemesi veri eksikliği değil, gerçek sonuçtur (hesaplandi, boş liste).
+ */
+export function buildPlatformLists(charts) {
+  const lists = charts?.lists
+  if (!lists) return yetersiz('liste verisi okunamadı')
+  if (!lists.window && lists.now.length === 0) return yetersiz('bu ülke için platform listesi kaydı yok')
+  const now = lists.now.map((it) => ({
+    seriesId: it.seriesId ?? null,
+    name: it.name,
+    rank: it.rank,
+    platforms: it.platforms ?? [it.platform].filter(Boolean),
+    weeksInList: it.weeksInList ?? null,
+    trend: it.trend ?? null,
+  }))
+  const top = lists.top.map((it) => ({
+    seriesId: it.seriesId ?? null,
+    name: it.name,
+    weeks: it.periods,
+    bestRank: it.bestRank,
+    platforms: it.platforms || [],
+    lastDate: it.lastDate ?? null,
+  }))
+  return OK({
+    now,
+    top,
+    window: lists.window,
+    platformsNow: [...new Set(now.flatMap((it) => it.platforms))],
+  })
+}
+
 export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} } = {}) {
   const iso2 = String(iso2Raw).toUpperCase()
   const cacheKey = `report:country:${iso2}`
@@ -577,6 +614,9 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
   ])
 
   const scores = section('scores', buildScores(countryRow, raw, iso2, signals?.byIso2?.[iso2] ?? null))
+  const platformLists = await guarded('platformLists', async () =>
+    buildPlatformLists(await (deps.getCountryCharts || getCountryCharts)(iso2))
+  )
   const ranking = section('ranking', buildRanking(iso2, countries, signals))
   const trend = await guarded('trend', () => buildTrend(countryRow, tracked ? monthlyFn(iso2) : []))
   const themes = section('themes', buildThemes(countryRow))
@@ -603,6 +643,7 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
 
   const sections = {
     scores,
+    platformLists,
     ranking,
     trend,
     findings,
@@ -624,6 +665,7 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
     dataCutoffs: {
       visibilityUpdatedAt: data.updatedAt ?? null,
       netflixLastWeek: netflixHistory.status === 'hesaplandi' ? netflixHistory.data.lastWeek : null,
+      listsLastDate: platformLists.status === 'hesaplandi' ? (platformLists.data.window?.to ?? null) : null,
       demographicsYear: countryRow?.perCapitaYear ?? null,
     },
     dataGaps: Object.values(sections)

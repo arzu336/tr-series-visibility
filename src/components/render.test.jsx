@@ -329,6 +329,42 @@ const producer = rapor('producer', {
   }),
 })
 
+describe('Ülke raporu — platform listeleri', () => {
+  const lists = ok('platformLists', 'Platform listeleri (Top 10)', {
+    now: [
+      { seriesId: 1, name: 'Eşref Rüya', rank: 4, platforms: ['Prime Video', 'Shahid'], weeksInList: 2, trend: 'yeni' },
+    ],
+    top: [{ seriesId: 1, name: 'Kuruluş Osman', weeks: 30, bestRank: 1, platforms: ['Netflix'] }],
+    window: { from: '2025-10-06', to: '2026-10-04', weeks: 52 },
+    platformsNow: ['Prime Video', 'Shahid'],
+  })
+
+  it('şu an listede olanlar platformlarıyla tek satır; 52 haftanın kalıcıları; yeni rozeti', () => {
+    const html = renderToString(
+      <CountryReportDocument report={rapor('executive', { platformLists: lists })} countryName="Almanya" />
+    ).replaceAll('<!-- -->', '')
+    expect(html).toContain('Platform listeleri (Top 10)')
+    expect(html).toContain('Prime Video · Shahid')
+    expect(html).toContain('2 hafta')
+    expect(html).toContain('Son 52 haftanın en kalıcıları')
+    expect(html).toContain('Kuruluş Osman')
+    expect(html).toContain('chart-list__trend--new')
+  })
+
+  it('Türk dizisi yoksa açık mesaj', () => {
+    const bos = ok('platformLists', 'Platform listeleri (Top 10)', {
+      now: [],
+      top: [],
+      window: { from: '2025-10-06', to: '2026-10-04', weeks: 52 },
+      platformsNow: [],
+    })
+    const html = renderToString(
+      <CountryReportDocument report={rapor('executive', { platformLists: bos })} countryName="Almanya" />
+    )
+    expect(html).toContain('Şu an hiçbir platformun Top 10 listesinde Türk dizisi yok.')
+  })
+})
+
 describe('Ülke raporu — üç profil SSR', () => {
   it('yönetici özeti: başlık, profil adı, veri kesimleri ve dört bölüm başlığı', () => {
     const html = renderToString(<CountryReportDocument report={executive} countryName="Almanya" />)

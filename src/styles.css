@@ -4451,6 +4451,15 @@ button.sidebar__big-card:hover {
   line-height: 1.5;
 }
 
+.report__caption {
+  caption-side: top;
+  text-align: left;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #8792a8;
+  padding: 0.9rem 0 0.4rem;
+}
+
 .report__table td,
 .report__table th {
   font-size: 0.82rem;
