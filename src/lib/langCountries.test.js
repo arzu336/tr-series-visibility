@@ -34,6 +34,13 @@ describe('langCountries — dil → ülke tablosu', () => {
     expect(languagesOfCountry('MK').some((x) => !x.regional)).toBe(true)
   })
 
+  it('lehçe vikileri tek ülkeye bağlanır; Tacikçe Tacikistan, Hausaca Nijer ve Nijerya (bölgesel)', () => {
+    expect(countriesOfLanguage('arz')).toEqual({ regional: false, iso: ['EG'] })
+    expect(countriesOfLanguage('azb')).toEqual({ regional: false, iso: ['IR'] })
+    expect(languagesOfCountry('TJ')).toEqual([{ lang: 'tg', regional: false }])
+    expect(languagesOfCountry('NE')).toEqual([{ lang: 'ha', regional: true }])
+  })
+
   it('Türkiye yalnızca Türkçeye eşlenir', () => {
     expect(languagesOfCountry('TR')).toEqual([{ lang: 'tr', regional: false }])
   })

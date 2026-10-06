@@ -1,7 +1,8 @@
 import db from '../db.js'
-import { getEnrichmentTargets } from './enrichmentTargets.js'
 import { fetchAndAnalyzeSentiment } from './newsSentiment.js'
 import { GDELT_PRIORITY } from './gdeltNews.js'
+import { getLocalTitle } from './localTitles.js'
+import { getNewsScanPairs } from './newsScanTargets.js'
 
 const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000
 const META_KEY = 'lastAutoNewsScanAt'
@@ -40,7 +41,8 @@ export async function scanSeriesAcrossCountries(
       break
     }
     try {
-      const result = await fetchAndAnalyzeSentiment(seriesId, seriesName, null, iso2, { priority })
+      const localTitle = getLocalTitle(seriesId, iso2, seriesName)
+      const result = await fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle, iso2, { priority })
       scanned++
       if (!result.fromCache) {
         liveCalls++
@@ -68,10 +70,10 @@ export async function runAutoNewsScanIfNeeded() {
   let tamamlandi = true
 
   try {
-    const { topSeries, topCountries } = await getEnrichmentTargets()
-
-    for (const series of topSeries) {
-      const result = await scanSeriesAcrossCountries(series.id, series.name, topCountries, {
+    // Ülke başına o ülkede ilgili diziler (sıralamaya giren + orada yayında olan), bütün ülkeler.
+    // Önceden en popüler 35 dizi × 25 ülkeydi; çiftlerin çoğu dizinin o ülkede bilinmediği eşleşmelerdi.
+    for (const { series, countries } of await getNewsScanPairs()) {
+      const result = await scanSeriesAcrossCountries(series.id, series.name, countries, {
         throttle: true,
         deadline,
       })

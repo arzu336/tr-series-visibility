@@ -8,12 +8,16 @@ import { getImdbDataForTmdbSeries } from '../imdb.js'
 import { buildPersonImpact } from '../cast.js'
 import { getRegionalInterest } from '../regional-interest.js'
 import { fetchAndAnalyzeSentiment, getMediaSentimentForSeries } from '../services/newsSentiment.js'
+import { getLocalTitle } from '../services/localTitles.js'
 import { calculateCountryCompositeScore } from '../services/countryScoringEngine.js'
 import { calculateShareOfSearch, getRegionalBreakdown } from '../services/trendsShareOfSearch.js'
 import {
   cacheFirstSerpApi,
   fetchTrendsTimeSeriesRaw,
   timeSeriesCacheKey,
+  trendsCacheKey,
+  socialCacheKey,
+  readStoredSerpApi,
   TIMESERIES_TTL_MS,
 } from '../services/serpApiCache.js'
 import { getEnrichmentTargets } from '../services/enrichmentTargets.js'
@@ -57,8 +61,14 @@ function liveSeriesOr404(res, seriesId) {
 
 // Zaman serisi çekimi iki uç tarafından paylaşılıyor (grafik + AI yorumu), aynı önbellek
 // anahtarıyla — ikisi birlikte tek ücretli çağrıya mal olur.
-async function timeSeriesFor(seriesName, iso2) {
+// `?cached=1`: yalnızca kayıtlı sonuç (dizi sayfası açılırken ücretli sorgu yapılmaz). Kayıt yoksa
+// { notCached: true } — sayfa "Arama ilgisini sorgula" düğmesini gösterir.
+const isCachedOnly = (req) => req.query.cached === '1'
+const NOT_CACHED = { notCached: true }
+
+async function timeSeriesFor(seriesName, iso2, { cachedOnly = false } = {}) {
   const key = timeSeriesCacheKey(seriesName, iso2, 'today 12-m')
+  if (cachedOnly) return readStoredSerpApi(key) ?? NOT_CACHED
   return cacheFirstSerpApi(key, TIMESERIES_TTL_MS, () => fetchTrendsTimeSeriesRaw(seriesName, iso2, 'today 12-m'))
 }
 
@@ -107,7 +117,7 @@ trendsRouter.get(
   upstream('trends/timeseries', async (req, res) => {
     const target = await resolveSeriesAndGeo(req, res)
     if (!target) return
-    res.json(await timeSeriesFor(target.seriesName, target.iso2))
+    res.json(await timeSeriesFor(target.seriesName, target.iso2, { cachedOnly: isCachedOnly(req) }))
   })
 )
 
@@ -116,9 +126,10 @@ trendsRouter.get(
   upstream('trends/insight', async (req, res) => {
     const target = await resolveSeriesAndGeo(req, res)
     if (!target) return
-    const timeseries = await timeSeriesFor(target.seriesName, target.iso2)
+    const cachedOnly = isCachedOnly(req)
+    const timeseries = await timeSeriesFor(target.seriesName, target.iso2, { cachedOnly })
     const scopeLabel = target.iso2 ? `${countryNameFromIso2(target.iso2)}'daki` : null
-    res.json(await getSeriesTrendInsight(target.seriesName, timeseries.timeline, scopeLabel))
+    res.json(await getSeriesTrendInsight(target.seriesName, timeseries.timeline, scopeLabel, { cacheOnly: cachedOnly }))
   })
 )
 
@@ -127,6 +138,7 @@ trendsRouter.get(
   upstream('trends', async (req, res) => {
     const seriesName = await resolveKnownSeriesName(req.params.seriesName)
     if (!seriesName) return res.status(400).json({ error: 'Bilinmeyen dizi' })
+    if (isCachedOnly(req)) return res.json(readStoredSerpApi(trendsCacheKey(seriesName)) ?? NOT_CACHED)
     res.json(await queryTrends(seriesName))
   })
 )
@@ -136,6 +148,7 @@ trendsRouter.get(
   upstream('social', async (req, res) => {
     const seriesName = await resolveKnownSeriesName(req.params.seriesName)
     if (!seriesName) return res.status(400).json({ error: 'Bilinmeyen dizi' })
+    if (isCachedOnly(req)) return res.json(readStoredSerpApi(socialCacheKey(seriesName)) ?? NOT_CACHED)
     res.json(await querySocialListening(seriesName))
   })
 )
@@ -221,7 +234,8 @@ trendsRouter.get(
     const series = liveSeriesOr404(res, seriesId)
     if (!series) return
     if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
-    res.json(await fetchAndAnalyzeSentiment(seriesId, series.name, null, normalizeIso2(req.params.iso2)))
+    const iso2 = normalizeIso2(req.params.iso2)
+    res.json(await fetchAndAnalyzeSentiment(seriesId, series.name, getLocalTitle(seriesId, iso2, series.name), iso2))
   })
 )
 

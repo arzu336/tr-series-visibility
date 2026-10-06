@@ -52,6 +52,16 @@ export function readCachedSerpApi(key) {
   return { ...cached.value, fromCache: true, stale: false }
 }
 
+/**
+ * Kayıtlı sonuç, süresi dolmuş olsa da (dizi sayfası açılırken ücretli sorgu yapılmaz; eski ölçüm tarihiyle
+ * gösterilir). Hiç kayıt yoksa null.
+ */
+export function readStoredSerpApi(key) {
+  const cached = readRaw(key)
+  if (!cached) return null
+  return { ...cached.value, fromCache: true, stale: !cached.isFresh, cachedAt: cached.updatedAt }
+}
+
 function writeRaw(key, value, ttlMs, now = Date.now()) {
   upsertStmt.run(key, JSON.stringify(value), now + ttlMs, now)
 }

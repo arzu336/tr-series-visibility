@@ -13,6 +13,11 @@ import { runNetflixSyncIfNeeded } from './services/netflixPipelineRunner.js'
 import { runReytingtvSyncIfNeeded } from './services/reytingtvRunner.js'
 import { runFlixpatrolSyncIfNeeded } from './services/flixpatrolRunner.js'
 import { runImdbSyncIfNeeded } from './services/imdbRunner.js'
+import { runWikiMonthlyRefreshIfNeeded } from './services/wikiMonthlyRefresh.js'
+import { syncForeignStudentsIfNeeded } from './services/foreignStudents.js'
+import { runYoutubeSyncIfNeeded } from './services/youtubeAnalytics.js'
+import { runYoutubePublicIfNeeded } from './services/youtubePublic.js'
+import { runTvGuideIfNeeded } from './services/tvGuide.js'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -101,6 +106,39 @@ async function runZenginlestirmeZinciri() {
     } catch (err) {
       console.error('[scheduler] oyuncu trend taraması başarısız:', err.message)
     }
+  }
+
+  try {
+    await syncForeignStudentsIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] öğrenci verisi eşitlemesi başarısız:', err.message)
+  }
+
+  try {
+    await runWikiMonthlyRefreshIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] aylık okunma tazelemesi başarısız:', err.message)
+  }
+
+  // Bağlı YouTube kanalları (yapılandırma yoksa hiçbir şey yapmaz).
+  try {
+    await runYoutubeSyncIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] YouTube eşitlemesi başarısız:', err.message)
+  }
+
+  // Afrika televizyon rehberi (izinli; TV_GUIDE_ENABLED=false ile kapanır), günde bir kez.
+  try {
+    await runTvGuideIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] televizyon rehberi toplaması başarısız:', err.message)
+  }
+
+  // YouTube herkese açık veri (YOUTUBE_API_KEY yoksa hiçbir şey yapmaz).
+  try {
+    await runYoutubePublicIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] YouTube herkese açık veri toplaması başarısız:', err.message)
   }
 
   try {

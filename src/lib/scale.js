@@ -154,6 +154,29 @@ export function watchLevelColor(level) {
   return WATCH_LEVEL_COLORS[level] ?? NO_SIGNAL_COLOR
 }
 
+/** Tek kaynağa dayalı tahmin: düzey rengi gri zemine doğru soldurulur (2D haritada üstüne tarama da çizilir). */
+export function provisionalColor(level) {
+  const [r1, g1, b1] = hexToRgb(WATCH_LEVEL_COLORS[level] ?? NO_SIGNAL_COLOR)
+  const [r2, g2, b2] = hexToRgb(NO_SIGNAL_COLOR)
+  const t = 0.55
+  return `rgb(${Math.round(lerp(r1, r2, t))}, ${Math.round(lerp(g1, g2, t))}, ${Math.round(lerp(b1, b2, t))})`
+}
+
+export const SOURCE_LABELS = {
+  netflix: 'Netflix Top 10',
+  wiki: 'ansiklopedi okunması',
+  search: 'arama ilgisi',
+  press: 'basın',
+}
+
+/** İpucu satırı: gerçek düzey, tek kaynağa dayalı tahmin ya da sinyal yetersiz. */
+export function watchLevelText(w) {
+  if (w?.level) return `İzlenme düzeyi: ${w.level}`
+  if (w?.provisional)
+    return `Tahmini düzey: ${w.provisional.level} (yalnızca ${SOURCE_LABELS[w.provisional.source] ?? w.provisional.source})`
+  return 'İzlenme düzeyi: sinyal yetersiz'
+}
+
 /**
  * Harita bileşenlerinin giriş noktası: ülke → { color, level, index, isSourceCountry, hasSignal }.
  * Sinyali olmayan ülke gri kalır (0 değil "yok"); proxy (yayın verisi olmayan) ülkeler de sinyalleri
@@ -164,13 +187,19 @@ export function buildWatchMap(countries) {
   for (const c of countries || []) {
     const isSource = c.iso2 === SOURCE_COUNTRY_ISO2
     const level = c.watchSignal?.level ?? null
+    const provisional = level == null ? (c.watchSignal?.provisional ?? null) : null
     byIso2.set(c.iso2, {
       ...c,
       isSourceCountry: isSource,
       level,
       index: c.watchSignal?.index ?? null,
       hasSignal: level != null,
-      color: isSource ? SOURCE_COUNTRY_COLOR : watchLevelColor(level),
+      provisionalLevel: provisional?.level ?? null,
+      color: isSource
+        ? SOURCE_COUNTRY_COLOR
+        : provisional
+          ? provisionalColor(provisional.level)
+          : watchLevelColor(level),
     })
   }
   return { byIso2 }

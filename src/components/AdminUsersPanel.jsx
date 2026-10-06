@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
+import YoutubeConnections from './YoutubeConnections.jsx'
+import { TvAdmin } from './TvSections.jsx'
 import { fetchAdminUsers, approveUser, rejectUser, setAccessLevel, resetUserPassword, deleteUser } from '../lib/api.js'
 
 function formatDate(iso) {
@@ -11,7 +13,7 @@ const ACCESS_LEVEL_LABELS = {
   admin: 'Yönetici',
 }
 
-export default function AdminUsersPanel({ currentUserId }) {
+export default function AdminUsersPanel({ currentUserId, youtubeNotice = null }) {
   const [items, setItems] = useState([])
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
@@ -82,7 +84,7 @@ export default function AdminUsersPanel({ currentUserId }) {
 
   return (
     <div className="dashboard">
-      <h2>Kullanıcı Yönetimi</h2>
+      <h2>Yönetim</h2>
 
       <div className="dashboard__summary">
         <span className="dashboard__summary-item dashboard__summary-item--warn">
@@ -237,6 +239,10 @@ export default function AdminUsersPanel({ currentUserId }) {
           </table>
         )}
       </section>
+
+      <YoutubeConnections notice={youtubeNotice} />
+
+      <TvAdmin />
     </div>
   )
 }

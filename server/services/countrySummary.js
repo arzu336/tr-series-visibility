@@ -2,11 +2,11 @@ import db from '../db.js'
 import { getCached, setCached } from '../cache.js'
 import { getPipelineDb } from './pipelineDb.js'
 import { getVisitorSeries, pickBeforeAfterPair } from './tourismData.js'
+import { readingSeriesFor, readingTourismCorrelation, MIN_PAIRS } from './readingTourism.js'
 import { getTourismLeadingSignalSummary, LEADING_SIGNAL_SCOPE } from './tourismTrendsCollector.js'
-import { differenceInDifferences, pearsonCorrelation } from './tourismCorrelation.js'
-import { getMonthlyPeriods } from '../period-history.js'
+import { differenceInDifferences } from './tourismCorrelation.js'
 import { TOP_COUNTRY_COUNT, TOP_SERIES_COUNT } from './enrichmentTargets.js'
-import { CORRELATION_MIN_MONTHS, EMPTY } from '../../src/lib/emptyStates.js'
+import { EMPTY } from '../../src/lib/emptyStates.js'
 import { suggestControlCountry } from '../control-matching.js'
 
 /**
@@ -155,7 +155,7 @@ export async function buildTourismDimension(iso2, countryRow, deps = {}) {
     suggestControlCountry: kontrolOner = suggestControlCountry,
     differenceInDifferences: didHesapla = differenceInDifferences,
     leadingSignalFor: onculSinyal = leadingSignalFor,
-    getMonthlyPeriods: aylikGorunurluk = getMonthlyPeriods,
+    readingSeriesFor: okumaAl = readingSeriesFor,
   } = deps
   const sources = [{ source: 'yigm', trust: trustOf('yigm'), note: 'turist giriş istatistikleri' }]
 
@@ -171,9 +171,7 @@ export async function buildTourismDimension(iso2, countryRow, deps = {}) {
   }
 
   const ciftler = ciftSec(seri)
-  const gorunurluk = countryRow?.score ?? null
-
-  const correlation = gorunurlukTuristKorelasyonu(iso2, seri, gorunurluk, aylikGorunurluk)
+  const correlation = okunmaTuristKorelasyonu(iso2, seri, okumaAl)
 
   let didEstimate = yetersiz('kontrol ülkesi eşleştirilemedi')
   if (ciftler && sayiMi(ciftler.before) && sayiMi(ciftler.after)) {
@@ -230,30 +228,35 @@ export async function buildTourismDimension(iso2, countryRow, deps = {}) {
 }
 
 /**
- * Görünürlük aylık ortalaması × aynı ayların turist girişi (Pearson). Yalnızca tamamlanmış aylar
- * (isCurrent=false) sayılır; ortak ay sayısı CORRELATION_MIN_MONTHS'un altındaysa "X/3 ay" ile
- * hesaplanamaz döner — böylece arayüz ne kadar beklendiğini gerçek sayıdan gösterir.
+ * Okunma ilgisi × turist girişi (readingTourism.js): yıllık değişimler, pandemi yılları hariç, dönem içi eğilim
+ * çıkarılmış, 0–6 ay gecikme, etkin örneklemle düzeltilmiş anlamlılık. Önceki sürüm yayın görünürlüğüyle
+ * karşılaştırıyordu; o seri 3 aylık olduğu için hiçbir ülkede hesaplanamıyordu.
  */
-export function gorunurlukTuristKorelasyonu(iso2, seri, gorunurluk, aylikGorunurluk = getMonthlyPeriods) {
-  if (gorunurluk == null) return yetersiz(EMPTY.correlationNoVisibility)
+export function okunmaTuristKorelasyonu(iso2, seri, okumaAl = readingSeriesFor) {
+  const { langs, series } = okumaAl(iso2)
+  if (!langs.length) {
+    return yetersiz('ülkenin dili birden çok ülkede konuşuluyor; okunma ilgisi bu ülkeye ayrılamaz')
+  }
   const turist = new Map(
     seri.filter((s) => sayiMi(s.visitorCount)).map((s) => [`${s.year}-${ay2(s.month)}`, s.visitorCount])
   )
-  const aylar = (aylikGorunurluk(iso2) || []).filter((p) => !p.isCurrent && sayiMi(p.avgScore) && turist.has(p.period))
-  const n = aylar.length
-  if (n < CORRELATION_MIN_MONTHS) {
+  const c = readingTourismCorrelation(series, turist)
+  if (c.r == null) {
     return {
-      ...yetersiz(EMPTY.correlationAccumulating(n, CORRELATION_MIN_MONTHS)),
-      monthsAvailable: n,
-      monthsRequired: CORRELATION_MIN_MONTHS,
+      ...yetersiz(`okunma ve ziyaretçi serilerinde yeterli ortak ay yok (${c.n}/${MIN_PAIRS})`),
+      monthsAvailable: c.n,
+      monthsRequired: MIN_PAIRS,
     }
   }
-  const r = pearsonCorrelation(
-    aylar.map((p) => p.avgScore),
-    aylar.map((p) => turist.get(p.period))
-  )
-  if (!sayiMi(r)) return yetersiz('korelasyon sayısal değil (seride varyans yok)')
-  return OK(Math.round(r * 100) / 100, { sampleSize: n, months: aylar.map((p) => p.period), unit: 'pearson-r' })
+  return OK(c.r, {
+    lagMonths: c.lagMonths,
+    sampleSize: c.n,
+    effectiveSampleSize: c.nEff,
+    pAdjusted: c.pAdjusted,
+    significant: c.significant,
+    unit: 'pearson-r',
+    method: 'okunma-yillik-degisim',
+  })
 }
 
 export function leadingSignalFor(iso2, ozet = getTourismLeadingSignalSummary()) {

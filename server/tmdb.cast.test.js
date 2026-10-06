@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { rankCast, toCastMember, mainCast, FULL_CAST_MAX } from './tmdb.js'
+import { rankCast, toCastMember, mainCast, FULL_CAST_MAX, isScriptedSeries } from './tmdb.js'
 
 // TMDB /aggregate_credits biçimi: oyuncu başına toplam bölüm ve rol(ler).
 const oyuncu = (id, name, eps, order, roles = [{ character: `Rol ${id}`, episode_count: eps }]) => ({
@@ -51,5 +51,25 @@ describe('mainCast — ana kadro', () => {
     const buyuk = Array.from({ length: 200 }, (_, i) => oyuncu(i + 1, `O${i}`, 100, i))
     expect(mainCast(buyuk)).toHaveLength(FULL_CAST_MAX)
     expect(mainCast([])).toEqual([])
+  })
+})
+
+describe('isScriptedSeries — katalog yalnızca dizileri içerir', () => {
+  const k = (type, genreIds) => ({ type, genreIds })
+  it('talk-show, haber, yarışma/realite ve skeç şovları çıkar', () => {
+    expect(isScriptedSeries(k('Talk Show', [10763, 10767]))).toBe(false) // Siyaset Meydanı
+    expect(isScriptedSeries(k('Reality', [10764]))).toBe(false) // Aşkın Gücü
+    expect(isScriptedSeries(k('Reality', []))).toBe(false) // MasterChef (TMDB türü boş)
+    expect(isScriptedSeries(k('Scripted', [10764, 35, 10767]))).toBe(false) // Güldür Güldür Show
+    expect(isScriptedSeries(k('Scripted', [10751, 35, 10767]))).toBe(false) // Çok Güzel Hareketler 2
+    expect(isScriptedSeries(k('Talk Show', [35]))).toBe(false) // Konuşanlar - Disney+
+  })
+
+  it('türünde Drama olan yapım TMDB tipi yanlış olsa da kalır; düz dizi kalır', () => {
+    expect(isScriptedSeries(k('Reality', [18, 10759]))).toBe(true) // Yalnız Kurt
+    expect(isScriptedSeries(k('Scripted', [35, 18, 10764]))).toBe(true) // Hepsi 1 (sitcom)
+    expect(isScriptedSeries(k('Scripted', [18]))).toBe(true)
+    expect(isScriptedSeries(k('Miniseries', []))).toBe(true)
+    expect(isScriptedSeries({})).toBe(true)
   })
 })

@@ -26,6 +26,7 @@ export const PROVIDER_LABELS = {
 }
 export const WINDOW_WEEKS = 52
 export const YEAR_AGO_TOLERANCE_DAYS = 28
+const DAY_MS = 24 * 60 * 60 * 1000
 const CACHE_TTL_MS = 30 * 60 * 1000
 
 export function addDays(ymd, d) {
@@ -309,6 +310,108 @@ export function mergeAcrossPlatforms(items) {
   return [...byKey.values()].map((it) => ({ ...it, platform: it.platforms.join(' · ') }))
 }
 
+/**
+ * Platformun KENDİ haftalık sıralaması (ülke raporu): bütün listeler (Netflix + diğer platformlar) tek
+ * listede birleşir, platform adı taşınmaz. `to`'dan geriye 7'şer günlük pencereler; her pencerede bir dizi,
+ * o hafta herhangi bir listede aldığı EN İYİ sıraya göre dizilir (eşitlikte daha çok listede yer alan, sonra
+ * ad). Değişim önceki pencereye göre; önceki hafta listede yoksa değişim yok (etiket basılmaz).
+ * Önceki hafta bu haftanın listelerinin hepsini kapsamıyorsa (ör. günlük listeler bu hafta toplanmaya başladı)
+ * haftalık karşılaştırma yanıltıcı olur: o durumda değişim hafta içinde, ilk günün sırasından son günün
+ * sırasına hesaplanır (`trendBasis: 'days'`, `trendSince`) ve önceki hafta sayısı verilmez (null).
+ * Netflix bir haftanın listesini (Pazar biten) birkaç gün sonra yayımlar; o liste, yayımlandığı haftanın güncel
+ * listesidir — bu yüzden Netflix satırları bir hafta ileri kaydırılır (ülke panelindeki "Şu an listede" ile aynı).
+ * Dönüş: { to, from, current: [{ position, seriesId, name, weeks, trend }], top, all, seriesCount, previousCount,
+ *   trendBasis: 'week' | 'days' | null, trendSince } | null
+ */
+export function buildOwnRanking({
+  netflixRows = [],
+  flixRows = [],
+  to,
+  nameOf = (id, raw) => raw,
+  windows = WINDOW_WEEKS,
+}) {
+  const rows = [
+    ...netflixRows.map((r) => ({ ...r, period_date: addDays(r.period_date, 7) })),
+    ...flixRows.map((r) => ({ ...r, daily: true })),
+  ].filter((r) => r.series_id != null && r.program_kind === 'series')
+  if (!to || rows.length === 0) return null
+  const from = addDays(to, -(windows * 7 - 1))
+  const perWindow = Array.from({ length: windows }, () => new Map())
+  const providers = Array.from({ length: windows }, () => new Set())
+  const days = new Map() // bu haftanın günlük listeleri: gün → Map(dizi → { best, lists })
+  const names = new Map()
+  for (const r of rows) {
+    if (r.period_date > to || r.period_date < from) continue
+    const w = Math.floor((Date.parse(`${to}T00:00:00Z`) - Date.parse(`${r.period_date}T00:00:00Z`)) / (7 * DAY_MS))
+    const k = keyOf(r)
+    if (!names.has(k)) names.set(k, { seriesId: r.series_id, name: displayName(r, nameOf) })
+    const a = perWindow[w].get(k) || { best: 99, lists: new Set() }
+    a.best = Math.min(a.best, r.rank)
+    a.lists.add(`${r.provider}|${r.segment}`)
+    perWindow[w].set(k, a)
+    providers[w].add(r.provider)
+    if (w === 0 && r.daily) {
+      if (!days.has(r.period_date)) days.set(r.period_date, new Map())
+      const d = days.get(r.period_date).get(k) || { best: 99, lists: new Set() }
+      d.best = Math.min(d.best, r.rank)
+      d.lists.add(`${r.provider}|${r.segment}`)
+      days.get(r.period_date).set(k, d)
+    }
+  }
+  const rankOf = (m) => {
+    const ordered = [...m.entries()].sort(
+      ([ka, a], [kb, b]) =>
+        a.best - b.best || b.lists.size - a.lists.size || names.get(ka).name.localeCompare(names.get(kb).name, 'tr')
+    )
+    return new Map(ordered.map(([k], i) => [k, i + 1]))
+  }
+  const positions = perWindow.map(rankOf)
+  const weeks = new Map()
+  const bestPos = new Map()
+  for (const pos of positions)
+    for (const [k, p] of pos) {
+      weeks.set(k, (weeks.get(k) || 0) + 1)
+      bestPos.set(k, Math.min(bestPos.get(k) ?? 99, p))
+    }
+  const comparable = windows > 1 && [...providers[0]].every((p) => providers[1].has(p))
+  const dayKeys = [...days.keys()].sort()
+  const byDays = !comparable && dayKeys.length > 1
+  const first = byDays ? rankOf(days.get(dayKeys[0])) : null
+  const last = byDays ? rankOf(days.get(dayKeys.at(-1))) : null
+  const move = (prev, p) => (prev > p ? `↑${prev - p}` : prev < p ? `↓${p - prev}` : '=')
+  const trendOf = (k, p) => {
+    if (comparable) {
+      const prev = positions[1].get(k)
+      return prev == null ? null : move(prev, p)
+    }
+    if (!byDays) return null
+    const a = first.get(k)
+    const b = last.get(k)
+    return a == null || b == null ? null : move(a, b)
+  }
+  const current = [...positions[0].entries()].map(([k, p]) => ({
+    position: p,
+    ...names.get(k),
+    weeks: weeks.get(k),
+    trend: trendOf(k, p),
+  }))
+  const all = [...weeks.keys()]
+    .map((k) => ({ ...names.get(k), weeks: weeks.get(k), bestPosition: bestPos.get(k) }))
+    .sort((a, b) => b.weeks - a.weeks || a.bestPosition - b.bestPosition || a.name.localeCompare(b.name, 'tr'))
+  // `all`: 52 haftada sıralamaya giren her dizi (dizi raporu için); `top`: ilk 10 (ülke brifingi için).
+  return {
+    to,
+    from,
+    current,
+    top: all.slice(0, 10),
+    all,
+    seriesCount: weeks.size,
+    previousCount: comparable ? positions[1].size : null,
+    trendBasis: comparable ? 'week' : byDays ? 'days' : null,
+    trendSince: byDays ? dayKeys[0] : null,
+  }
+}
+
 // ---------------------------------------------------------------- okuyucular
 
 /**
@@ -345,6 +448,49 @@ async function namer() {
   const { raw } = await getEnrichedVisibility()
   const byId = new Map(raw.series.map((s) => [s.id, s.name]))
   return (id, rawTitle) => (id != null && byId.has(id) ? byId.get(id) : rawTitle)
+}
+
+/**
+ * Bütün ülkelerin kendi haftalık sıralaması (buildOwnRanking) tek okumada — dizi raporu bir dizinin her
+ * ülkedeki yerini buradan alır. Pencere bütün ülkeler için aynı güne dayanır (ülke panelindeki gibi).
+ * Dönüş: Map iso2 → ownRanking (current, top, seriesCount, previousCount, to, from). 30 dk önbellek.
+ */
+export async function getAllOwnRankings() {
+  const cacheKey = 'charts:own-all:v2'
+  const cached = getCached(cacheKey)
+  if (cached) return new Map(Object.entries(cached))
+  const conn = getPipelineDb()
+  if (!conn) return new Map()
+  const nameOf = await namer()
+  const netflix = readRows(conn, "provider='netflix_tudum' AND series_id IS NOT NULL", [])
+  const flix = readRows(conn, "provider='flixpatrol' AND series_id IS NOT NULL AND program_kind='series'", [])
+  const lastNetflix =
+    netflix
+      .map((r) => r.period_date)
+      .sort()
+      .at(-1) ?? null
+  const lastFlix =
+    flix
+      .map((r) => r.period_date)
+      .sort()
+      .at(-1) ?? null
+  const to = [lastNetflix ? addDays(lastNetflix, 7) : null, lastFlix].filter(Boolean).sort().at(-1) ?? null
+  const byCountry = new Map()
+  for (const [list, kind] of [
+    [netflix, 'netflixRows'],
+    [flix, 'flixRows'],
+  ])
+    for (const r of list) {
+      if (!byCountry.has(r.country_iso2)) byCountry.set(r.country_iso2, { netflixRows: [], flixRows: [] })
+      byCountry.get(r.country_iso2)[kind].push(r)
+    }
+  const out = {}
+  for (const [iso2, rows] of byCountry) {
+    const own = buildOwnRanking({ ...rows, to, nameOf })
+    if (own) out[iso2] = own
+  }
+  setCached(cacheKey, out, CACHE_TTL_MS)
+  return new Map(Object.entries(out))
 }
 
 export async function getChartsMeta() {
@@ -444,7 +590,7 @@ export async function getTurkeyTv({ date, segment = 'Total', onlySeries = true }
 
 /** Ülke paneli: kaynak sırasına göre gerçekler + liste + 1 yıl önce + zaman çizelgesi. */
 export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
-  const cacheKey = `charts:country:v6:${iso2}:${week ?? 'latest'}:${range}`
+  const cacheKey = `charts:country:v9:${iso2}:${week ?? 'latest'}:${range}`
   const cached = getCached(cacheKey)
   if (cached) return cached
   const conn = getPipelineDb()
@@ -524,6 +670,17 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
     nameOf,
   })
   const lists = { ...built, now: withPoster(built.now), top: withPoster(built.top) }
+  // Raporun kendi sıralaması: pencere bütün ülkeler için aynı güne (en son liste günü) dayanır; böylece
+  // listeleri bayatlamış bir ülkenin eski listesi "bu hafta" gibi görünmez.
+  const flixLatestAll = conn
+    ? (conn.prepare("SELECT MAX(period_date) AS d FROM chart_entries WHERE provider = 'flixpatrol'").get()?.d ?? null)
+    : null
+  const ownRanking = buildOwnRanking({
+    netflixRows: rows,
+    flixRows: platformRows.filter((r) => r.provider === 'flixpatrol'),
+    to: [allWeeks.at(-1) ? addDays(allWeeks.at(-1), 7) : null, flixLatestAll].filter(Boolean).sort().at(-1) ?? null,
+    nameOf,
+  })
   const flixSeries = platformRows.filter((r) => r.series_id != null && r.program_kind === 'series')
   // Türkiye TV'nin en son yayımlanan günü ayrı liste olarak (tarihiyle): kaynak düzensiz yayımladığı
   // için "şu an" listesine giremeyecek kadar eski olabilir; tarih açıkça gösterilir.
@@ -623,6 +780,7 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
     wiki,
     access,
     lists,
+    ownRanking,
     turkeyTv,
     timeline: timeline([...rows, ...flixSeries], range),
     timelineRange: range,

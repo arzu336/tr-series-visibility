@@ -16,6 +16,10 @@ const NAME_ALIASES = {
   'beyaz rusya (belarus)': 'BY',
   'güney kıbrıs rum kesimi': 'CY',
   'çek cumhuriyeti (çekya)': 'CZ',
+  // Eski yıllık sınır bültenlerindeki adlar (2016–2019)
+  'çek cumhuriyeti': 'CZ',
+  'çin halk cumhuriyeti': 'CN',
+  makedonya: 'MK',
   'ingiltere (birleşik krallık)': 'GB',
   'kuzey makedonya cumhuriyeti': 'MK',
   'rusya fed.': 'RU',

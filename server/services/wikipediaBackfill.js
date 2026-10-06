@@ -11,6 +11,14 @@ import {
 
 const EN_ERKEN = new Date(Date.UTC(2015, 6, 1))
 
+/**
+ * Son TAMAMLANMIŞ ayın son günü (UTC). İçinde bulunulan ay yarım olduğu için seriye yazılmaz: önceden bitiş
+ * "bugün" idi ve ayın ilk günlerinde toplanan Eylül 2026 (~1 günlük okunma) tam ay gibi kalmıştı.
+ */
+export function sonTamAyBitisi(now = new Date()) {
+  return new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 0))
+}
+
 const sayArticlesStmt = db.prepare('SELECT COUNT(*) n FROM series_wiki_articles WHERE tmdb_id = ?')
 const sayViewsStmt = db.prepare('SELECT COUNT(*) n FROM series_language_interest WHERE tmdb_id = ? AND lang = ?')
 
@@ -58,7 +66,7 @@ export async function backfillPageviews({ force = false, limit, onProgress } = {
   if (!force) hedefler = hedefler.filter((h) => sayViewsStmt.get(h.tmdb_id, h.lang).n === 0)
   if (limit) hedefler = hedefler.slice(0, limit)
 
-  const bitis = new Date()
+  const bitis = sonTamAyBitisi()
   let yazilanSatir = 0
   let veriliCift = 0
   let bosCift = 0
@@ -85,4 +93,31 @@ export async function backfillPageviews({ force = false, limit, onProgress } = {
   })
 
   return { cift: hedefler.length, veriliCift, bosCift, hatali, yazilanSatir, hataOrnekleri }
+}
+
+/**
+ * Aylık tazeleme: her (dizi, dil) çifti için son `ay` tamamlanmış ayı yeniden çeker ve üzerine yazar.
+ * Yarım toplanmış ayı düzeltir ve seriyi güncel tutar (tam geri doldurmanın aksine 2.400 küçük istek).
+ */
+export async function refreshRecentMonths({ ay = 3, now = new Date(), onProgress } = {}) {
+  const hedefler = db.prepare('SELECT tmdb_id, lang, title FROM series_wiki_articles').all()
+  const bitis = sonTamAyBitisi(now)
+  const baslangic = new Date(Date.UTC(bitis.getUTCFullYear(), bitis.getUTCMonth() - (ay - 1), 1))
+  let yazilanSatir = 0
+  let hatali = 0
+  let islenen = 0
+  await havuzdaCalistir(hedefler, async (h) => {
+    try {
+      const satirlar = await fetchMonthlyPageviews(h.lang, h.title, baslangic, bitis)
+      if (satirlar.length) {
+        saveMonthlyViews(h.tmdb_id, h.lang, satirlar)
+        yazilanSatir += satirlar.length
+      }
+    } catch {
+      hatali++
+    }
+    islenen++
+    if (onProgress && islenen % 200 === 0) onProgress(islenen, hedefler.length)
+  })
+  return { cift: hedefler.length, yazilanSatir, hatali, son: bitis.toISOString().slice(0, 7) }
 }

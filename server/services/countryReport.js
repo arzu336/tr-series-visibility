@@ -10,12 +10,16 @@ import { readCachedSerpApi, timeSeriesCacheKey } from './serpApiCache.js'
 import { findSimilarCountries } from './similarCountries.js'
 import { getWatchSignals } from './watchSignal.js'
 import { getCountryCharts } from './charts.js'
+import { getImdbDataForTmdbSeries } from '../imdb.js'
+import { languagesOfCountry } from '../../src/lib/langCountries.js'
+import { getForeignStudentSummary } from './foreignStudents.js'
 import { generateFindings } from './reportFindings.js'
 import * as notes from '../../src/lib/methodologyNotes.js'
 import { EMPTY } from '../../src/lib/emptyStates.js'
 
-// Ülke raporu — tek veri toplama noktası. Her çağrı TÜM bölümleri hesaplar; profil yalnızca
-// hangi bölümlerin döneceğini seçer (selectProfile). Böylece üç profil aynı sayıları gösterir.
+// Ülke raporu — tek veri toplama noktası ve TEK ORTAK RAPOR (kullanıcı kararı 2026-10-05: profil yok,
+// herkes aynı raporu görür). Rapor veri kaynaklarının ya da tek tek platformların adını taşımaz; listeler
+// platformun kendi sıralamasıyla verilir (charts.js buildOwnRanking).
 // Kurallar: ücretli çağrı yok (cachedOnly), eksik veri gizlenmez (hesaplanamaz + neden), her
 // bölümün metodoloji notu vardır, Türkiye hiçbir sıralamaya girmez.
 
@@ -30,6 +34,7 @@ const HIGHLIGHTED_MAX = 3
 export const SECTION_KEYS = [
   'scores',
   'platformLists',
+  'wikiInterest',
   'ranking',
   'trend',
   'findings',
@@ -42,11 +47,13 @@ export const SECTION_KEYS = [
   'netflixHistory',
   'gapAnalysis',
   'tourismSignal',
+  'foreignStudents',
 ]
 
 export const SECTION_TITLES = {
   scores: 'İzlenme düzeyi ve yayın varlığı',
-  platformLists: 'Platform listeleri (Top 10)',
+  platformLists: 'Türk dizileri sıralaması',
+  wikiInterest: 'Okunma ilgisi',
   ranking: 'Ülkeler arası izlenme sırası',
   trend: 'Trend',
   findings: 'Öne çıkan bulgular',
@@ -59,11 +66,15 @@ export const SECTION_TITLES = {
   netflixHistory: 'Netflix Top 10 geçmişi',
   gapAnalysis: 'Boşluk analizi',
   tourismSignal: 'Turizm / etki sinyali',
+  foreignStudents: "Türkiye'de okuyan öğrenciler",
 }
 
 export const SECTION_NOTES = {
   scores: `${notes.WATCH_LEVEL_NOTE} ${notes.AVAILABILITY_NOTE}`,
   platformLists: notes.PLATFORM_LISTS_NOTE,
+  wikiInterest:
+    'Türk dizilerine ait ansiklopedi maddelerinin ülkenin dillerindeki aylık okunma sayısıdır. Birden çok ülkede ' +
+    'konuşulan dillerde okunma tek bir ülkeye ayrılamaz.',
   ranking: notes.RANKING_NOTE,
   trend: notes.TREND_NOTE,
   findings: notes.FINDINGS_NOTE,
@@ -75,22 +86,11 @@ export const SECTION_NOTES = {
   availability: notes.AVAILABILITY_NOTE,
   netflixHistory: notes.NETFLIX_RANK_NOTE,
   gapAnalysis: `${notes.GAP_ANALYSIS_NOTE} ${notes.SIMILAR_COUNTRY_NOTE}`,
+  foreignStudents:
+    'Bu ülkeden Türkiye’de yükseköğretim gören uluslararası öğrenci sayısı (yıllık, resmî istatistik). ' +
+    'Dizilerin etkisini tek başına ölçmez; Türkiye’ye ilginin bir göstergesidir.',
   tourismSignal:
     'Korelasyon nedensellik değildir; DiD tek bir önce/sonra çiftine dayanır, paralel-trend kontrolü yoktur.',
-}
-
-export const PROFILES = {
-  executive: ['scores', 'platformLists', 'ranking', 'trend', 'findings'],
-  marketing: ['scores', 'platformLists', 'topSeries', 'themes', 'searchTrend', 'pressTone', 'highlightedSeries'],
-  producer: ['scores', 'platformLists', 'availability', 'netflixHistory', 'gapAnalysis', 'tourismSignal'],
-}
-
-export const PROFILE_MIN_ACCESS = { executive: 'viewer', marketing: 'analyst', producer: 'admin' }
-
-export const PROFILE_TITLES = {
-  executive: 'Yönetici özeti',
-  marketing: 'Pazarlama raporu',
-  producer: 'Yapımcı / dağıtımcı raporu',
 }
 
 const OK = (data, extra = {}) => ({ status: 'hesaplandi', data, ...extra })
@@ -192,6 +192,21 @@ function buildThemes(countryRow) {
   return OK({ items, seriesCount: countryRow.seriesCount })
 }
 
+/** IMDb puanı ve son 7 günlük oy artışı (küresel; skora girmez, bağlam olarak gösterilir). */
+async function attachImdb(composite, imdbFn, conn) {
+  if (!composite?.entries?.length) return composite
+  const entries = await Promise.all(
+    composite.entries.map(async (e) => {
+      const r = await Promise.resolve()
+        .then(() => imdbFn(e.tmdbId, conn !== undefined ? { conn } : undefined))
+        .catch(() => null)
+      if (r?.status !== 'ready') return { ...e, imdb: null }
+      return { ...e, imdb: { rating: r.rating, votes: r.votes, growth7: r.votesGrowth?.d7 ?? null } }
+    })
+  )
+  return { ...composite, entries }
+}
+
 function buildTopSeries(composite) {
   if (!composite) return yetersiz('bileşik skor hesaplanamadı')
   if (composite.error) return yetersiz(composite.error)
@@ -209,7 +224,7 @@ function buildTopSeries(composite) {
 
 function buildHighlightedSeries(topSeries) {
   if (topSeries.status !== 'hesaplandi') return yetersiz(`öne çıkan dizi seçilemedi: ${topSeries.reason}`)
-  const criteria = 'bileşik skor sırası + en az kısmi doğrulama (arama payı veya Netflix Top 10)'
+  const criteria = 'bileşik skor sırası + en az kısmi doğrulama (arama payı veya platform Top 10 listeleri)'
   const items = topSeries.data.entries
     .filter((e) => e.compositeScore != null && ['verified', 'partial'].includes(e.dataConfidence?.level))
     .slice(0, HIGHLIGHTED_MAX)
@@ -219,6 +234,7 @@ function buildHighlightedSeries(topSeries) {
       compositeScore: e.compositeScore,
       confidence: e.dataConfidence?.label ?? null,
       evidence: e.evidence,
+      imdb: e.imdb ?? null,
     }))
   if (items.length === 0) {
     return yetersiz('hiçbir dizi en az kısmi doğrulama eşiğini geçmiyor (yalnızca medya/yayın sinyali var)')
@@ -244,7 +260,7 @@ function buildSearchTrend(iso2, countryRow, readCache) {
       `bu ülke için arama ilgisi zaman serisi henüz sorgulanmamış (${eksik.join(', ')}); rapor ücretli sorgu yapmaz — Arama İlgisi sekmesinden tetiklenebilir`
     )
   }
-  return OK({ series, missing: eksik })
+  return OK({ iso2, series, missing: eksik })
 }
 
 function buildPressTone(convergence, raw) {
@@ -545,41 +561,136 @@ function buildTourismSignal(convergence) {
  *   findSimilarCountries, similarOpts, readNetflixSyncError, cache {get,set}, now
  */
 /**
- * Ülkede Türk dizilerinin şu an hangi platformun Top 10'unda olduğu ve son 52 haftanın en kalıcıları. Ülke
- * panelindeki "Şu an listede" ile AYNI veri (getCountryCharts → buildCountryLists): rapor ile panel aynı
- * sayıyı gösterir. Hiç Türk dizisi girmemesi veri eksikliği değil, gerçek sonuçtur (hesaplandi, boş liste).
+ * Platformun kendi haftalık sıralaması (charts.js buildOwnRanking): bu haftanın listesi ve son 52 haftanın en
+ * kalıcıları. Platform/kaynak adı taşınmaz. Hiç Türk dizisi girmemesi veri eksikliği değil, gerçek sonuçtur.
  */
 export function buildPlatformLists(charts) {
-  const lists = charts?.lists
-  if (!lists) return yetersiz('liste verisi okunamadı')
-  if (!lists.window && lists.now.length === 0) return yetersiz('bu ülke için platform listesi kaydı yok')
-  const now = lists.now.map((it) => ({
-    seriesId: it.seriesId ?? null,
-    name: it.name,
-    rank: it.rank,
-    platforms: it.platforms ?? [it.platform].filter(Boolean),
-    weeksInList: it.weeksInList ?? null,
-    trend: it.trend ?? null,
-  }))
-  const top = lists.top.map((it) => ({
-    seriesId: it.seriesId ?? null,
-    name: it.name,
-    weeks: it.periods,
-    bestRank: it.bestRank,
-    platforms: it.platforms || [],
-    lastDate: it.lastDate ?? null,
-  }))
+  if (!charts) return yetersiz('liste verisi okunamadı')
+  const own = charts.ownRanking
+  if (!own) return yetersiz('bu ülke için liste kaydı yok')
   return OK({
-    now,
-    top,
-    window: lists.window,
-    platformsNow: [...new Set(now.flatMap((it) => it.platforms))],
+    now: own.current.map((it) => ({
+      seriesId: it.seriesId ?? null,
+      name: it.name,
+      position: it.position,
+      weeks: it.weeks,
+      trend: it.trend ?? null,
+    })),
+    top: own.top.map((it) => ({
+      seriesId: it.seriesId ?? null,
+      name: it.name,
+      weeks: it.weeks,
+      bestPosition: it.bestPosition,
+    })),
+    seriesCount: own.seriesCount,
+    previousCount: own.previousCount ?? null,
+    trendBasis: own.trendBasis ?? null,
+    trendSince: own.trendSince ?? null,
+    window: { from: own.from, to: own.to, weeks: 52 },
   })
+}
+
+const WIKI_MONTHS = 12
+const WIKI_TOP = 5
+const languageName = (lang) => {
+  try {
+    const n = new Intl.DisplayNames(['tr'], { type: 'language' }).of(lang)
+    return n ? n.charAt(0).toLocaleUpperCase('tr') + n.slice(1) : lang
+  } catch {
+    return lang
+  }
+}
+
+/**
+ * Okunma ilgisi: katalogdaki Türk dizilerinin ülkenin dillerindeki aylık ansiklopedi okunması (son 12 ay),
+ * dil başına en çok okunan 5 dizi. Ana gösterge yalnızca o ülkeye özgü (bölgesel olmayan) bir dilden: ortak
+ * dillerde (İngilizce, İspanyolca, Arapça…) okunma tek ülkeye ayrılamaz.
+ * `rows`: [{ lang, tmdb_id, year, month, views }].
+ */
+export function buildWikiInterest(langs, allRows, nameOf, { now = new Date() } = {}) {
+  if (!langs.length) return yetersiz('ülkenin dilleri eşlenmedi')
+  const periodOf = (r) => `${r.year}-${String(r.month).padStart(2, '0')}`
+  // İçinde bulunulan ay yarımdır; seriye girmez (toplayıcı da artık yazmıyor — wikipediaBackfill.sonTamAyBitisi).
+  const thisMonth = now.toISOString().slice(0, 7)
+  let rows = allRows.filter((r) => periodOf(r) < thisMonth)
+  if (!rows.length) return yetersiz('ülkenin dillerinde okunma kaydı yok')
+  // Kaynak bir ayın verisini ay bittikten sonra da bir süre yarım verebiliyor (Eylül 2026: Ağustos'un ~%3'ü).
+  // Son ayın toplamı önceki üç ayın ortalamasının %40'ının altındaysa "henüz tamamlanmamış" sayılır ve
+  // seriye girmez — bütün dizilerde aynı anda %60'tan büyük düşüş doğal olarak beklenmez.
+  const totals = new Map()
+  for (const r of rows) totals.set(periodOf(r), (totals.get(periodOf(r)) || 0) + r.views)
+  const sorted = [...totals.keys()].sort()
+  let incompleteMonth = null
+  if (sorted.length >= 4) {
+    const last = sorted.at(-1)
+    const prev3 = sorted.slice(-4, -1).map((p) => totals.get(p))
+    const avg = prev3.reduce((a, b) => a + b, 0) / prev3.length
+    if (avg > 0 && totals.get(last) < 0.4 * avg) {
+      incompleteMonth = last
+      rows = rows.filter((r) => periodOf(r) !== last)
+    }
+  }
+  const periods = [...new Set(rows.map(periodOf))].sort().slice(-WIKI_MONTHS)
+  const languages = []
+  for (const { lang, regional } of langs) {
+    const own = rows.filter((r) => r.lang === lang && periods.includes(periodOf(r)))
+    if (!own.length) continue
+    const byMonth = new Map(periods.map((p) => [p, 0]))
+    const bySeries = new Map()
+    for (const r of own) {
+      byMonth.set(periodOf(r), byMonth.get(periodOf(r)) + r.views)
+      bySeries.set(r.tmdb_id, (bySeries.get(r.tmdb_id) || 0) + r.views)
+    }
+    languages.push({
+      lang,
+      languageName: languageName(lang),
+      regional: Boolean(regional),
+      months: [...byMonth.entries()].map(([period, views]) => ({ period, views })),
+      top: [...bySeries.entries()]
+        .sort((a, b) => b[1] - a[1])
+        .slice(0, WIKI_TOP)
+        .map(([id, views]) => ({ seriesId: id, name: nameOf(id), views })),
+    })
+  }
+  if (!languages.length) return yetersiz('ülkenin dillerinde okunma kaydı yok')
+  const main = languages.find((l) => !l.regional) ?? null
+  let primary = null
+  if (main) {
+    const last = main.months.at(-1)
+    const prev = main.months.at(-2)
+    primary = {
+      lang: main.lang,
+      languageName: main.languageName,
+      period: last.period,
+      last: last.views,
+      prev: prev?.views ?? null,
+      changePct: prev?.views ? Math.round(((last.views - prev.views) / prev.views) * 1000) / 10 : null,
+      topName: main.top[0]?.name ?? null,
+    }
+  }
+  return OK({ languages, primary, incompleteMonth })
+}
+
+function readWikiRows(langs, seriesIds) {
+  if (!langs.length || !seriesIds.size) return []
+  const marks = langs.map(() => '?').join(',')
+  try {
+    return db
+      .prepare(
+        `SELECT lang, tmdb_id, year, month, views FROM series_language_interest
+         WHERE lang IN (${marks}) AND (year * 100 + month) >= (
+           SELECT MAX(year * 100 + month) - 100 FROM series_language_interest WHERE lang IN (${marks}))`
+      )
+      .all(...langs.map((l) => l.lang), ...langs.map((l) => l.lang))
+      .filter((r) => seriesIds.has(r.tmdb_id))
+  } catch {
+    return []
+  }
 }
 
 export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} } = {}) {
   const iso2 = String(iso2Raw).toUpperCase()
-  const cacheKey = `report:country:${iso2}`
+  const cacheKey = `report:country:v3:${iso2}`
   const cache = deps.cache || { get: getCached, set: setCached }
   if (useCache) {
     const cached = cache.get(cacheKey)
@@ -608,7 +719,8 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
       .catch((err) => ({ error: err.message })),
     tracked
       ? Promise.resolve()
-          .then(() => compositeFn(iso2, { cachedOnly: true }))
+          .then(() => compositeFn(iso2, { cachedOnly: true, pipelineConn }))
+          .then((c) => attachImdb(c, deps.getImdbData || getImdbDataForTmdbSeries, pipelineConn))
           .catch((err) => ({ error: err.message }))
       : Promise.resolve({ error: 'ülke yayın verisi yok' }),
   ])
@@ -632,8 +744,14 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
     buildGapAnalysis(iso2, raw, countries, pipelineConn, similarFn, deps.similarOpts)
   )
   const tourismSignal = section('tourismSignal', buildTourismSignal(convergence))
+  const wikiInterest = await guarded('wikiInterest', () => {
+    const langs = languagesOfCountry(iso2)
+    const names = new Map((raw?.series || []).map((sr) => [sr.id, sr.name]))
+    const rows = (deps.readWikiRows || readWikiRows)(langs, new Set(names.keys()))
+    return buildWikiInterest(langs, rows, (id) => names.get(id) ?? `#${id}`, { now })
+  })
 
-  const findingsResult = generateFindings({ ranking, trend, netflix: netflixHistory, themes, pressTone })
+  const findingsResult = generateFindings({ ranking, trend, lists: platformLists, imdb: topSeries, themes, pressTone })
   const findings = section(
     'findings',
     findingsResult.items.length > 0
@@ -641,9 +759,16 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
       : yetersiz('bulgu üretilecek yeterli veri yok')
   )
 
+  const foreignStudents = await guarded('foreignStudents', () => {
+    const s = (deps.getForeignStudentSummary || getForeignStudentSummary)(iso2)
+    return s ? OK(s) : yetersiz('bu ülkeden öğrenci kaydı yok')
+  })
+
   const sections = {
     scores,
     platformLists,
+    wikiInterest,
+    foreignStudents,
     ranking,
     trend,
     findings,
@@ -676,19 +801,4 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
   }
   if (useCache) cache.set(cacheKey, report, REPORT_CACHE_TTL_MS)
   return report
-}
-
-/** Profil yalnızca bölüm seçer; sayılar değişmez. Bilinmeyen profil → hata. */
-export function selectProfile(report, profile) {
-  const keys = PROFILES[profile]
-  if (!keys) throw new Error(`Bilinmeyen rapor profili: ${profile}`)
-  const sections = Object.fromEntries(keys.map((k) => [k, report.sections[k]]))
-  return {
-    ...report,
-    profile,
-    profileTitle: PROFILE_TITLES[profile],
-    sections,
-    sectionOrder: keys,
-    dataGaps: report.dataGaps.filter((g) => keys.includes(g.section)),
-  }
 }

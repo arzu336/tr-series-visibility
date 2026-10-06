@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import Globe from 'globe.gl'
 import * as THREE from 'three'
-import { scoreToColor, brightenRgb, buildWatchMap } from '../lib/scale.js'
+import { scoreToColor, brightenRgb, buildWatchMap, watchLevelText } from '../lib/scale.js'
 import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
@@ -12,8 +12,10 @@ function displayName(feat) {
   return featureDisplayName(feat, turkishNames)
 }
 
-const MIN_ALTITUDE = 0.006
-const MAX_ALTITUDE = 0.22
+// Ülkeler düz: izlenme yalnızca renkle gösterilir (2026-10-06). Endekse göre yükseltme aynı bilgiyi tekrar ediyor,
+// komşuları kapatıyor ve düz kalan ülkeleri "izlenmiyor" gibi gösteriyordu; ince sabit yükseklik yalnızca sınır
+// çizgilerinin küre yüzeyine gömülmemesi için.
+const COUNTRY_ALTITUDE = 0.006
 const NO_DATA_COLOR = '#131c31'
 const HIGHLIGHT_FILTER_COLOR = '#22d3ee'
 const DEFAULT_VIEW = { lat: 15, lng: 20, altitude: 2.4 }
@@ -55,7 +57,6 @@ export default function Globe3D({
     if (!containerRef.current) return
     const world = Globe()(containerRef.current)
       .globeImageUrl('/map/earth-night.jpg')
-      .bumpImageUrl('/map/earth-topology.png')
       .backgroundImageUrl('/map/night-sky.png')
       .showAtmosphere(true)
       .atmosphereColor('#7fb6ff')
@@ -185,12 +186,7 @@ export default function Globe3D({
         if (f === hoveredRef.current) return STROKE_HOVER
         return STROKE_DEFAULT
       })
-      .polygonAltitude((f) => {
-        const c = byIso2.get(featureIso2(f))
-        if (!c) return 0.003
-        if (c.index == null) return MIN_ALTITUDE
-        return MIN_ALTITUDE + (c.index / 100) * (MAX_ALTITUDE - MIN_ALTITUDE)
-      })
+      .polygonAltitude(COUNTRY_ALTITUDE)
       .polygonLabel((f) => {
         const name = displayName(f)
         const iso2 = featureIso2(f)
@@ -209,9 +205,9 @@ export default function Globe3D({
         const w = c.watchSignal
         const nf = w?.components?.netflix
         const satir = [
-          w?.level ? `İzlenme düzeyi: ${w.level}` : 'İzlenme düzeyi: sinyal yetersiz',
+          watchLevelText(w),
           nf?.present && nf.weeks > 0 ? `Netflix Top 10'da ${nf.series} dizi / ${nf.weeks} hafta` : null,
-          c.dataSource === 'proxy' ? 'yayın verisi yok' : null,
+          c.limited ? 'sınırlı veri' : c.dataSource === 'proxy' ? 'yayın verisi yok' : null,
         ]
           .filter(Boolean)
           .join(' · ')

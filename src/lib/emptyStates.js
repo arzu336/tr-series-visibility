@@ -46,8 +46,6 @@ export const EMPTY = {
   // --- Arayüz: ülke paneli / harita / kenar çubuğu --------------------------------------
   regionalInterestMissing:
     'Google Trends bu dizi için bu ülkede bölge kırılımı döndürmedi (arama hacmi bölge eşiğinin altında ya da sorgu henüz yapılmadı).',
-  visibilityHistoryProxy:
-    'Bu ülkede yayın sağlayıcı verisi yok (tahmini arama ilgisi ülkesi); görünürlük geçmişi yalnızca yayın verisi olan ülkeler için tutulur.',
   periodsAccumulating:
     'Veri birikiyor — günlük anlık görüntüler dönem sonunda ortalanır; henüz bir periyot tamamlanmadı.',
   leaderboardEmpty: 'Bileşik skor için veri yok: bu ülkede sağlayıcı kaydı olan dizi bulunmadı.',

@@ -65,7 +65,7 @@ export function sanitizeClaimsPayload(payload) {
 export function sanitizeReportPayload(payload, { direktifIceriyorMu } = {}) {
   const { removed: removedClaims } = sanitizeClaimsPayload(payload)
   let removedDirectives = 0
-  if (typeof direktifIceriyorMu !== 'function' || !payload?.sections)
+  if (typeof direktifIceriyorMu !== 'function' || !(payload?.sections || payload?.chapters))
     return { payload, removedClaims, removedDirectives }
 
   const gez = (node) => {
@@ -84,6 +84,6 @@ export function sanitizeReportPayload(payload, { direktifIceriyorMu } = {}) {
     if (!node || typeof node !== 'object') return
     for (const deger of Object.values(node)) gez(deger)
   }
-  gez(payload.sections)
+  for (const kok of [payload.sections, payload.chapters, payload.summary]) if (kok) gez(kok)
   return { payload, removedClaims, removedDirectives }
 }

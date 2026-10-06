@@ -83,45 +83,63 @@ describe('buildTourismDimension — gerçek sözleşmeyle', () => {
     hicNaNYok(r)
   })
 
-  it('korelasyon: ortak ay yokken "Aylık seri birikiyor: 0/3 ay" ile hesaplanamaz kalır', async () => {
-    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, getMonthlyPeriods: () => [] })
+  it('korelasyon: ülkenin dili ortak dilse (okunma ülkeye ayrılamaz) nedeniyle hesaplanamaz', async () => {
+    const r = await buildTourismDimension(
+      'DE',
+      { score: 500 },
+      { ...deps, readingSeriesFor: () => ({ langs: [], series: new Map() }) }
+    )
     expect(r.didEstimate.status).toBe('hesaplandi')
     expect(r.correlation.status).toBe('hesaplanamaz')
-    expect(r.correlation.reason).toMatch(/^Aylık seri birikiyor: 0\/3 ay/)
-    expect(r.correlation).toMatchObject({ monthsAvailable: 0, monthsRequired: 3 })
+    expect(r.correlation.reason).toMatch(/birden çok ülkede konuşuluyor/)
   })
 
-  it('korelasyon: ortak ay sayısı gerçek veriden sayılır (2/3), cari ay sayılmaz', async () => {
-    const aylik = () => [
-      { period: '2024-07', avgScore: 100, sampleCount: 5, isCurrent: false },
-      { period: '2025-07', avgScore: 120, sampleCount: 5, isCurrent: false },
-      { period: '2025-08', avgScore: 130, sampleCount: 2, isCurrent: true },
-      { period: '2023-01', avgScore: 90, sampleCount: 5, isCurrent: false },
-    ]
-    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, getMonthlyPeriods: aylik })
+  it('korelasyon: ortak ay yetersizse kaç ay olduğu ve gereken sayı söylenir', async () => {
+    const okuma = () => ({
+      langs: ['de'],
+      series: new Map([
+        ['2023-07', 10],
+        ['2024-07', 12],
+        ['2025-07', 15],
+      ]),
+    })
+    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, readingSeriesFor: okuma })
     expect(r.correlation.status).toBe('hesaplanamaz')
-    expect(r.correlation.reason).toMatch(/^Aylık seri birikiyor: 2\/3 ay/)
-    expect(r.correlation.monthsAvailable).toBe(2)
+    expect(r.correlation.reason).toMatch(/yeterli ortak ay yok/)
+    expect(r.correlation).toMatchObject({ monthsRequired: 24 })
   })
 
-  it('korelasyon: 3+ ortak ayda Pearson hesaplanır', async () => {
-    const aylik = () => [
-      { period: '2023-07', avgScore: 90, sampleCount: 5, isCurrent: false },
-      { period: '2024-07', avgScore: 100, sampleCount: 5, isCurrent: false },
-      { period: '2025-07', avgScore: 120, sampleCount: 5, isCurrent: false },
-      { period: '2025-08', avgScore: 130, sampleCount: 5, isCurrent: false }, // turist serisinde yok → sayılmaz
-    ]
-    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, getMonthlyPeriods: aylik })
+  it('korelasyon: yeterli ortak ayda gecikme, ay sayısı ve anlamlılıkla hesaplanır; NaN yok', async () => {
+    const ay = (y, m) => `${y}-${String(m).padStart(2, '0')}`
+    const okunma = new Map()
+    const turist = []
+    let x = 1
+    for (let y = 2016; y <= 2026; y++)
+      for (let m = 1; m <= 12; m++) {
+        x = (x * 16807) % 2147483647
+        const sok = (x / 2147483647 - 0.5) * 0.6
+        okunma.set(ay(y, m), 1000 * (1 + sok))
+        turist.push({ year: y, month: m, visitorCount: Math.round(5000 * (1 + sok * 0.9)) })
+      }
+    const r = await buildTourismDimension(
+      'DE',
+      { score: 500 },
+      {
+        ...deps,
+        getVisitorSeries: (iso2) => (iso2 === 'DE' ? turist : seri(iso2)),
+        readingSeriesFor: () => ({ langs: ['de'], series: okunma }),
+      }
+    )
     expect(r.correlation.status).toBe('hesaplandi')
-    expect(r.correlation).toMatchObject({ sampleSize: 3, unit: 'pearson-r', months: ['2023-07', '2024-07', '2025-07'] })
-    expect(r.correlation.value).toBeGreaterThan(0.9) // 900/1000/1200 ile 90/100/120 neredeyse doğrusal
-    expect(Math.abs(r.correlation.value)).toBeLessThanOrEqual(1)
+    expect(r.correlation).toMatchObject({
+      lagMonths: 0,
+      unit: 'pearson-r',
+      significant: true,
+      method: 'okunma-yillik-degisim',
+    })
+    expect(r.correlation.value).toBeGreaterThan(0.9)
+    expect(r.correlation.sampleSize).toBeGreaterThanOrEqual(24)
     hicNaNYok(r)
-  })
-
-  it('korelasyon: yayın varlığı ölçümü yoksa nedeni bunu söyler', async () => {
-    const r = await buildTourismDimension('DE', { score: null }, { ...deps, getMonthlyPeriods: () => [] })
-    expect(r.correlation.reason).toBe('bu ülke için yayın varlığı ölçümü yok')
   })
 
   it('seri yoksa üç boyut da hesaplanamaz', async () => {

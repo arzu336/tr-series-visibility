@@ -12,7 +12,7 @@ vi.mock('undici', () => ({
 }))
 vi.mock('../cache.js', () => ({ getCached: () => null, setCached: () => {} }))
 
-const { fetchNewsArticlesGdelt, GDELT_PRIORITY, gdeltQueueStats } = await import('./gdeltNews.js')
+const { fetchNewsArticlesGdelt, GDELT_PRIORITY, gdeltQueueStats, TURKISH_CONTEXT } = await import('./gdeltNews.js')
 
 // Kuyruğun "son istek zamanı" modül durumunda yaşar; her test sahte saati bir saat ileri kurar
 // ki önceki testin ileri alınmış saati yeni testte "geleceğe" düşüp aralığı uzatmasın.
@@ -74,5 +74,21 @@ describe('GDELT kuyruğu — öncelik', () => {
     const sonuc = await fetchNewsArticlesGdelt('x', 'XX')
     expect(sonuc.unsupported).toBe(true)
     expect(cagrilar).toHaveLength(0)
+  })
+})
+
+describe('GDELT sorgusu — İngilizce ad ve bağlam koşulu', () => {
+  it('bağlam verilince ad grubunun ardına eklenir; ülke filtresi sonda', async () => {
+    const soz = fetchNewsArticlesGdelt(['Kızılcık Şerbeti', 'Cranberry Sherbet'], 'RU', { context: TURKISH_CONTEXT })
+    await hepsiniAkit()
+    await soz
+    expect(cagrilar).toEqual(['("Kızılcık Şerbeti" OR "Cranberry Sherbet") (turkish OR turkey) sourcecountry:RS'])
+  })
+
+  it('bağlam yoksa sorgu eskisi gibi', async () => {
+    const soz = fetchNewsArticlesGdelt(['Kızılcık Şerbeti'], 'RU')
+    await hepsiniAkit()
+    await soz
+    expect(cagrilar).toEqual(['"Kızılcık Şerbeti" sourcecountry:RS'])
   })
 })

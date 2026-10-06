@@ -34,6 +34,8 @@ vi.mock('./services/netflixPipelineRunner.js', () => ({ runNetflixSyncIfNeeded: 
 vi.mock('./services/reytingtvRunner.js', () => ({ runReytingtvSyncIfNeeded: kaydet('zincir:reytingtv') }))
 vi.mock('./services/flixpatrolRunner.js', () => ({ runFlixpatrolSyncIfNeeded: kaydet('zincir:flixpatrol') }))
 vi.mock('./services/imdbRunner.js', () => ({ runImdbSyncIfNeeded: kaydet('zincir:imdb') }))
+vi.mock('./services/wikiMonthlyRefresh.js', () => ({ runWikiMonthlyRefreshIfNeeded: kaydet('zincir:wiki') }))
+vi.mock('./services/foreignStudents.js', () => ({ syncForeignStudentsIfNeeded: kaydet('zincir:students') }))
 
 const { runScheduledRefreshInner, startScheduler, META_KEY } = await import('./scheduler.js')
 

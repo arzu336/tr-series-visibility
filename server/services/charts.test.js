@@ -8,6 +8,7 @@ import {
   addDays,
   isRecap,
   buildCountryLists,
+  buildOwnRanking,
   mergeAcrossPlatforms,
   weekEndOf,
   collapseSeasons,
@@ -306,5 +307,84 @@ describe('seriesListings — dizinin tüm listeleri, ülke × platform', () => {
       ['SA', 'Netflix', 2, 2, '2026-09-27'],
       ['TR', 'TV', 1, 1, '2026-08-23'],
     ])
+  })
+})
+
+describe('buildOwnRanking — platformun kendi haftalık sıralaması', () => {
+  const nf = (date, rank, id, name) => ({
+    provider: 'netflix_tudum',
+    segment: 'TV',
+    period_date: date,
+    rank,
+    series_id: id,
+    title_raw: name,
+    program_kind: 'series',
+  })
+  const fx = (date, seg, rank, id, name) => ({
+    provider: 'flixpatrol',
+    segment: seg,
+    period_date: date,
+    rank,
+    series_id: id,
+    title_raw: name,
+    program_kind: 'series',
+  })
+  const to = '2026-10-05'
+  const sonuc = buildOwnRanking({
+    netflixRows: [nf('2026-09-27', 1, 1, 'Seni Tanıyorum'), nf('2026-09-20', 3, 1, 'Seni Tanıyorum')],
+    flixRows: [
+      fx('2026-10-04', 'shahid', 3, 2, 'Uzak Şehir'),
+      fx('2026-10-03', 'amazon-prime', 3, 3, 'Eşref Rüya'),
+      fx('2026-10-04', 'shahid', 7, 3, 'Eşref Rüya'), // iki listede → eşit sırada önce
+      fx('2026-09-27', 'shahid', 1, 2, 'Uzak Şehir'), // önceki hafta 1.
+      { ...fx('2026-10-04', 'shahid', 2, 9, 'Haber'), program_kind: 'other' }, // dizi değil
+    ],
+    to,
+  })
+
+  it("Netflix'in yayımlanan listesi bu haftaya sayılır; en iyi sıra, eşitlikte çok listede olan önce", () => {
+    expect(sonuc.current.map((x) => [x.position, x.name])).toEqual([
+      [1, 'Seni Tanıyorum'],
+      [2, 'Eşref Rüya'],
+      [3, 'Uzak Şehir'],
+    ])
+  })
+
+  it('değişim önceki haftaya göre; önceki hafta yoksa etiket yok; hafta sayısı ve en iyi sıra', () => {
+    const byName = Object.fromEntries(sonuc.current.map((x) => [x.name, x]))
+    expect(byName['Uzak Şehir'].trend).toBe('↓2') // geçen hafta 1., bu hafta 3.
+    expect(byName['Seni Tanıyorum'].trend).toBe('↑1') // geçen hafta 2. (Uzak Şehir'in ardından), bu hafta 1.
+    expect(byName['Eşref Rüya'].trend).toBeNull()
+    expect(byName['Seni Tanıyorum'].weeks).toBe(2)
+    expect(sonuc.top[0]).toMatchObject({ name: 'Seni Tanıyorum', weeks: 2, bestPosition: 1 })
+    expect(sonuc.seriesCount).toBe(3)
+    expect(JSON.stringify(sonuc)).not.toMatch(/shahid|amazon|netflix|Haber/i)
+  })
+
+  it('geçen hafta iki kaynağı da kapsıyorsa karşılaştırma haftalık', () => {
+    expect(sonuc).toMatchObject({ trendBasis: 'week', trendSince: null, previousCount: 2 })
+  })
+
+  it('geçen hafta günlük listeleri kapsamıyorsa değişim hafta içi: ilk günün sırasından son güne', () => {
+    const r = buildOwnRanking({
+      netflixRows: [nf('2026-09-27', 1, 1, 'Seni Tanıyorum'), nf('2026-09-20', 1, 1, 'Seni Tanıyorum')],
+      flixRows: [
+        fx('2026-09-30', 'shahid', 2, 2, 'Uzak Şehir'),
+        fx('2026-09-30', 'shahid', 3, 3, 'Eşref Rüya'),
+        fx('2026-10-05', 'shahid', 4, 2, 'Uzak Şehir'),
+        fx('2026-10-05', 'shahid', 1, 3, 'Eşref Rüya'),
+      ],
+      to,
+    })
+    expect(r).toMatchObject({ trendBasis: 'days', trendSince: '2026-09-30', previousCount: null })
+    const byName = Object.fromEntries(r.current.map((x) => [x.name, x.trend]))
+    expect(byName['Eşref Rüya']).toBe('↑1') // 30 Eylül'de 2., 5 Ekim'de 1.
+    expect(byName['Uzak Şehir']).toBe('↓1')
+    expect(byName['Seni Tanıyorum']).toBeNull() // günlük listede yok
+  })
+
+  it('kayıt yoksa null', () => {
+    expect(buildOwnRanking({ netflixRows: [], flixRows: [], to })).toBeNull()
+    expect(buildOwnRanking({ netflixRows: [nf('2026-09-27', 1, 1, 'X')], flixRows: [], to: null })).toBeNull()
   })
 })

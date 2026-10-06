@@ -54,12 +54,15 @@ export async function fetchTrendSeriesList() {
   return handle(await fetch('/api/trends/series'))
 }
 
-export async function fetchTrends(seriesName) {
-  return handle(await fetch(`/api/trends/${encodeURIComponent(seriesName)}`))
+// `cachedOnly`: yalnızca kayıtlı sonuç (ücretli sorgu yok); kayıt yoksa { notCached: true }.
+const cachedQ = (cachedOnly, sep = '?') => (cachedOnly ? `${sep}cached=1` : '')
+
+export async function fetchTrends(seriesName, { cachedOnly = false } = {}) {
+  return handle(await fetch(`/api/trends/${encodeURIComponent(seriesName)}${cachedQ(cachedOnly)}`))
 }
 
-export async function fetchSocialListening(seriesName) {
-  return handle(await fetch(`/api/social/${encodeURIComponent(seriesName)}`))
+export async function fetchSocialListening(seriesName, { cachedOnly = false } = {}) {
+  return handle(await fetch(`/api/social/${encodeURIComponent(seriesName)}${cachedQ(cachedOnly)}`))
 }
 
 export async function fetchShareOfSearch(titles) {
@@ -70,19 +73,76 @@ export async function fetchRegionalBreakdown(titles) {
   return handle(await fetch(`/api/trends/regional-breakdown?titles=${encodeURIComponent(titles.join(','))}`))
 }
 
-export async function fetchTrendsTimeSeries(seriesName, iso2 = null) {
+export async function fetchTrendsTimeSeries(seriesName, iso2 = null, { cachedOnly = false } = {}) {
   const q = iso2 ? `?geo=${encodeURIComponent(iso2)}` : ''
-  return handle(await fetch(`/api/trends/timeseries/${encodeURIComponent(seriesName)}${q}`))
+  return handle(
+    await fetch(`/api/trends/timeseries/${encodeURIComponent(seriesName)}${q}${cachedQ(cachedOnly, q ? '&' : '?')}`)
+  )
 }
 
-export async function fetchTrendsInsight(seriesName, iso2 = null) {
+export async function fetchTrendsInsight(seriesName, iso2 = null, { cachedOnly = false } = {}) {
   const q = iso2 ? `?geo=${encodeURIComponent(iso2)}` : ''
-  return handle(await fetch(`/api/trends/insight/${encodeURIComponent(seriesName)}${q}`))
+  return handle(
+    await fetch(`/api/trends/insight/${encodeURIComponent(seriesName)}${q}${cachedQ(cachedOnly, q ? '&' : '?')}`)
+  )
 }
 
 // 202 döner: { job, existing, statusUrl }. Sonuç için fetchJob ile ilerleme izlenir.
 export async function enrichSeriesNow(seriesId) {
   return handle(await fetch(`/api/series/enrich-now/${seriesId}`, { method: 'POST' }))
+}
+
+// YouTube bağlantıları (yönetici)
+export async function fetchYoutubeStatus() {
+  return handle(await fetch('/api/youtube/status'))
+}
+
+export async function runYoutubePublic() {
+  return handle(await fetch('/api/youtube/public/run', { method: 'POST' }))
+}
+
+export async function fetchSeriesYoutube(seriesId) {
+  return handle(await fetch(`/api/series/${encodeURIComponent(seriesId)}/youtube`))
+}
+
+export async function syncYoutubeChannel(channelId) {
+  return handle(await fetch(`/api/youtube/channels/${encodeURIComponent(channelId)}/sync`, { method: 'POST' }))
+}
+
+export async function disconnectYoutubeChannel(channelId) {
+  return handle(await fetch(`/api/youtube/channels/${encodeURIComponent(channelId)}`, { method: 'DELETE' }))
+}
+
+export async function fetchCountryContext(iso2) {
+  return handle(await fetch(`/api/country/${encodeURIComponent(iso2)}/context`))
+}
+
+// Televizyon yayınları ve dağıtımcı satış kayıtları
+export async function fetchCountryTv(iso2) {
+  return handle(await fetch(`/api/country/${encodeURIComponent(iso2)}/tv`))
+}
+
+export async function fetchSeriesTv(seriesId) {
+  return handle(await fetch(`/api/series/${encodeURIComponent(seriesId)}/tv`))
+}
+
+export async function fetchTvAdmin() {
+  return handle(await fetch('/api/admin/tv'))
+}
+
+export async function runTvGuide() {
+  return handle(await fetch('/api/admin/tv/run', { method: 'POST' }))
+}
+
+const postJson = (url, body) =>
+  fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+
+export async function mapTvTitle(body) {
+  return handle(await postJson('/api/admin/tv/map', body))
+}
+
+export async function importSalesCsv(body) {
+  return handle(await postJson('/api/admin/tv/sales', body))
 }
 
 export async function fetchJob(jobId) {
@@ -111,27 +171,6 @@ export async function fetchSeriesEnrichment(tmdbSeriesId) {
 
 export async function fetchPersonImpact(personId) {
   return handle(await fetch(`/api/person/${personId}`))
-}
-
-export async function fetchCulturalImpact() {
-  return handle(await fetch('/api/impact/cultural'))
-}
-
-export async function fetchTourismImpact() {
-  return handle(await fetch('/api/impact/tourism'))
-}
-
-export async function fetchExportImpact() {
-  return handle(await fetch('/api/impact/export'))
-}
-
-export async function fetchCountrySummary(iso2, { withInsight = false } = {}) {
-  const q = withInsight ? '?insight=1' : ''
-  return handle(await fetch(`/api/impact/country-summary/${encodeURIComponent(iso2)}${q}`))
-}
-
-export async function fetchBenchmark() {
-  return handle(await fetch('/api/benchmark'))
 }
 
 export async function fetchTurkishLearningIndex() {
@@ -255,10 +294,6 @@ export async function fetchCountryPeriods(iso2, range = 'monthly') {
   return handle(await fetch(`/api/history/${iso2}/periods?range=${range}`))
 }
 
-export async function fetchThemeInsight() {
-  return handle(await fetch('/api/theme-insight'))
-}
-
 export async function fetchTourismSummary() {
   return handle(await fetch('/api/tourism-summary'))
 }
@@ -304,14 +339,18 @@ export async function clearMediaSentimentOverride(id) {
 }
 
 /** Ülke raporu — üç profil (executive | marketing | producer); yetki sunucuda denetlenir (403). */
-export async function fetchCountryReport(iso2, profile, { fresh = false } = {}) {
-  const q = new URLSearchParams({ profile })
-  if (fresh) q.set('fresh', '1')
-  return handle(await fetch(`/api/report/country/${encodeURIComponent(iso2)}?${q}`))
+export async function fetchGlobalReport({ fresh = false } = {}) {
+  return handle(await fetch(`/api/report/global${fresh ? '?fresh=1' : ''}`))
 }
 
-export async function fetchReportProfiles() {
-  return handle(await fetch('/api/report/profiles'))
+export async function fetchSeriesReport(seriesId, { fresh = false } = {}) {
+  const q = fresh ? '?fresh=1' : ''
+  return handle(await fetch(`/api/report/series/${encodeURIComponent(seriesId)}${q}`))
+}
+
+export async function fetchCountryReport(iso2, { fresh = false } = {}) {
+  const q = fresh ? '?fresh=1' : ''
+  return handle(await fetch(`/api/report/country/${encodeURIComponent(iso2)}${q}`))
 }
 
 /** Liste uçları (chart_entries): kaynak etiketiyle döner. */

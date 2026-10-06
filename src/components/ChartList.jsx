@@ -27,15 +27,14 @@ export function ChartSource({ source, periodLabel }) {
 }
 
 // Spotify listelerindeki gibi: yükselen yeşil ▲, düşen kırmızı ▼ (kaç sıra olduğu yalnızca ipucunda),
-// aynı kalan gri çizgi; listeye ilk kez giren "YENİ", daha önce listede olup geri giren "TEKRAR" rozeti.
+// aynı kalan gri çizgi. Raporlarda (`withCount`) sıra farkı okun yanına yazılır: baskıda ipucu görünmez. Listeye giren ya da geri giren dizide işaret yok: "YENİ"/"TEKRAR" rozetleri dizinin
+// yeni çıktığı ya da tekrar yayını olduğu izlenimi verdiği için kaldırıldı (kullanıcı kararı, 2026-10-06).
 const TREND_LABELS = {
-  yeni: 'listeye ilk kez girdi',
-  tekrar: 'listeye geri girdi',
   '=': 'sıra değişmedi',
 }
 
-export function TrendBadge({ trend }) {
-  if (!trend) return null
+export function TrendBadge({ trend, withCount = false }) {
+  if (!trend || trend === 'yeni' || trend === 'tekrar') return null
   const up = trend.startsWith('↑')
   const down = trend.startsWith('↓')
   const label = up
@@ -47,19 +46,13 @@ export function TrendBadge({ trend }) {
   let content = trend
   if (up) {
     cls += ' chart-list__trend--up'
-    content = '▲'
+    content = withCount ? `▲ ${trend.slice(1)}` : '▲'
   } else if (down) {
     cls += ' chart-list__trend--down'
-    content = '▼'
+    content = withCount ? `▼ ${trend.slice(1)}` : '▼'
   } else if (trend === '=') {
     cls += ' chart-list__trend--same'
     content = '–'
-  } else if (trend === 'yeni') {
-    cls += ' chart-list__trend--pill chart-list__trend--new'
-    content = 'YENİ'
-  } else if (trend === 'tekrar') {
-    cls += ' chart-list__trend--pill chart-list__trend--reentry'
-    content = 'TEKRAR'
   }
   return (
     <span className={cls} title={label} aria-label={label}>

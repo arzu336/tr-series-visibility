@@ -2,33 +2,99 @@ import db from '../db.js'
 import { getCached } from '../cache.js'
 import { calculateShareOfSearch } from './trendsShareOfSearch.js'
 import { getPipelineDb } from './pipelineDb.js'
+import { PLATFORM_LABELS, weekEndOf } from './charts.js'
 
 const TOP_N_CANDIDATES = 5
 
 const WEIGHTS = {
   shareOfSearch: 0.4,
-  netflix: 0.3,
+  lists: 0.3,
   mediaSentiment: 0.15,
   availability: 0.15,
 }
 
-function getNetflixScore(iso2, tmdbId) {
-  const conn = getPipelineDb()
-  if (!conn) return null
-  try {
-    const row = conn
-      .prepare(
-        'SELECT rank_score, weeks_in_top10, peak_rank, last_week_date FROM netflix_country_rankings WHERE country_iso2 = ? AND tmdb_id = ?'
-      )
-      .get(iso2, tmdbId)
-    if (!row) return null
-    return {
-      value: row.rank_score,
-      evidence: `Resmi platform Top 10: ${row.weeks_in_top10} hafta, en iyi #${row.peak_rank} (${row.last_week_date || 'tarih yok'})`,
-    }
-  } catch {
-    return null
+// Liste faktörü: dizinin bu ülkede son 52 haftada TÜM platformların Top 10 listelerindeki başarısı
+// (Netflix haftalık + Disney+/Prime Video/HBO Max/Apple TV+/Shahid günlük anlık görüntüleri). Önceden
+// yalnızca Netflix'ti; Shahid'de 1. olan bir dizi bu faktörden sıfır alıyordu.
+const LIST_WINDOW_DAYS = 364
+const LIST_WEEKS_CAP = 26
+
+function addDaysIso(ymd, days) {
+  const d = new Date(`${ymd}T00:00:00Z`)
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().slice(0, 10)
+}
+
+/**
+ * Satırlar → dizi başına { weeks, bestRank, platforms, value, evidence }. Değer 0-100: listede kalınan
+ * hafta (26 haftada tavan) %60 + en iyi sıra (#1 = tam, #10 = onda bir) %40. Aynı hafta birden çok
+ * platformda olmak tek hafta sayılır.
+ */
+export function listPerformance(rows) {
+  const by = new Map()
+  for (const r of rows) {
+    const a = by.get(r.series_id) || { weeks: new Set(), bestRank: 99, platforms: new Set() }
+    a.weeks.add(weekEndOf(r.period_date))
+    a.bestRank = Math.min(a.bestRank, r.rank)
+    a.platforms.add(
+      r.provider === 'netflix_tudum' ? PLATFORM_LABELS.netflix : (PLATFORM_LABELS[r.segment] ?? r.segment)
+    )
+    by.set(r.series_id, a)
   }
+  const out = new Map()
+  for (const [id, a] of by) {
+    const weeks = a.weeks.size
+    const value =
+      Math.round(((60 * Math.min(weeks, LIST_WEEKS_CAP)) / LIST_WEEKS_CAP + (40 * (11 - a.bestRank)) / 10) * 10) / 10
+    const platforms = [...a.platforms].sort()
+    out.set(id, {
+      weeks,
+      bestRank: a.bestRank,
+      platforms,
+      value,
+      evidence: `Listelerde ${weeks} hafta`,
+    })
+  }
+  return out
+}
+
+function readListPerformance(iso2, { conn = getPipelineDb(), today = new Date().toISOString().slice(0, 10) } = {}) {
+  if (!conn) return new Map()
+  try {
+    const rows = conn
+      .prepare(
+        `SELECT provider, segment, period_date, rank, series_id FROM chart_entries
+         WHERE country_iso2 = ? AND period_date >= ? AND series_id IS NOT NULL AND program_kind = 'series'
+           AND provider IN ('netflix_tudum', 'flixpatrol')`
+      )
+      .all(iso2, addDaysIso(today, -LIST_WINDOW_DAYS))
+    return listPerformance(rows)
+  } catch {
+    return new Map()
+  }
+}
+
+/**
+ * Aday havuzu: önce bu ülkede Top 10 listelerine girmiş diziler (liste başarısına göre), kalan yer
+ * ülkede yayında olan en popüler dizilerle dolar. Listelerde zirveye çıkan bir dizi, TMDB popülerliği
+ * düşük diye "en çok ilgi gören diziler"in dışında kalmasın.
+ */
+export function pickCandidates(raw, iso2, lists, n = TOP_N_CANDIDATES) {
+  const inCatalog = new Map(raw.series.map((s) => [s.id, s]))
+  const charted = [...lists.entries()]
+    .filter(([id]) => inCatalog.has(id))
+    .sort((a, b) => b[1].value - a[1].value)
+    .map(([id]) => inCatalog.get(id))
+  const popular = raw.series.filter((s) => raw.providersById[s.id]?.[iso2]).sort((a, b) => b.popularity - a.popularity)
+  const seen = new Set()
+  const out = []
+  for (const s of [...charted, ...popular]) {
+    if (seen.has(s.id)) continue
+    seen.add(s.id)
+    out.push(s)
+    if (out.length === n) break
+  }
+  return out
 }
 
 const getMediaSentimentStmt = db.prepare(
@@ -42,7 +108,15 @@ function getMediaSentimentScore(iso2, tmdbId) {
   return { value, evidence: `Basın algısı: ${row.dominant_sentiment} (${row.total_news_count} haber)` }
 }
 
-function getAvailabilityScore(providersForCountry) {
+export function getAvailabilityScore(providersForCountry, listed = null) {
+  // TMDB'nin platform verisi bazı platformları (ör. Shahid) tanımıyor; dizi o ülkede bir platformun Top 10
+  // listesindeyse orada yayında olduğu kesindir — kayıt yokken liste platformları kanıt olarak sayılır.
+  if (!providersForCountry && listed?.platforms?.length) {
+    return {
+      value: Math.min(100, listed.platforms.length * 25),
+      evidence: `Listede olduğu ${listed.platforms.length} platformda yayında`,
+    }
+  }
   if (!providersForCountry) return { value: 0, evidence: 'Bu ülkede yayın sağlayıcısı kaydı yok' }
   const categories = ['flatrate', 'free', 'ads', 'rent', 'buy']
   const distinctProviders = new Set()
@@ -67,38 +141,36 @@ function weightedComposite(factors) {
 }
 
 function badgeFor(usedFactors) {
-  const hasNetflix = usedFactors.includes('netflix')
+  const hasLists = usedFactors.includes('lists')
   const hasShareOfSearch = usedFactors.includes('shareOfSearch')
-  if (hasNetflix && hasShareOfSearch) {
+  if (hasLists && hasShareOfSearch) {
     return { label: 'Çift Kaynakla Doğrulandı', level: 'verified' }
   }
   if (hasShareOfSearch) {
     return { label: 'Arama İlgisiyle Kısmi Doğrulama', level: 'partial' }
   }
-  if (hasNetflix) {
-    return { label: 'Platform Verisiyle Kısmi Doğrulama', level: 'partial' }
+  if (hasLists) {
+    return { label: 'Platform Listesiyle Kısmi Doğrulama', level: 'partial' }
   }
   return { label: 'Sadece Medya/Yayın Sinyali', level: 'weak' }
 }
 
 /**
- * Ülkede yayında olan (providersById'de kaydı olan) en popüler 5 Türk dizisini 4 faktörle
- * (Share of Search %40, Netflix Top 10 %30, Basın Algısı %15, Yayın Varlığı %15) yeniden
- * sıralar. TMDB popülerliği SADECE aday havuzunu belirlemek için kullanılır, nihai sıralamaya
- * girmez (bkz. yukarıdaki WEIGHTS notu). Hiçbir gerçek veri yoksa (Share of Search bile
- * çekilemezse) boş entries + açık bir `error` alanıyla döner, uydurma bir sıralama üretilmez.
+ * Ülkede Top 10 listelerine girmiş ve yayında olan en popüler Türk dizilerinden 5 aday seçer
+ * (pickCandidates) ve 4 faktörle (Share of Search %40, platform Top 10 listeleri %30, Basın Algısı %15,
+ * Yayın Varlığı %15) sıralar. TMDB popülerliği SADECE aday havuzunu doldurmak için kullanılır, nihai
+ * sıralamaya girmez. Hiçbir gerçek veri yoksa boş entries + açık bir `error` alanıyla döner, uydurma
+ * bir sıralama üretilmez.
  */
-export async function calculateCountryCompositeScore(countryIso2, { cachedOnly = false } = {}) {
+export async function calculateCountryCompositeScore(countryIso2, { cachedOnly = false, pipelineConn } = {}) {
   const iso2 = countryIso2.toUpperCase()
   const raw = getCached('raw-series-providers')
   if (!raw) {
     return { iso2, generatedAt: new Date().toISOString(), entries: [], error: 'Canlı veri önbelleği henüz dolmamış' }
   }
 
-  const candidates = raw.series
-    .filter((s) => raw.providersById[s.id]?.[iso2])
-    .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, TOP_N_CANDIDATES)
+  const lists = readListPerformance(iso2, pipelineConn !== undefined ? { conn: pipelineConn } : {})
+  const candidates = pickCandidates(raw, iso2, lists)
 
   if (candidates.length < 2) {
     return {
@@ -127,9 +199,9 @@ export async function calculateCountryCompositeScore(countryIso2, { cachedOnly =
 
   const entries = candidates.map((s) => {
     const sos = shareOfSearchByTitle.get(s.name)
-    const netflix = getNetflixScore(iso2, s.id)
+    const listed = lists.get(s.id) ?? null
     const sentiment = getMediaSentimentScore(iso2, s.id)
-    const availability = getAvailabilityScore(raw.providersById[s.id]?.[iso2])
+    const availability = getAvailabilityScore(raw.providersById[s.id]?.[iso2], listed)
 
     const factors = [
       {
@@ -138,7 +210,7 @@ export async function calculateCountryCompositeScore(countryIso2, { cachedOnly =
         value: sos ? sos.shareOfSearchPct : null,
         evidence: sos ? `Arama payı: %${sos.shareOfSearchPct}` : null,
       },
-      { key: 'netflix', weight: WEIGHTS.netflix, value: netflix?.value ?? null, evidence: netflix?.evidence ?? null },
+      { key: 'lists', weight: WEIGHTS.lists, value: listed?.value ?? null, evidence: listed?.evidence ?? null },
       {
         key: 'mediaSentiment',
         weight: WEIGHTS.mediaSentiment,

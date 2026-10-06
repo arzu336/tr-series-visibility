@@ -32,7 +32,7 @@ export const WIKI_WINDOW_MONTHS = 12
 export const LINEAR_TV_DISTRIBUTION_MIN_P = 60
 export const LINEAR_TV_GAP_MIN_P = 30
 export const LINEAR_TV_INTEREST_MIN_P = 40
-export const CACHE_KEY = 'watch-signal:v1'
+export const CACHE_KEY = 'watch-signal:v2'
 export const CACHE_TTL_MS = 60 * 60 * 1000
 // IMDb "yerel başlık" sayımında dışlanan İngilizce pazarlar: buradaki AKA'lar çeviri değil İngilizce ad.
 export const ENGLISH_AKA_REGIONS = new Set([
@@ -239,9 +239,14 @@ export function computeWatchSignals(inputs, opts = {}) {
         text: `Tek kaynak (${comps[0].key}); endeks için en az ${minComponents} bileşen gerekir.`,
       })
     }
+    // Tek kaynaklı ülke (2026-10-06): endeks yok (en az iki kaynak kuralı değişmedi), ama o tek kaynağın yüzdelik
+    // konumundan ayrı işaretli bir tahmini düzey verilir — harita taralı/soluk gösterir. Sıralamaya, dağılıma ve
+    // brifinge girmez; yalnızca `provisional` alanında taşınır.
+    const tekKaynak = index == null && comps.length === 1 ? Math.round(comps[0].p) : null
     byIso2[iso] = {
       index,
       level: levelOf(index),
+      provisional: tekKaynak == null ? null : { index: tekKaynak, level: levelOf(tekKaynak), source: comps[0].key },
       confidence: index == null ? null : confidenceOf(comps),
       componentCount: comps.length,
       components,

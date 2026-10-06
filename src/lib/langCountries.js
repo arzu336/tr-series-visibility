@@ -106,6 +106,15 @@ export const LANG_COUNTRIES = {
   is: SINGLE('IS'),
   mt: SINGLE('MT'),
   ga: SINGLE('IE'),
+  // 2026-10-06: maddesi ve okunması olduğu hâlde hiçbir ülkeye bağlanmamış diller. Tacikçe Tacikistan'a, Hausaca
+  // Nijer'e ikinci izlenme kaynağı verir; lehçe vikileri (Mısır ve Fas Arapçası, Güney Azerbaycan Türkçesi)
+  // ortak Arapça/Farsçanın aksine tek ülkeye ayrılabilen okunmadır.
+  tg: SINGLE('TJ'),
+  ha: REGIONAL(['NG', 'NE']),
+  arz: SINGLE('EG'),
+  ary: SINGLE('MA'),
+  azb: SINGLE('IR'),
+  zu: SINGLE('ZA'),
 }
 
 /** Bilinçli olarak eşlenmeyen wiki kodları (ülke sinyali üretmez ya da dil değil). */

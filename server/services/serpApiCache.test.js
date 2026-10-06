@@ -1,6 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import db from '../db.js'
-import { cacheFirstSerpApi, serpapiGet, getSerpApiUsageThisMonth, inFlightCount } from './serpApiCache.js'
+import {
+  cacheFirstSerpApi,
+  serpapiGet,
+  getSerpApiUsageThisMonth,
+  inFlightCount,
+  readStoredSerpApi,
+} from './serpApiCache.js'
 
 const silCache = db.prepare("DELETE FROM cache_entries WHERE key LIKE 'test:%'")
 const silUsage = db.prepare("DELETE FROM meta WHERE key LIKE 'serpApiUsage:%' OR key LIKE 'liveCalls:%'")
@@ -143,5 +149,16 @@ describe('serpapiGet — aylık bütçe sayacı', () => {
     vi.stubGlobal('fetch', fetchMock)
     await expect(serpapiGet({ q: 'x' })).rejects.toThrow(/SERPAPI_API_KEY/)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('readStoredSerpApi — dizi sayfası açılırken yalnızca kayıt', () => {
+  it('kayıt yoksa null; süresi dolmuş kayıt eski olarak işaretlenip döner; ağa çıkılmaz', async () => {
+    expect(readStoredSerpApi('test:yok')).toBeNull()
+    await cacheFirstSerpApi('test:eski', -1, async () => ({ veri: 7 }))
+    expect(readStoredSerpApi('test:eski')).toMatchObject({ veri: 7, fromCache: true, stale: true })
+    await cacheFirstSerpApi('test:taze', 60_000, async () => ({ veri: 8 }))
+    expect(readStoredSerpApi('test:taze')).toMatchObject({ veri: 8, stale: false })
+    expect(readStoredSerpApi('test:taze').cachedAt).toEqual(expect.any(Number))
   })
 })

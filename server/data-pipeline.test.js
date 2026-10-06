@@ -56,7 +56,7 @@ vi.mock('./history.js', () => ({
 vi.mock('./series-period-history.js', () => ({ maybeRecordSeriesSnapshot: () => {} }))
 vi.mock('./aggregate.js', async (orig) => {
   const gercek = await orig()
-  return { ...gercek, mergeProxyFallback: (c) => c, attachPerCapitaScores: (c) => c }
+  return { ...gercek, mergeProxyFallback: (c) => c, addLimitedCountries: (c) => c, attachPerCapitaScores: (c) => c }
 })
 
 const { getEnrichedVisibility, sameSupplement } = await import('./data-pipeline.js')

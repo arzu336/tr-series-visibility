@@ -1,6 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { geoNaturalEarth1, geoPath } from 'd3-geo'
-import { scoreToColor, buildWatchMap } from '../lib/scale.js'
+import {
+  scoreToColor,
+  buildWatchMap,
+  provisionalColor,
+  watchLevelText,
+  WATCH_LEVELS,
+  WATCH_LEVEL_COLORS,
+} from '../lib/scale.js'
 import { fetchCountryGeoJSON, featureIso2, featureDisplayName } from '../lib/geo.js'
 import { resolveIso2FromLabel } from '../lib/continents.js'
 import turkishNames from '../data/country-centroids.json'
@@ -150,6 +157,22 @@ export default function Map2D({
         aria-label="Ülke bazlı izlenme haritası. Bir ülke seçmek için sağ paneldeki arama kutusunu kullanabilirsiniz."
         onClick={() => popup?.onClose?.()}
       >
+        {/* Tek kaynağa dayalı tahmin: soluk düzey rengi üstüne aynı rengin ince çapraz taraması */}
+        <defs>
+          {WATCH_LEVELS.map((lv, i) => (
+            <pattern
+              key={lv}
+              id={`tahmin-${i}`}
+              patternUnits="userSpaceOnUse"
+              width="5"
+              height="5"
+              patternTransform="rotate(45)"
+            >
+              <rect width="5" height="5" fill={provisionalColor(lv)} />
+              <line x1="0" y1="0" x2="0" y2="5" stroke={WATCH_LEVEL_COLORS[lv]} strokeWidth="1.4" />
+            </pattern>
+          ))}
+        </defs>
         <g
           ref={zoomGroupRef}
           className="map2d__zoom-group"
@@ -178,7 +201,9 @@ export default function Map2D({
                   ? scoreToColor(seriesValue / 100)
                   : NO_DATA_COLOR
                 : c
-                  ? c.color
+                  ? c.provisionalLevel
+                    ? `url(#tahmin-${WATCH_LEVELS.indexOf(c.provisionalLevel)})`
+                    : c.color
                   : NO_DATA_COLOR
             return (
               <path
@@ -243,9 +268,9 @@ export default function Map2D({
               <>
                 <strong>{name}</strong>
                 <br />
-                {w?.level ? `İzlenme düzeyi: ${w.level}` : 'İzlenme düzeyi: sinyal yetersiz'}
+                {watchLevelText(w)}
                 {nf?.present && nf.weeks > 0 ? ` · Netflix Top 10'da ${nf.series} dizi / ${nf.weeks} hafta` : ''}
-                {c.dataSource === 'proxy' ? ' · yayın verisi yok' : ''}
+                {c.limited ? ' · sınırlı veri' : c.dataSource === 'proxy' ? ' · yayın verisi yok' : ''}
               </>
             )
           })()}

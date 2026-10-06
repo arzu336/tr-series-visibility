@@ -25,12 +25,12 @@ export const NETFLIX_RANK_NOTE =
   "haftalık sıra (1-10) ve Top 10'da kalınan hafta sayısı vardır. Netflix'in hizmet vermediği ya da " +
   'çekildiği pazarlarda (ör. Rusya, 2022) liste yayımlanmaz; panel bunu açıkça yazar.'
 
-/** Platform listeleri (ülke raporu + ülke paneli "Şu an listede"). */
+/** Ülke raporu — Türk dizileri sıralaması (platformun kendi haftalık sıralaması). */
 export const PLATFORM_LISTS_NOTE =
-  'Netflix için resmî haftalık Top 10; Disney+, Prime Video, HBO Max, Apple TV+ ve Shahid için platformların ' +
-  'günlük Top 10 listelerinden haftada bir alınan anlık görüntüler. Bu listelerde izlenme saati yoktur, ' +
-  'yalnızca sıra vardır. Aynı dizi birden çok platformun listesindeyse tek satırda, en iyi sırasıyla ' +
-  'gösterilir. Netflix dışı platformların geçmişi, takibin başladığı tarihten itibaren birikir.'
+  'Sıralama, platformun izlediği yayın listelerinden haftalık olarak derlenir: bir dizi o hafta listelerde ' +
+  'aldığı en iyi sıraya göre yerleşir; eşitlikte daha fazla listede yer alan önce gelir. "Listede" son 52 ' +
+  'haftada sıralamada bulunduğu hafta sayısıdır; değişim bir önceki haftaya göredir. Sıralama izlenme süresi ' +
+  'değil liste sırası verisidir.'
 
 /** Yayın varlığı — sayılabilir gerçek, izlenme değil. */
 export const AVAILABILITY_NOTE =
@@ -60,6 +60,13 @@ export const DESTINATION_SHARE_NOTE =
   'Dizi özetlerinden LLM ile çıkarılan destinasyon etiketlerine dayanır; bir yapımın gerçekte ' +
   'nerede çekildiğini değil, anlatısında hangi destinasyonun geçtiğini yansıtır.'
 
+/** Okunma ilgisi × ziyaretçi sayısı (turizm sekmesi, ülke brifingi). */
+export const READING_TOURISM_NOTE =
+  'Aylık değerlerin geçen yılın aynı ayına göre değişimi karşılaştırılır (mevsimsellik ayıklanır); pandemi ' +
+  'yılları (2020–2022) dışarıdadır ve her dönemin kendi eğilimi çıkarılır. 0–6 ay gecikme denenir, en ' +
+  'güçlüsü gösterilir. Art arda aylar bağımsız olmadığından anlamlılık etkin örneklem büyüklüğüyle ve ' +
+  'gecikme denemelerine göre düzeltilmiş eşikle hesaplanır. Yalnızca ülkeye özgü diller kullanılır.'
+
 /** Ülke raporu — izlenme sırası. */
 export const RANKING_NOTE =
   'Sıra, izlenme düzeyi hesaplanabilen ülkeler arasındaki yüzdelik konumdur; Türkiye kaynak ülke ' +
@@ -67,8 +74,11 @@ export const RANKING_NOTE =
 
 /** Ülke raporu — bileşik ülke skoru (en çok ilgi gören diziler). */
 export const COMPOSITE_SCORE_NOTE =
-  'Bileşik skor dört faktörün ağırlıklı ortalamasıdır: arama payı %40, Netflix Top 10 %30, basın ' +
-  'algısı %15, yayın varlığı %15. Bir faktör için veri yoksa o faktör dışlanır ve kalan ağırlıklar ' +
+  'Bileşik skor dört faktörün ağırlıklı ortalamasıdır: arama payı %40, liste başarısı %30 (son 52 ' +
+  'haftada listede kalınan hafta ve en iyi sıra), basın algısı %15, yayın varlığı %15. Adaylar önce bu ' +
+  'ülkede listelere girmiş dizilerden, kalan yer en popüler dizilerden seçilir. İzleyici puanı ve oy ' +
+  'artışı küresel olduğu için skora girmez, ' +
+  'bağlam olarak gösterilir. Bir faktör için veri yoksa o faktör dışlanır ve kalan ağırlıklar ' +
   'kendi aralarında yeniden dağıtılır — eksik veri sıfır puan sayılmaz. Rapor üretiminde ücretli ' +
   'arama sorgusu yapılmaz; arama payı yalnızca daha önce önbelleğe alınmışsa hesaba girer.'
 

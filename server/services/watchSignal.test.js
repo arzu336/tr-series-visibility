@@ -122,6 +122,14 @@ describe('computeWatchSignals — ağırlıklar, eksik bileşen, en az 2 bileşe
     expect(r.meta.indexed).toBe(4) // JP tek bileşenli (Netflix 0), endeks almaz
   })
 
+  it('tek kaynaklı ülke endeks ve resmî düzey almaz; o kaynağın yüzdelik konumundan ayrı işaretli tahmini düzey taşır', () => {
+    expect(r.byIso2.AD.level).toBeNull()
+    expect(r.byIso2.AD.provisional).toMatchObject({ source: 'search' })
+    expect(r.byIso2.AD.provisional.level).toBeTruthy()
+    expect(r.byIso2.AD.provisional.index).toBeGreaterThanOrEqual(0)
+    expect(r.byIso2.DE.provisional).toBeNull() // iki kaynaklı ülkede tahmin yok, gerçek düzey var
+  })
+
   it('Netflix pazarında kayıt olmaması 0 değerli bileşendir; pazar dışı ülke için bileşen yok', () => {
     expect(r.byIso2.DE.components.netflix).toMatchObject({ present: true, weeks: 0, p: 17 }) // DE ve JP 0 puan → ortalama sıra
     expect(r.byIso2.AD.components.netflix.present).toBe(false)

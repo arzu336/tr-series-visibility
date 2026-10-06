@@ -190,6 +190,16 @@ db.exec(`
     PRIMARY KEY (iso2, year, month)
   );
 
+  -- Türkiye'de okuyan uluslararası öğrenciler, geldikleri ülkeye göre, yıllık (UNESCO İstatistik Enstitüsü;
+  -- Türkiye verisini YÖK bildirir). server/services/foreignStudents.js aylık eşitler.
+  CREATE TABLE IF NOT EXISTS foreign_students (
+    iso2 TEXT NOT NULL,
+    year INTEGER NOT NULL,
+    students INTEGER NOT NULL,
+    imported_at TEXT NOT NULL,
+    PRIMARY KEY (iso2, year)
+  );
+
   CREATE TABLE IF NOT EXISTS tourist_arrivals (
     iso2 TEXT,
     year INTEGER,
@@ -253,7 +263,7 @@ db.exec(`
   -- bkz. server/services/tourismTrendsCollector.js — "3-6 Aylık Öncü Turizm Sinyali". Ham
   -- SerpAPI TIMESERIES yanıtı zaten cache_entries'te (fetchTrendsTimeSeriesRaw, TTL'li); burada
   -- tutulan onun TÜRETİLMİŞ sonucu (gecikmeli korelasyon + örneklem) — media_sentiment ile aynı
-  -- gerekçe: /api/impact/tourism'in SQL ile doğrudan özetleyebileceği gerçek sütunlar.
+  -- gerekçe: turizm özetlerinin SQL ile doğrudan okuyabileceği gerçek sütunlar.
   CREATE TABLE IF NOT EXISTS tourism_leading_signal (
     country_iso2 TEXT NOT NULL,
     travel_query TEXT NOT NULL,
@@ -308,6 +318,129 @@ db.exec(`
     month INTEGER NOT NULL,
     views INTEGER NOT NULL,
     PRIMARY KEY (tmdb_id, lang, year, month)
+  );
+
+  -- YouTube Analytics (2026-10-06): yayıncı kanalların sahiplerinin verdiği salt okunur izinle, kanalın kendi
+  -- izlenme raporları. Yenileme anahtarı şifreli saklanır (YOUTUBE_TOKEN_KEY, AES-256-GCM); düz metin yazılmaz.
+  CREATE TABLE IF NOT EXISTS youtube_channels (
+    channel_id TEXT PRIMARY KEY,
+    title TEXT NOT NULL,
+    thumbnail TEXT,
+    uploads_playlist TEXT,
+    refresh_token_enc TEXT NOT NULL,
+    connected_by TEXT,
+    connected_at TEXT NOT NULL,
+    last_sync_at TEXT,
+    last_error TEXT,
+    backfill_page_token TEXT,
+    backfill_done INTEGER NOT NULL DEFAULT 0,
+    last_full_month TEXT
+  );
+
+  -- Kanalın yüklediği videolar ve eşlendiği dizi (başlıktan; eşleşmeyen video series_id NULL kalır).
+  CREATE TABLE IF NOT EXISTS youtube_videos (
+    video_id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    published_at TEXT,
+    series_id INTEGER
+  );
+
+  -- Ülke × ay izlenme. series_id 0 = kanalın bütün videoları (dizi eşlemesinden bağımsız kanal toplamı).
+  -- period: 'YYYY-MM', yalnızca tamamlanmış aylar.
+  CREATE TABLE IF NOT EXISTS youtube_country_views (
+    channel_id TEXT NOT NULL,
+    series_id INTEGER NOT NULL,
+    iso2 TEXT NOT NULL,
+    period TEXT NOT NULL,
+    views INTEGER NOT NULL,
+    minutes INTEGER NOT NULL,
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (channel_id, series_id, iso2, period)
+  );
+
+  -- YouTube herkese açık veri (API anahtarı, izin gerektirmez): resmî yayıncı kanallarının videoları, son
+  -- sayıları ve dizi başına günlük toplam. Ülke kırılımı YOKTUR (o yalnızca izinli Analytics'te).
+  CREATE TABLE IF NOT EXISTS yt_public_channels (
+    handle TEXT PRIMARY KEY,
+    channel_id TEXT,
+    title TEXT,
+    uploads_playlist TEXT,
+    page_token TEXT,
+    backfill_done INTEGER NOT NULL DEFAULT 0,
+    last_run_at TEXT,
+    last_error TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS yt_public_videos (
+    video_id TEXT PRIMARY KEY,
+    channel_id TEXT NOT NULL,
+    title TEXT NOT NULL,
+    published_at TEXT,
+    series_id INTEGER,
+    views INTEGER,
+    likes INTEGER,
+    comments INTEGER,
+    stats_at TEXT
+  );
+
+  CREATE TABLE IF NOT EXISTS yt_series_daily (
+    series_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    videos INTEGER NOT NULL,
+    views INTEGER NOT NULL,
+    likes INTEGER NOT NULL,
+    comments INTEGER NOT NULL,
+    PRIMARY KEY (series_id, date)
+  );
+
+  -- Televizyon yayın akışları (2026-10-06; DStv ve StarTimes'ın yazılı izniyle): ülke × kanal × gün başına
+  -- Türk dizisi yayın sayısı. Yalnızca rehberdeki program adı ve saati kullanılır.
+  CREATE TABLE IF NOT EXISTS tv_airings (
+    provider TEXT NOT NULL,
+    iso2 TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    series_id INTEGER NOT NULL,
+    date TEXT NOT NULL,
+    slots INTEGER NOT NULL,
+    title TEXT NOT NULL,
+    PRIMARY KEY (provider, iso2, channel, series_id, date)
+  );
+
+  -- Rehberde görülen başlıklar (dizi kanallarında): eşleşmeyenler yönetim ekranında elle diziye bağlanabilir.
+  CREATE TABLE IF NOT EXISTS tv_titles (
+    provider TEXT NOT NULL,
+    channel TEXT NOT NULL,
+    title TEXT NOT NULL,
+    series_id INTEGER,
+    manual INTEGER NOT NULL DEFAULT 0,
+    countries INTEGER NOT NULL DEFAULT 0,
+    first_seen TEXT NOT NULL,
+    last_seen TEXT NOT NULL,
+    PRIMARY KEY (provider, channel, title)
+  );
+
+  -- Dağıtımcı satış kayıtları (Türk dağıtımcıların izinle paylaştığı tablo): hangi dizi hangi ülkede hangi
+  -- kanala/platforma satıldı.
+  CREATE TABLE IF NOT EXISTS distribution_sales (
+    series_id INTEGER NOT NULL,
+    iso2 TEXT NOT NULL,
+    buyer TEXT NOT NULL,
+    distributor TEXT NOT NULL,
+    start_date TEXT,
+    end_date TEXT,
+    imported_at TEXT NOT NULL,
+    PRIMARY KEY (series_id, iso2, buyer, distributor)
+  );
+
+  -- Yorum dili örneklemi (dizinin son bölümlerinden): dil ülke değildir.
+  CREATE TABLE IF NOT EXISTS yt_comment_langs (
+    series_id INTEGER NOT NULL,
+    lang TEXT NOT NULL,
+    comments INTEGER NOT NULL,
+    sampled INTEGER NOT NULL,
+    sampled_at TEXT NOT NULL,
+    PRIMARY KEY (series_id, lang)
   );
 `)
 

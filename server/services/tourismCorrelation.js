@@ -1,5 +1,4 @@
-import { suggestControlCountry } from '../control-matching.js'
-import { getVisitorSeries, getTrackedIso2s, pickBeforeAfterPair } from './tourismData.js'
+import { getTrackedIso2s } from './tourismData.js'
 import { cacheFirstSerpApi, fetchTrendsTimeSeriesRaw, timeSeriesCacheKey, TIMESERIES_TTL_MS } from './serpApiCache.js'
 
 function mean(arr) {
@@ -144,21 +143,6 @@ export function getExpandedCandidatePool(countries, n = TOP_N_CANDIDATES) {
     }))
 }
 
-async function withSuggestedControls(candidates) {
-  const excludeIso2Set = new Set(candidates.map((c) => c.iso2))
-  return Promise.all(
-    candidates.map(async (c) => {
-      let suggestedControl = null
-      try {
-        suggestedControl = await suggestControlCountry(c.iso2, excludeIso2Set)
-      } catch (err) {
-        console.error(`[tourismCorrelation] kontrol ülkesi önerisi alınamadı (${c.iso2}):`, err.message)
-      }
-      return { ...c, suggestedControl }
-    })
-  )
-}
-
 export const LEADING_INDICATOR_LAG_WEEKS = 16
 const LEADING_INDICATOR_TIMEFRAME = 'today 12-m'
 const TRAVEL_QUERY = 'Istanbul'
@@ -200,93 +184,5 @@ export async function getTravelLeadingIndicator(iso2, topSeriesName, travelQuery
   } catch (err) {
     console.error(`[tourismCorrelation] öncü seyahat sinyali hesaplanamadı (${iso2}/${travelQuery}):`, err.message)
     return null
-  }
-}
-
-export const PENDING_ANALYSIS = {
-  title: 'Turizm ve İhracat Korelasyonu',
-  status: 'gerçek-veri-bekleniyor',
-  description: 'Yükselen ülkeler için turist/ihracat verisi henüz eşleşmedi.',
-  requiredSources: [
-    'YİGM turist giriş istatistikleri — otomatik çekiliyor, eşleşen veri yok',
-    'Dizi ihracatı (ülke bazlı) — kamuya açık değil',
-  ],
-}
-
-export async function computeTourismCorrelation(countries) {
-  const candidates = getExpandedCandidatePool(countries)
-  if (candidates.length === 0) return null
-  const withControls = await withSuggestedControls(candidates)
-
-  const withData = []
-  for (const c of withControls) {
-    if (!c.suggestedControl) continue
-    const targetPair = pickBeforeAfterPair(getVisitorSeries(c.iso2))
-    const controlPair = pickBeforeAfterPair(getVisitorSeries(c.suggestedControl.iso2))
-    if (!targetPair || !controlPair) continue
-    if (
-      targetPair.month !== controlPair.month ||
-      targetPair.beforeYear !== controlPair.beforeYear ||
-      targetPair.afterYear !== controlPair.afterYear
-    ) {
-      continue
-    }
-
-    const did = differenceInDifferences({
-      treatmentBefore: targetPair.before,
-      treatmentAfter: targetPair.after,
-      controlBefore: controlPair.before,
-      controlAfter: controlPair.after,
-    })
-
-    withData.push({
-      iso2: c.iso2,
-      visibilityScore: c.score,
-      visibilityChangePct: c.changePct,
-      control: c.suggestedControl,
-      period: { month: targetPair.month, beforeYear: targetPair.beforeYear, afterYear: targetPair.afterYear },
-      didEstimate: did.didEstimate,
-      treatmentChangePct: did.treatmentChangePct,
-      controlChangePct: did.controlChangePct,
-      impactBadge: did.didEstimate > 0 ? 'pozitif-katki' : 'notr',
-    })
-  }
-
-  if (withData.length === 0) return null
-
-  const pairs = withData.filter((w) => w.visibilityChangePct != null && w.treatmentChangePct != null)
-  const hasEnoughForCorrelation = pairs.length >= 3
-  const correlation = hasEnoughForCorrelation
-    ? round2(
-        pearsonCorrelation(
-          pairs.map((p) => p.visibilityChangePct),
-          pairs.map((p) => p.treatmentChangePct)
-        )
-      )
-    : null
-  const pValue = hasEnoughForCorrelation ? pValueForPearsonR(correlation, pairs.length) : null
-  const hasEnoughForConfidenceInterval = pairs.length >= 4
-  const confInterval = hasEnoughForConfidenceInterval ? confidenceInterval95(correlation, pairs.length) : null
-
-  const topCandidate = [...withData].sort((a, b) => b.visibilityScore - a.visibilityScore)[0]
-  const leadingIndicator = topCandidate
-    ? await getTravelLeadingIndicator(
-        topCandidate.iso2,
-        candidates.find((c) => c.iso2 === topCandidate.iso2)?.topSeriesName
-      )
-    : null
-
-  return {
-    title: 'Turizm ve İhracat Korelasyonu',
-    status: 'gerçek-veri-mevcut',
-    dataSource: 'YİGM Sınır İstatistikleri Bülteni (otomatik)',
-    sampleSize: withData.length,
-    correlation,
-    pValue,
-    confidenceInterval: confInterval,
-    hasEnoughForCorrelation,
-    hasEnoughForConfidenceInterval,
-    countries: withData,
-    leadingIndicator,
   }
 }

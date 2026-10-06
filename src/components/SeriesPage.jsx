@@ -1,12 +1,11 @@
 import { useMemo } from 'react'
-import { IconBack, IconMap, IconChart, IconStar } from './Icons.jsx'
+import { IconBack, IconMap, IconChart, IconStar, IconReport } from './Icons.jsx'
 import EpisodeHeatmap from './EpisodeHeatmap.jsx'
 import {
   fetchImdbData,
   fetchSeriesEnrichment,
   fetchSeriesCharts,
   fetchSeriesMeta,
-  fetchMediaSentimentSummary,
   fetchMagazineNews,
   fetchSeriesCast,
 } from '../lib/api.js'
@@ -17,9 +16,13 @@ import Flag from './Flag.jsx'
 import { fmtDateTr } from './ChartList.jsx'
 import { AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import countryNames from '../data/country-centroids.json'
+import { useSearchInterest, SearchInterestSection, PromoSection, PressSection } from './SeriesSearchInterest.jsx'
+import SeriesYoutube from './SeriesYoutube.jsx'
+import { SeriesTv } from './TvSections.jsx'
 
 // Dizi sayfası: haritadaki sağ panel kısa özet için; dizi hakkında her şey burada (listeler, nerede yayında,
-// uluslararası isimler, magazin, kadro, basın algısı). Adresi ?dizi=<tmdbId> — geri tuşu haritaya döner.
+// arama ilgisi, uluslararası isimler, magazin, kadro, basın algısı). Adresi ?dizi=<tmdbId> — geri tuşu haritaya
+// döner. Arama İlgisi sekmesinde dizi aramak da bu sayfayı açar (2026-10-06'da iki ekran birleşti).
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w342'
 
@@ -111,33 +114,6 @@ function ListingsTable({ listings }) {
   )
 }
 
-function SentimentSummary({ seriesId }) {
-  const { status, data } = useAsync(() => fetchMediaSentimentSummary(seriesId), [seriesId])
-  if (status === 'loading' || status === 'idle') return <p className="dashboard__empty">Yükleniyor…</p>
-  if (status === 'error' || !data || data.status === 'pending')
-    return <p className="dashboard__empty">Bu dizi için henüz basın taraması yapılmadı.</p>
-  if (data.status !== 'ready')
-    return <p className="dashboard__empty">Taranan {data.scannedCount} ülkede yeterli haber bulunamadı.</p>
-  const tone = { positive: 'olumlu', negative: 'olumsuz', neutral: 'nötr' }
-  return (
-    <>
-      <p className="series-page__sentiment-line">
-        {data.withDataCount} ülkede haber · olumlu %{data.avgPositivePct} · olumsuz %{data.avgNegativePct}
-      </p>
-      <ul className="series-page__chips">
-        {data.countries
-          .filter((c) => c.dominantSentiment && c.dominantSentiment !== 'yetersiz-veri')
-          .map((c) => (
-            <li key={c.iso2} className="series-page__chip">
-              <Country iso2={c.iso2} />
-              <span className="series-page__chip-meta">{tone[c.dominantSentiment] ?? c.dominantSentiment}</span>
-            </li>
-          ))}
-      </ul>
-    </>
-  )
-}
-
 /**
  * Ana kadro: tüm sezonlar, oynadığı bölüm sayısına göre sıralı (sunucu /api/series/:id/cast). Tek satırda
  * yatay kaydırılır. Yüklenirken katalogdaki kısa kadro (5 kişi) gösterilir.
@@ -157,7 +133,17 @@ function SeriesCast({ seriesId, fallback = [], onSelectActor }) {
   )
 }
 
-export default function SeriesPage({ seriesId, allCountries, onBack, onShowOnMap, onSelectActor, onAnalyze }) {
+export default function SeriesPage({
+  seriesId,
+  allCountries,
+  onBack,
+  backLabel = 'Haritaya dön',
+  onShowOnMap,
+  onSelectActor,
+  onShowInterestOnMap,
+  onOpenReport,
+  isAdmin = false,
+}) {
   const fromCountries = useMemo(() => seriesFromCountries(allCountries, seriesId), [allCountries, seriesId])
   const metaReq = useAsync(() => fetchSeriesMeta(seriesId), [seriesId], { enabled: seriesId != null })
   // Hiçbir yayın platformunda olmayan diziler (ör. katalog tamamlamayla eklenen eski TV dizileri) ülke yayın
@@ -173,6 +159,8 @@ export default function SeriesPage({ seriesId, allCountries, onBack, onShowOnMap
   const listings = charts?.listings || []
   const magazineReq = useAsync(() => fetchMagazineNews(seriesId), [seriesId], { enabled: seriesId != null })
   const magazineItems = visibleMagazineItems(magazineReq.data?.items, 10)
+  const si = useSearchInterest(series?.name)
+  const kg = si.social?.knowledgeGraph
 
   if (!series) {
     const loading = metaReq.status === 'loading' || metaReq.status === 'idle'
@@ -180,7 +168,7 @@ export default function SeriesPage({ seriesId, allCountries, onBack, onShowOnMap
       <div className="series-page">
         <button type="button" className="series-page__back" onClick={onBack}>
           <IconBack />
-          Haritaya dön
+          {backLabel}
         </button>
         <p className="dashboard__empty">{loading ? 'Yükleniyor…' : 'Bu dizi için veri bulunamadı.'}</p>
       </div>
@@ -207,7 +195,7 @@ export default function SeriesPage({ seriesId, allCountries, onBack, onShowOnMap
     <div className="series-page">
       <button type="button" className="series-page__back" onClick={onBack}>
         <IconBack />
-        Haritaya dön
+        {backLabel}
       </button>
 
       <header className="series-page__header">
@@ -242,6 +230,14 @@ export default function SeriesPage({ seriesId, allCountries, onBack, onShowOnMap
             {enrichment?.dizilah?.channel && <span className="map-popup-card__pill">{enrichment.dizilah.channel}</span>}
             <span className="map-popup-card__pill">{series.availability.length} ülkede yayında</span>
             {listedCountries > 0 && <span className="map-popup-card__pill">{listedCountries} ülkede listede</span>}
+            {kg?.userReviewsPct != null && (
+              <span className="map-popup-card__pill">İzleyici beğenisi %{kg.userReviewsPct}</span>
+            )}
+            {(kg?.ratings || []).map((r) => (
+              <span key={r.source} className="map-popup-card__pill">
+                {r.source}: {r.rating}
+              </span>
+            ))}
           </div>
           {(crew?.directors?.length > 0 || crew?.writers?.length > 0) && (
             <p className="series-page__crew">
@@ -265,15 +261,25 @@ export default function SeriesPage({ seriesId, allCountries, onBack, onShowOnMap
               <IconMap />
               Haritada göster
             </button>
-            {onAnalyze && (
-              <button type="button" className="series-page__btn" onClick={() => onAnalyze(series.name)}>
-                <IconChart />
-                Arama ilgisi analizi
+            <button
+              type="button"
+              className="series-page__btn"
+              onClick={() => document.getElementById('arama-ilgisi')?.scrollIntoView({ behavior: 'smooth' })}
+            >
+              <IconChart />
+              Arama ilgisi
+            </button>
+            {onOpenReport && (
+              <button type="button" className="series-page__btn" onClick={() => onOpenReport(seriesId)}>
+                <IconReport />
+                Dizi raporu
               </button>
             )}
           </div>
         </div>
       </header>
+
+      <SearchInterestSection si={si} onShowOnMap={onShowInterestOnMap} />
 
       <div className="series-page__grid">
         <div className="series-page__col">
@@ -302,6 +308,8 @@ export default function SeriesPage({ seriesId, allCountries, onBack, onShowOnMap
             )}
           </section>
 
+          <SeriesTv seriesId={seriesId} />
+
           {seasons.length > 0 && (
             <section className="series-page__section">
               <h2>Bölüm puanları</h2>
@@ -321,6 +329,10 @@ export default function SeriesPage({ seriesId, allCountries, onBack, onShowOnMap
               <MagazineCarousel items={magazineItems} />
             )}
           </section>
+
+          <PromoSection social={si.social} />
+
+          <SeriesYoutube seriesId={seriesId} />
 
           <SeriesCast seriesId={seriesId} fallback={series.cast} onSelectActor={onSelectActor} />
 
@@ -342,10 +354,7 @@ export default function SeriesPage({ seriesId, allCountries, onBack, onShowOnMap
             </section>
           )}
 
-          <section className="series-page__section">
-            <h2>Basın &amp; medya algısı</h2>
-            <SentimentSummary seriesId={seriesId} />
-          </section>
+          <PressSection seriesId={seriesId} isAdmin={isAdmin} onScanned={si.reloadSocial} />
         </div>
       </div>
     </div>

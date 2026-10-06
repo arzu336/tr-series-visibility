@@ -10,6 +10,7 @@ import {
 } from '../services/charts.js'
 import continentByIso2 from '../../src/data/continents.json' with { type: 'json' }
 import { upstream } from './shared.js'
+import { getCountryContext } from '../services/countryContext.js'
 
 // src/lib/continents.js Vite'a özgüdür (JSON'u attribute'suz içe alır, Node'da çökertir); kıta listesi
 // burada yinelenir — src/lib/continents.js'teki CONTINENTS ile aynı sıra ve adlar.
@@ -56,6 +57,15 @@ chartsRouter.get(
     if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
     const range = req.query.range === 'yearly' ? 'yearly' : 'monthly'
     res.json(await getCountryCharts(normalizeIso2(req.params.iso2), { week: dateParam(req.query.week), range }))
+  })
+)
+
+// Yayın kataloğu olmayan ülkelerin paneli: öğrenci, basın, bağlı ülkenin listesi.
+chartsRouter.get(
+  '/api/country/:iso2/context',
+  upstream('country/context', async (req, res) => {
+    if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
+    res.json(await getCountryContext(normalizeIso2(req.params.iso2)))
   })
 )
 

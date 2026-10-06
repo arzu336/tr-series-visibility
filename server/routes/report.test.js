@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeAll } from 'vitest'
 import request from 'supertest'
 
-// Route + yetki testi: gerçek Express app (dinlemeden), test DB (APP_DB_PATH), üç erişim düzeyi.
+// Route testi: gerçek Express app (dinlemeden), test DB (APP_DB_PATH), üç erişim düzeyi — tek ortak rapor.
 // Rapor üreticisi sahte — TMDB/World Bank'a çıkılmaz; kapı davranışı (direktif elemesi) gerçek.
 
 process.env.APP_PASSWORD = 'rapor-test-sifresi-12'
@@ -12,6 +12,7 @@ const sahteRapor = (iso2) => {
   const sections = {}
   for (const k of [
     'scores',
+    'platformLists',
     'ranking',
     'trend',
     'findings',
@@ -27,7 +28,19 @@ const sahteRapor = (iso2) => {
   ]) {
     sections[k] = bolum(k, { status: 'hesaplanamaz', reason: 'sahte' })
   }
-  sections.scores = bolum('scores', { status: 'hesaplandi', data: { score: 500 } })
+  sections.scores = bolum('scores', {
+    status: 'hesaplandi',
+    data: { level: 'yüksek', access: { seriesCount: 40, platformCount: 5 }, warnings: [] },
+  })
+  sections.topSeries = bolum('topSeries', {
+    status: 'hesaplandi',
+    data: {
+      entries: [
+        { tmdbId: 1, name: 'Uzak Şehir', compositeScore: 50, evidence: [] },
+        { text: 'Bu pazarda tanıtım faaliyetleri artırılmalı.' },
+      ],
+    },
+  })
   sections.findings = bolum('findings', {
     status: 'hesaplandi',
     data: {
@@ -97,82 +110,73 @@ beforeAll(async () => {
   admin = await girisYap(yonetici.email, yoneticiSifresi)
 })
 
-describe('GET /api/report/country/:iso2 — yetki matrisi', () => {
+describe('GET /api/report/country/:iso2 — ülke brifingi', () => {
   it('oturumsuz istek 401', async () => {
-    const res = await request(app).get('/api/report/country/DE?profile=executive')
+    const res = await request(app).get('/api/report/country/DE')
     expect(res.status).toBe(401)
   })
 
-  it('viewer: executive 200, marketing 403, producer 403', async () => {
-    expect((await viewer.get('/api/report/country/DE?profile=executive')).status).toBe(200)
-    expect((await viewer.get('/api/report/country/DE?profile=marketing')).status).toBe(403)
-    expect((await viewer.get('/api/report/country/DE?profile=producer')).status).toBe(403)
+  it('her erişim düzeyi aynı brifingi alır: özet ve başlıklar', async () => {
+    const yanitlar = await Promise.all([viewer, analyst, admin].map((a) => a.get('/api/report/country/DE')))
+    for (const res of yanitlar) {
+      expect(res.status).toBe(200)
+      expect(res.body.title).toBe('Ülke brifingi')
+      expect(res.body.contract).toBe('ulke-brifingi-v1')
+      expect(res.body.summary.kpis.map((k) => k.key)).toEqual(['level', 'ranked', 'available', 'reading'])
+      expect(res.body.chapters.map((c) => c.key)).toEqual(['izleniyor'])
+      expect(res.body.appendix).toBeUndefined()
+      expect(res.body.profile).toBeUndefined()
+    }
+    expect(yanitlar[0].body).toEqual(yanitlar[2].body)
   })
 
-  it('analyst: marketing 200, producer 403', async () => {
-    expect((await analyst.get('/api/report/country/DE?profile=marketing')).status).toBe(200)
-    const res = await analyst.get('/api/report/country/DE?profile=producer')
-    expect(res.status).toBe(403)
-    expect(res.body.error).toMatch(/admin/)
-  })
-
-  it('admin: producer 200 ve yalnızca producer bölümleri döner', async () => {
-    const res = await admin.get('/api/report/country/DE?profile=producer')
-    expect(res.status).toBe(200)
-    expect(res.body.profile).toBe('producer')
-    expect(Object.keys(res.body.sections)).toEqual([
-      'scores',
-      'availability',
-      'netflixHistory',
-      'gapAnalysis',
-      'tourismSignal',
-    ])
-    expect(res.body.availableProfiles).toEqual(['executive', 'marketing', 'producer'])
-  })
-
-  it('profil verilmezse executive varsayılır', async () => {
-    const res = await viewer.get('/api/report/country/DE')
-    expect(res.status).toBe(200)
-    expect(res.body.profile).toBe('executive')
-    expect(res.body.availableProfiles).toEqual(['executive'])
+  it('eski profil parametresi yok sayılır', async () => {
+    expect((await viewer.get('/api/report/country/DE?profile=producer')).status).toBe(200)
   })
 })
 
 describe('GET /api/report/country/:iso2 — doğrulama ve kapı', () => {
-  it('geçersiz ISO2 400, bilinmeyen profil 400', async () => {
-    expect((await admin.get('/api/report/country/XYZ?profile=executive')).status).toBe(400)
-    const res = await admin.get('/api/report/country/DE?profile=ceo')
-    expect(res.status).toBe(400)
-    expect(res.body.profiles).toContain('executive')
+  it('geçersiz ISO2 400', async () => {
+    expect((await admin.get('/api/report/country/XYZ')).status).toBe(400)
   })
 
   it('ISO2 normalize edilir ve üretici o kodla çağrılır', async () => {
-    const res = await admin.get('/api/report/country/de?profile=executive')
+    const res = await admin.get('/api/report/country/de')
     expect(res.status).toBe(200)
     expect(res.body.iso2).toBe('DE')
     expect(vi.mocked(buildCountryReport)).toHaveBeenLastCalledWith('DE', { useCache: true })
   })
 
   it('fresh=1 önbelleği atlar', async () => {
-    await admin.get('/api/report/country/DE?profile=executive&fresh=1')
+    await admin.get('/api/report/country/DE?fresh=1')
     expect(vi.mocked(buildCountryReport)).toHaveBeenLastCalledWith('DE', { useCache: false })
   })
 
-  it('direktif içeren bulgu yanıttan elenir (iddia kapısı, istisna yok)', async () => {
-    const res = await viewer.get('/api/report/country/DE?profile=executive')
-    const metinler = res.body.sections.findings.data.items.map((i) => i.text)
-    expect(metinler).toEqual(['İzlenme düzeyi "yüksek": izlenme sinyali hesaplanan 111 ülke arasında 7. sırada.'])
+  it('direktif içeren metin brifingin başlıklarından elenir (iddia kapısı, istisna yok)', async () => {
+    const res = await viewer.get('/api/report/country/DE')
+    const top = res.body.chapters.find((c) => c.key === 'izleniyor').sections.find((x) => x.key === 'topSeries')
+    expect(top.data.entries.map((e) => e.name ?? e.text)).toEqual(['Uzak Şehir'])
+  })
+
+  it('profil listesi ucu kaldırıldı', async () => {
+    expect((await admin.get('/api/report/profiles')).status).toBe(404)
   })
 })
 
-describe('GET /api/report/profiles', () => {
-  it('kullanıcının erişebildiği profilleri işaretler', async () => {
-    const res = await analyst.get('/api/report/profiles')
-    expect(res.status).toBe(200)
-    expect(res.body.profiles.map((p) => [p.id, p.allowed])).toEqual([
-      ['executive', true],
-      ['marketing', true],
-      ['producer', false],
+describe('GET /api/report/global — küresel görünüm', () => {
+  it('yalnızca yönetici: viewer ve analyst 403', async () => {
+    expect((await viewer.get('/api/report/global')).status).toBe(403)
+    expect((await analyst.get('/api/report/global')).status).toBe(403)
+  })
+
+  it('eski etki analizi uçları kaldırıldı (yönetici için de 404)', async () => {
+    for (const u of [
+      '/api/impact',
+      '/api/impact/cultural',
+      '/api/impact/tourism',
+      '/api/impact/export',
+      '/api/impact/country-summary/DE',
     ])
+      expect((await admin.get(u)).status, u).toBe(404)
   })
 })

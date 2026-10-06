@@ -82,11 +82,6 @@ function currentMonthAverages(iso2Filter = null) {
   return { year, month, byCountry }
 }
 
-/** Tamamlanmış (yuvarlanmış) aylar — herhangi bir ülke için — 'YYYY-MM' kümesi. Korelasyon sayacı okur. */
-export function getCompletedMonthKeys() {
-  return new Set(selectAllMonthlyStmt.all().map((r) => periodKey(r.year, r.month)))
-}
-
 export function getMonthlyPeriods(iso2) {
   const rolled = selectMonthlyForCountryStmt.all(iso2).map((r) => ({
     period: periodKey(r.year, r.month),

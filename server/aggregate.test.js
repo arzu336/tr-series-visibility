@@ -1,5 +1,11 @@
 import { describe, it, expect } from 'vitest'
-import { attachPerCapitaScores, platformNames, PER_CAPITA_BASIS, MIN_PER_CAPITA_DENOMINATOR } from './aggregate.js'
+import {
+  attachPerCapitaScores,
+  addLimitedCountries,
+  platformNames,
+  PER_CAPITA_BASIS,
+  MIN_PER_CAPITA_DENOMINATOR,
+} from './aggregate.js'
 
 const demo = {
   DE: {
@@ -135,5 +141,22 @@ describe('platformNames', () => {
       'Netflix Standard with Ads',
     ])
     expect(platformNames({})).toEqual([])
+  })
+})
+
+describe('addLimitedCountries — haritada verisi olmayan ülkeler', () => {
+  it('eksik ülkeler sınırlı veri olarak eklenir: arama endeksi ve skor uydurulmaz; var olanlar değişmez', () => {
+    const var_ = [{ iso2: 'DE', score: 5, dataSource: 'tmdb' }]
+    const sonuc = addLimitedCountries(var_, ['DE', 'RW', 'MN'])
+    expect(sonuc.map((c) => c.iso2)).toEqual(['DE', 'MN', 'RW'])
+    expect(sonuc[0]).toBe(var_[0])
+    expect(sonuc[1]).toMatchObject({ dataSource: 'proxy', limited: true, searchInterestScore: null, seriesList: [] })
+    expect(addLimitedCountries(var_, ['DE'])).toBe(var_)
+  })
+
+  it('varsayılan liste kıta tablosundaki bütün ülkeler', () => {
+    const sonuc = addLimitedCountries([])
+    expect(sonuc.length).toBeGreaterThan(190)
+    expect(sonuc.some((c) => c.iso2 === 'AQ')).toBe(false) // Antarktika ülke değil
   })
 })

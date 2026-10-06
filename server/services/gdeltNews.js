@@ -23,8 +23,28 @@ const TIMESPAN = '3m'
  * kayıtlarıyla asla çakışmaz. Sağlayıcı değiştiğinde eski kayıtlar okunmaz ve yeni şemadaki
  * veriymiş gibi davranmaz — kendi hâllerinde süreleri dolana kadar dururlar.
  */
-export function gdeltNewsCacheKey(query, iso2) {
-  return `gdelt:news:${String(query).trim().toLocaleLowerCase('tr')}::${String(iso2).toUpperCase()}`
+/** Sorgu: tek ad ya da ad listesi (Türkçe ad + ülkedeki yerel ad). */
+function phrasesOf(query) {
+  const list = Array.isArray(query) ? query : [query]
+  return [...new Set(list.map((q) => String(q || '').trim()).filter(Boolean))]
+}
+
+export function gdeltNewsCacheKey(query, iso2, { context = null } = {}) {
+  const key = phrasesOf(query).join(' | ').toLocaleLowerCase('tr') + (context ? ` + ${context}` : '')
+  return `gdelt:news:${key}::${String(iso2).toUpperCase()}`
+}
+
+/**
+ * Bağlam koşulu: GDELT yabancı dildeki haberleri İngilizceye çevirip çeviride arar; dizinin İngilizce adı
+ * ("Endless Love", "Forbidden Love") çoğu zaman genel bir ifadedir. Haberde "Turkish/Turkey" de geçmesi
+ * istenir — çeviride "Türk dizisi" → "Turkish series" olarak kalır.
+ */
+export const TURKISH_CONTEXT = '(turkish OR turkey)'
+
+/** GDELT sorgu ifadesi: tek ad `"a"`, birden çok ad `("a" OR "b")` (GDELT'te OR parantez içinde olmalı). */
+export function buildGdeltPhrase(phrases) {
+  const quoted = phrases.map((p) => `"${p.replace(/"/g, '')}"`)
+  return quoted.length === 1 ? quoted[0] : `(${quoted.join(' OR ')})`
 }
 
 // GDELT'in genel ucu ≥20 sn/istek istiyor; tek bir kuyruk bunu zorlar. Eski kuyruk düz FIFO'ydu:
@@ -425,28 +445,41 @@ export function normalizeGdeltArticles(articles, iso2) {
  * `source` olarak yayının alan adı (domain) kullanılıyor — başlık ve alan adı, analize giren iki
  * gerçek alan.
  */
-export async function fetchNewsArticlesGdelt(query, countryIso2, { priority = GDELT_PRIORITY.BACKGROUND } = {}) {
+export async function fetchNewsArticlesGdelt(
+  query,
+  countryIso2,
+  { priority = GDELT_PRIORITY.BACKGROUND, context = null } = {}
+) {
   const iso2 = String(countryIso2).toUpperCase()
   const fips = ISO2_TO_FIPS[iso2]
 
   if (!fips) {
     return { unsupported: true, reason: 'ulke', news: [] }
   }
-  if (isQueryTooShort(query)) {
+  // GDELT'in kabul etmediği kısa adlar sorgudan çıkar; hiç ad kalmazsa sorgu yapılmaz.
+  const phrases = phrasesOf(query).filter((p) => !isQueryTooShort(p))
+  if (phrases.length === 0) {
     return { unsupported: true, reason: 'kisa-ad', news: [] }
   }
 
-  const data = await gdeltGet(`"${String(query).trim()}" sourcecountry:${fips}`, priority)
+  const data = await gdeltGet(
+    `${buildGdeltPhrase(phrases)}${context ? ` ${context}` : ''} sourcecountry:${fips}`,
+    priority
+  )
   return { unsupported: false, news: normalizeGdeltArticles(data.articles, iso2) }
 }
 
 /** 14 günlük önbellek katmanı — `gdelt:news:*` ad alanında (bkz. gdeltNewsCacheKey). */
-export async function fetchNewsArticlesGdeltCached(query, countryIso2, { priority = GDELT_PRIORITY.BACKGROUND } = {}) {
-  const key = gdeltNewsCacheKey(query, countryIso2)
+export async function fetchNewsArticlesGdeltCached(
+  query,
+  countryIso2,
+  { priority = GDELT_PRIORITY.BACKGROUND, context = null } = {}
+) {
+  const key = gdeltNewsCacheKey(query, countryIso2, { context })
   const cached = getCached(key)
   if (cached) return Array.isArray(cached) ? { unsupported: false, news: cached } : cached
 
-  const sonuc = await fetchNewsArticlesGdelt(query, countryIso2, { priority })
+  const sonuc = await fetchNewsArticlesGdelt(query, countryIso2, { priority, context })
   if (!sonuc.unsupported) setCached(key, sonuc, NEWS_TTL_MS)
   return sonuc
 }

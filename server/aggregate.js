@@ -2,6 +2,7 @@ import { STREAMABLE_KEYS } from './tmdb.js'
 import { effectiveTheme, effectiveConfidence } from './themes.js'
 import { DESTINATIONS, effectiveDestinations } from './destinations.js'
 import { resolveIso2FromLabel } from './services/countryLookup.js'
+import continentByIso2 from '../src/data/continents.json' with { type: 'json' }
 
 const UNCERTAIN_THRESHOLD = 70
 const DESTINATION_NAMES = Object.fromEntries(DESTINATIONS.map((d) => [d.id, d.name]))
@@ -172,6 +173,34 @@ export function mergeProxyFallback(countries, fallback) {
   }
 
   return [...countries, ...proxyCountries]
+}
+
+/**
+ * Sınırlı veri ülkeleri (2026-10-06): yayın kataloğu tutulmayan ve arama hacmi ölçülemeyecek kadar düşük ülkeler
+ * (ör. Ruanda, Moğolistan, Haiti) haritadan tümüyle düşüyordu. Bunlar da `proxy` biçiminde eklenir — arama endeksi
+ * yok (null), `limited: true` — ki harita gri göstersin, ülke paneli ve raporlar elde olan veriyi (öğrenci, basın,
+ * yerel dilde okunma) gösterebilsin. İzlenme düzeyi yalnızca izlenme sinyalinden gelir; burada uydurulmaz.
+ */
+export function addLimitedCountries(countries, allIso2 = Object.keys(continentByIso2)) {
+  const existing = new Set(countries.map((c) => c.iso2))
+  const limited = allIso2
+    .filter((iso2) => !existing.has(iso2))
+    .sort()
+    .map((iso2) => ({
+      iso2,
+      score: 0,
+      seriesCount: 0,
+      topSeries: null,
+      seriesList: [],
+      dominantTheme: null,
+      themeConfidence: 0,
+      isThemeUncertain: true,
+      destinationSummary: [],
+      dataSource: 'proxy',
+      searchInterestScore: null,
+      limited: true,
+    }))
+  return limited.length ? [...countries, ...limited] : countries
 }
 
 export function buildDestinationRanking(countries, series, destinationStore) {

@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  pearsonCorrelation,
-  confidenceInterval95,
-  differenceInDifferences,
-  describePendingCorrelation,
-} from './impact.js'
+import { pearsonCorrelation, confidenceInterval95, differenceInDifferences } from './tourismCorrelation.js'
 
 describe('pearsonCorrelation', () => {
   it('tam pozitif ilişkide r = 1 döner', () => {
@@ -61,25 +56,5 @@ describe('differenceInDifferences', () => {
     })
     expect(result.treatmentChangePct).toBeNull()
     expect(result.controlChangePct).toBe(10)
-  })
-})
-
-describe('describePendingCorrelation — "Aylık seri birikiyor: X/3 ay"', () => {
-  it('X, görünürlük aylarıyla turist aylarının kesişimidir', () => {
-    const r = describePendingCorrelation({
-      getCompletedMonthKeys: () => new Set(['2026-06', '2026-07', '2026-08']),
-      getVisitorMonthKeys: () => new Set(['2025-01', '2026-07', '2026-08']),
-    })
-    expect(r).toMatchObject({ status: 'gerçek-veri-bekleniyor', monthsAvailable: 2, monthsRequired: 3 })
-    expect(r.accumulatingLabel).toMatch(/^Aylık seri birikiyor: 2\/3 ay/)
-  })
-
-  it('kesişim yoksa 0/3', () => {
-    const r = describePendingCorrelation({
-      getCompletedMonthKeys: () => new Set(),
-      getVisitorMonthKeys: () => new Set(['2026-07']),
-    })
-    expect(r.monthsAvailable).toBe(0)
-    expect(r.accumulatingLabel).toMatch(/0\/3 ay/)
   })
 })

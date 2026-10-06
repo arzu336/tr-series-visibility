@@ -1,8 +1,8 @@
-import { getRawSeriesData, CAST_SOURCE } from './tmdb.js'
+import { getRawSeriesData, CAST_SOURCE, CATALOG_FILTER } from './tmdb.js'
 import { getCached, setCached } from './cache.js'
 import { ensureClassified, getThemeStore } from './themes.js'
 import { ensureDetected, getDestinationStore } from './destinations.js'
-import { buildVisibility, mergeProxyFallback, attachPerCapitaScores } from './aggregate.js'
+import { buildVisibility, mergeProxyFallback, addLimitedCountries, attachPerCapitaScores } from './aggregate.js'
 import { getCountryDemographics } from './services/countryDemographics.js'
 import { getTrend, maybeRecordSnapshot, loadHistoryStore } from './history.js'
 import { getFallbackInterestScores } from './services/proxyScore.js'
@@ -24,8 +24,14 @@ export function sameSupplement(cachedIds = [], currentIds = []) {
 export async function getRawSeriesDataCached() {
   const supplementIds = getCatalogSupplementIds()
   const cached = getCached(RAW_CACHE_KEY)
-  // Ek dizi listesi ya da kadro kaynağı değiştiyse katalog yeniden kurulur (24 saat beklenmez).
-  if (cached && sameSupplement(cached.supplementIds, supplementIds) && cached.castSource === CAST_SOURCE) return cached
+  // Ek dizi listesi, kadro kaynağı ya da katalog süzgeci değiştiyse katalog yeniden kurulur (24 saat beklenmez).
+  if (
+    cached &&
+    sameSupplement(cached.supplementIds, supplementIds) &&
+    cached.castSource === CAST_SOURCE &&
+    cached.catalogFilter === CATALOG_FILTER
+  )
+    return cached
   if (rawFetchInFlight) return rawFetchInFlight
 
   rawFetchInFlight = (async () => {
@@ -75,6 +81,7 @@ export async function getEnrichedVisibility({ waitForClassification = false } = 
   } catch (err) {
     console.error('[visibility] arama hacmi fallback verisi alınamadı:', err.message)
   }
+  data.countries = addLimitedCountries(data.countries)
 
   try {
     const demographics = await getCountryDemographics()

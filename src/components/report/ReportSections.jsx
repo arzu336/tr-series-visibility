@@ -2,6 +2,7 @@ import countryNames from '../../data/country-centroids.json'
 import { fmtDate, fmtNum, fmtPct, fmtPeriod, fmtSignedPct, fmtWeek } from './format.js'
 import { EMPTY } from '../../lib/emptyStates.js'
 import { TrendBadge } from '../ChartList.jsx'
+import SeriesTrendChart from '../SeriesTrendChart.jsx'
 
 // Bölüm görünümleri: yalnızca sunucudan gelen `data`yı basar, hiçbir sayı burada türetilmez
 // (rapor sözleşmesi ulke-raporu-v1). Grafikler saf SVG — SSR ve baskıda aynı çıktı.
@@ -38,7 +39,7 @@ function BarList({ rows, labelKey, valueKey, format, ariaLabel }) {
 }
 
 /** Aylık ortalama skor çubukları — 12 sütun, sabit yükseklik; tablo yerine tek satırlık grafik. */
-function MonthlyBars({ monthly }) {
+function MonthlyBars({ monthly, label }) {
   const W = 600
   const H = 150
   const padB = 22
@@ -51,7 +52,7 @@ function MonthlyBars({ monthly }) {
       className="report__chart"
       viewBox={`0 0 ${W} ${H}`}
       role="img"
-      aria-label={`Aylık ortalama yayın varlığı, ${monthly.length} ay`}
+      aria-label={label || `Aylık ortalama yayın varlığı, ${monthly.length} ay`}
     >
       {monthly.map((m, i) => {
         const h = ((m.avgScore || 0) / max) * (H - padB - padT)
@@ -80,22 +81,6 @@ function MonthlyBars({ monthly }) {
   )
 }
 
-function Sparkline({ timeline, label }) {
-  const W = 160
-  const H = 36
-  const vals = timeline.map((p) => p.value ?? 0)
-  const max = Math.max(...vals, 1)
-  const step = vals.length > 1 ? W / (vals.length - 1) : W
-  const d = vals
-    .map((v, i) => `${i === 0 ? 'M' : 'L'}${(i * step).toFixed(1)},${(H - 2 - (v / max) * (H - 4)).toFixed(1)}`)
-    .join(' ')
-  return (
-    <svg className="report__sparkline" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={label}>
-      <path d={d} fill="none" strokeWidth="1.5" />
-    </svg>
-  )
-}
-
 function ScoresSection({ data }) {
   return (
     <>
@@ -109,18 +94,6 @@ function ScoresSection({ data }) {
               : 'en az iki kaynak gerekir'
           }
           warn={data.level == null}
-        />
-        <Kpi
-          label="Netflix Top 10 (son 52 hafta)"
-          value={data.netflix ? `${data.netflix.series} dizi · ${data.netflix.weeks} hafta` : '—'}
-          hint={
-            data.netflix
-              ? data.netflix.bestRank
-                ? `en iyi sıra ${data.netflix.bestRank}`
-                : 'Türk dizisi girmedi'
-              : data.netflixReason || 'Netflix bu pazarda liste yayımlamıyor'
-          }
-          warn={!data.netflix}
         />
         <Kpi
           label="Yayın varlığı"
@@ -202,6 +175,21 @@ function FindingsSection({ data }) {
   )
 }
 
+function ImdbCell({ imdb }) {
+  if (!imdb) return '—'
+  return (
+    <>
+      {fmtNum(imdb.rating, 1)} ({fmtNum(imdb.votes, 0)} oy)
+      {imdb.growth7?.votes > 0 && (
+        <span className="report__basis">
+          {' '}
+          · son {imdb.growth7.days} gün +{fmtNum(imdb.growth7.votes, 0)}
+        </span>
+      )}
+    </>
+  )
+}
+
 function TopSeriesSection({ data }) {
   return (
     <table className="dashboard__table dashboard__table--compact report__table">
@@ -210,8 +198,7 @@ function TopSeriesSection({ data }) {
           <th scope="col">#</th>
           <th scope="col">Dizi</th>
           <th scope="col">Bileşik skor</th>
-          <th scope="col">Kanıt</th>
-          <th scope="col">Veri güveni</th>
+          <th scope="col">İzleyici puanı</th>
         </tr>
       </thead>
       <tbody>
@@ -220,9 +207,8 @@ function TopSeriesSection({ data }) {
             <td>{i + 1}</td>
             <td>{e.name}</td>
             <td>{fmtNum(e.compositeScore, 0)}</td>
-            <td>{(e.evidence || []).join('; ') || '—'}</td>
-            <td className={`report__confidence report__confidence--${e.dataConfidence?.level || 'none'}`}>
-              {e.dataConfidence?.label || '—'}
+            <td>
+              <ImdbCell imdb={e.imdb} />
             </td>
           </tr>
         ))}
@@ -246,47 +232,23 @@ function ThemesSection({ data }) {
   )
 }
 
+// Dizi sayfasından açılan arama ilgisi ekranıyla aynı grafik (zirve etiketi, üzerine gelince değer); dizi
+// başına bir grafik, kapsam bu ülke.
 function SearchTrendSection({ data }) {
-  const ozet = (tl) => {
-    const vals = tl.map((p) => p.value ?? 0)
-    const ort = vals.reduce((s, v) => s + v, 0) / Math.max(vals.length, 1)
-    const zirveI = vals.indexOf(Math.max(...vals))
-    return { ort, zirve: vals[zirveI], zirveTarih: tl[zirveI]?.timestamp, son: vals.at(-1) }
-  }
+  const scope = data.iso2 ? countryName(data.iso2) : null
   return (
     <>
-      <table className="dashboard__table dashboard__table--compact report__table">
-        <thead>
-          <tr>
-            <th scope="col">Dizi</th>
-            <th scope="col">12 aylık seyir</th>
-            <th scope="col">Ortalama</th>
-            <th scope="col">Zirve</th>
-            <th scope="col">Son hafta</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.series.map((s) => {
-            const o = ozet(s.timeline)
-            return (
-              <tr key={s.tmdbId}>
-                <td>{s.name}</td>
-                <td>
-                  <Sparkline timeline={s.timeline} label={`${s.name} arama ilgisi seyri`} />
-                </td>
-                <td>{fmtNum(o.ort, 1)}</td>
-                <td>
-                  {fmtNum(o.zirve, 0)}
-                  {o.zirveTarih ? ` (${fmtDate(o.zirveTarih * 1000)})` : ''}
-                </td>
-                <td>{fmtNum(o.son, 0)}</td>
-              </tr>
-            )
-          })}
-        </tbody>
-      </table>
+      {data.series.map((s) => (
+        <div key={s.tmdbId} className="report__search-series">
+          <p className="report__lead">
+            <strong>{s.name}</strong>
+          </p>
+          <SeriesTrendChart timeline={s.timeline} scopeLabel={scope} />
+        </div>
+      ))}
       <p className="report__fine">
-        Değerler Google Trends göreli ilgi endeksi (0–100, ülke içi). Önbellekteki son sorgu kullanıldı.
+        Değerler 0–100 ölçeğinde ve ülke içinde görelidir: zaman içindeki yönü gösterir, ülkeler ya da diziler arası
+        mutlak hacim karşılaştırması için kullanılmaz.
         {data.missing?.length > 0 && <> Sorgulanmamış: {data.missing.join(', ')}.</>}
       </p>
     </>
@@ -336,6 +298,7 @@ function HighlightedSeriesSection({ data }) {
           <li key={s.tmdbId}>
             <strong>{s.name}</strong> — bileşik skor {fmtNum(s.compositeScore, 0)}
             {s.confidence ? `, ${s.confidence}` : ''}
+            {s.imdb ? `, izleyici puanı ${fmtNum(s.imdb.rating, 1)}` : ''}
             {s.evidence?.length > 0 && <span className="report__basis"> ({s.evidence.join('; ')})</span>}
           </li>
         ))}
@@ -344,87 +307,43 @@ function HighlightedSeriesSection({ data }) {
   )
 }
 
-const PLATFORM_GROUPS = [
-  ['Abonelik', ['flatrate']],
-  ['Ücretsiz / reklamlı', ['free', 'ads']],
-  ['Kirala / satın al', ['rent', 'buy']],
-]
-
-function platformText(platforms, keys) {
-  const list = keys.flatMap((k) => platforms?.[k] || [])
-  return list.length > 0 ? Array.from(new Set(list)).join(', ') : '—'
-}
-
-function AvailabilitySection({ data }) {
-  return (
-    <>
-      <p className="report__lead">
-        {data.rows.length} dizinin sağlayıcı kaydı var; <strong>{data.streamableCount}</strong> tanesi abonelik veya
-        ücretsiz yayında izlenebilir.
-      </p>
-      {data.platformSummary?.length > 0 && (
-        <ul className="report__chips" aria-label="Platform özeti">
-          {data.platformSummary.slice(0, 10).map((p) => (
-            <li key={p.name} className="report__chip">
-              {p.name} · {p.count}
-            </li>
-          ))}
-        </ul>
-      )}
-      <table className="dashboard__table dashboard__table--compact report__table">
-        <thead>
-          <tr>
-            <th scope="col">Dizi</th>
-            {PLATFORM_GROUPS.map(([label]) => (
-              <th key={label} scope="col">
-                {label}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.rows.map((r) => (
-            <tr key={r.tmdbId} className={r.streamable ? undefined : 'report__row--muted'}>
-              <td>{r.name}</td>
-              {PLATFORM_GROUPS.map(([label, keys]) => (
-                <td key={label}>{platformText(r.platforms, keys)}</td>
-              ))}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </>
-  )
+// Değişim sütununun dayanağı: geçen haftanın sıralaması ya da (geçen hafta bu haftanın listelerini kapsamıyorsa)
+// hafta içinde ilk günün sırası.
+function trendCaption({ trendBasis, trendSince }) {
+  if (trendBasis === 'week') return 'Değişim geçen haftanın sıralamasına göredir.'
+  if (trendBasis === 'days')
+    return `Değişim hafta içinde, ${fmtDate(trendSince)} sıralamasına göredir (geçen haftanın listeleri karşılaştırmaya yetmiyor).`
+  return null
 }
 
 function PlatformListsSection({ data }) {
-  const { now = [], top = [], window: win, platformsNow = [] } = data
+  const { now = [], top = [], window: win, seriesCount = 0 } = data
+  const caption = trendCaption(data)
   return (
     <>
       <dl className="report__kpis">
         <Kpi
-          label="Şu an Top 10'da"
+          label="Bu hafta sıralamada"
           value={`${now.length} dizi`}
-          hint={platformsNow.join(' · ') || 'hiçbir platformda'}
+          hint={win ? `hafta sonu ${fmtDate(win.to)}` : ''}
         />
         {win && (
           <Kpi
-            label={`Son ${win.weeks} haftada listeye giren`}
-            value={`${top.length}${top.length === 10 ? '+' : ''} dizi`}
+            label={`Son ${win.weeks} haftada sıralamaya giren`}
+            value={`${seriesCount} dizi`}
             hint={`${fmtDate(win.from)} – ${fmtDate(win.to)}`}
           />
         )}
       </dl>
       {now.length === 0 ? (
-        <p className="report__lead">Şu an hiçbir platformun Top 10 listesinde Türk dizisi yok.</p>
+        <p className="report__lead">Bu hafta sıralamada Türk dizisi yok.</p>
       ) : (
         <table className="dashboard__table dashboard__table--compact report__table">
-          <caption className="report__caption">Şu an listede</caption>
+          <caption className="report__caption">Bu hafta</caption>
           <thead>
             <tr>
               <th scope="col">Sıra</th>
               <th scope="col">Dizi</th>
-              <th scope="col">Platform</th>
               <th scope="col">Listede</th>
               <th scope="col">Değişim</th>
             </tr>
@@ -432,18 +351,18 @@ function PlatformListsSection({ data }) {
           <tbody>
             {now.map((r) => (
               <tr key={`${r.seriesId ?? r.name}`}>
-                <td>{r.rank}</td>
+                <td>{r.position}</td>
                 <td>{r.name}</td>
-                <td>{r.platforms.join(' · ')}</td>
-                <td>{r.weeksInList != null ? `${r.weeksInList} hafta` : '—'}</td>
+                <td>{r.weeks} hafta</td>
                 <td>
-                  <TrendBadge trend={r.trend} />
+                  <TrendBadge trend={r.trend} withCount />
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+      {now.length > 0 && caption && <p className="report__fine">{caption}</p>}
       {top.length > 0 && (
         <table className="dashboard__table dashboard__table--compact report__table">
           <caption className="report__caption">Son {win?.weeks ?? 52} haftanın en kalıcıları</caption>
@@ -452,7 +371,6 @@ function PlatformListsSection({ data }) {
               <th scope="col">Dizi</th>
               <th scope="col">Listede kaldığı hafta</th>
               <th scope="col">En iyi sıra</th>
-              <th scope="col">Platformlar</th>
             </tr>
           </thead>
           <tbody>
@@ -460,13 +378,79 @@ function PlatformListsSection({ data }) {
               <tr key={`${r.seriesId ?? r.name}`}>
                 <td>{r.name}</td>
                 <td>{r.weeks}</td>
-                <td>{r.bestRank}</td>
-                <td>{r.platforms.join(' · ')}</td>
+                <td>{r.bestPosition}</td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
+    </>
+  )
+}
+
+function WikiInterestSection({ data }) {
+  return (
+    <>
+      {data.incompleteMonth && (
+        <p className="report__fine">
+          {fmtPeriod(data.incompleteMonth)} verisi henüz tamamlanmadığı için gösterilmiyor.
+        </p>
+      )}
+      {data.languages.map((l) => (
+        <div key={l.lang} className="brief__wiki">
+          <p className="report__lead">
+            <strong>{l.languageName}</strong>
+            {l.regional ? ' · ortak dil; okunma bu ülkeye ayrılamaz' : ''}
+          </p>
+          <MonthlyBars
+            monthly={l.months.map((m) => ({ period: m.period, avgScore: m.views }))}
+            label={`${l.languageName} aylık okunma, ${l.months.length} ay`}
+          />
+          {l.top.length > 0 && (
+            <p className="report__caption">
+              En çok okunan diziler — son 12 ayda toplam okunma (çubuk: en çok okunana göre)
+            </p>
+          )}
+          {l.top.length > 0 && (
+            <BarList
+              rows={l.top}
+              labelKey="name"
+              valueKey="views"
+              format={(v) => fmtNum(v, 0)}
+              ariaLabel={`${l.languageName} en çok okunan diziler (12 ay)`}
+            />
+          )}
+        </div>
+      ))}
+    </>
+  )
+}
+
+function ForeignStudentsSection({ data }) {
+  const max = Math.max(...data.series.map((r) => r.students), 1)
+  return (
+    <>
+      <dl className="report__kpis">
+        <Kpi label={`${data.year} yılında`} value={`${fmtNum(data.students, 0)} öğrenci`} />
+        {data.changePct != null && (
+          <Kpi
+            label={`${data.baseYear}'e göre`}
+            value={`${data.changePct >= 0 ? '+' : ''}${fmtNum(data.changePct, 0)}%`}
+            hint="5 yıllık değişim"
+          />
+        )}
+        {data.rank != null && (
+          <Kpi label="Ülkeler arasında" value={`${data.rank}. / ${data.of}`} hint="öğrenci sayısına göre" />
+        )}
+      </dl>
+      <div className="report__years" role="img" aria-label={`Yıllara göre öğrenci sayısı, ${data.series.length} yıl`}>
+        {data.series.map((r) => (
+          <div key={r.year} className="report__year">
+            <span className="report__year-bar" style={{ height: `${Math.max(2, (r.students / max) * 100)}%` }} />
+            <span className="report__year-label">{String(r.year).slice(2)}</span>
+          </div>
+        ))}
+      </div>
     </>
   )
 }
@@ -542,7 +526,7 @@ function NetflixHistorySection({ data }) {
 }
 
 const POOL_LABELS = {
-  bolge: 'aynı Dünya Bankası bölgesi',
+  bolge: 'aynı bölge',
   'bolge+gelir': 'aynı bölge, aynı gelir grubuyla tamamlandı',
   tumu: 'tüm ülkeler (bölge/gelir verisi yok)',
 }
@@ -628,12 +612,16 @@ function TourismSignalSection({ data }) {
         )}
       />
       <SubSignal
-        label="Görünürlük–ziyaretçi korelasyonu"
+        label="Okunma ilgisi–ziyaretçi ilişkisi"
         item={data.correlation}
         render={(c) => (
           <>
             <dd>{fmtNum(c.value, 2)}</dd>
-            <small>{c.sampleSize != null ? `${c.sampleSize} ay` : ''}</small>
+            <small>
+              {c.lagMonths != null ? `${c.lagMonths} ay gecikmeli · ` : ''}
+              {c.sampleSize != null ? `${c.sampleSize} ay · ` : ''}
+              {c.significant ? 'istatistiksel olarak anlamlı' : 'anlamlı değil'}
+            </small>
           </>
         )}
       />
@@ -670,6 +658,8 @@ function TourismSignalSection({ data }) {
 export const SECTION_COMPONENTS = {
   scores: ScoresSection,
   platformLists: PlatformListsSection,
+  wikiInterest: WikiInterestSection,
+  foreignStudents: ForeignStudentsSection,
   ranking: RankingSection,
   trend: TrendSection,
   findings: FindingsSection,
@@ -678,7 +668,6 @@ export const SECTION_COMPONENTS = {
   searchTrend: SearchTrendSection,
   pressTone: PressToneSection,
   highlightedSeries: HighlightedSeriesSection,
-  availability: AvailabilitySection,
   netflixHistory: NetflixHistorySection,
   gapAnalysis: GapAnalysisSection,
   tourismSignal: TourismSignalSection,

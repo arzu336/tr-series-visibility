@@ -38,7 +38,7 @@ function timelineHash(timeline) {
   return crypto.createHash('sha1').update(summary).digest('hex').slice(0, 16)
 }
 
-export async function getSeriesTrendInsight(seriesName, timeline, scopeLabel = null) {
+export async function getSeriesTrendInsight(seriesName, timeline, scopeLabel = null, { cacheOnly = false } = {}) {
   if (!timeline || timeline.length < 2) {
     return { stats: null, insightText: null, generatedAt: null, fromCache: false }
   }
@@ -49,6 +49,8 @@ export async function getSeriesTrendInsight(seriesName, timeline, scopeLabel = n
   if (cached) {
     return { stats, insightText: cached.insightText, generatedAt: cached.generatedAt, fromCache: true }
   }
+  // Dizi sayfası açılırken yapay zekâ çağrısı yapılmaz; yorum yalnızca kullanıcı sorgulayınca üretilir.
+  if (cacheOnly) return { stats, insightText: null, generatedAt: null, fromCache: false }
 
   let insightText = null
   const generatedAt = new Date().toISOString()

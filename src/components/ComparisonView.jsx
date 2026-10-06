@@ -9,9 +9,11 @@ import {
 import MultiSeriesTrendChart from './MultiSeriesTrendChart.jsx'
 import { EMPTY } from '../lib/emptyStates.js'
 import { IconStar } from './Icons.jsx'
+import Flag from './Flag.jsx'
+import countryNames from '../data/country-centroids.json'
 
 const MAX_COMPARE = 3
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w185'
+const POSTER_BASE = 'https://image.tmdb.org/t/p/w342'
 const CHIP_COLORS = ['#3b82f6', '#EE3135', '#22c55e']
 
 function CompareEmptyState() {
@@ -28,55 +30,49 @@ function CompareEmptyState() {
   )
 }
 
+// Dizi sayfasının başlık dili: afiş, ad, yıl · tema, rozetler. Önde olan gösterge yeşil rozetle "önde" yazar.
 function Head2HeadCard({ card, isRatingLeader, isShareLeader, isCountryLeader }) {
+  const year = card.meta?.firstAirDate?.slice(0, 4)
+  const pill = (leader) => `map-popup-card__pill${leader ? ' series-page__pill--up' : ''}`
   return (
-    <div className="h2h-card" style={{ '--h2h-color': card.color }}>
-      <div className="h2h-card__stripe" />
-      <div className="h2h-card__body">
-        {card.meta?.posterPath ? (
-          <img className="h2h-card__poster" src={`${POSTER_BASE}${card.meta.posterPath}`} alt="" />
-        ) : (
-          <div className="h2h-card__poster h2h-card__poster--empty">Afiş yok</div>
-        )}
-        <h4 className="h2h-card__title">{card.name}</h4>
-
-        <div className="h2h-card__metric">
-          <span className="h2h-card__metric-label">IMDb Puanı</span>
-          <span className="h2h-card__metric-value">
+    <section className="series-page__section compare-card" style={{ '--h2h-color': card.color }}>
+      {card.meta?.posterPath ? (
+        <img className="compare-card__poster" src={`${POSTER_BASE}${card.meta.posterPath}`} alt="" />
+      ) : (
+        <span className="compare-card__poster series-page__poster--empty" aria-hidden="true" />
+      )}
+      <div className="series-page__intro">
+        <h4 className="compare-card__title">
+          <span className="chip__dot" />
+          {card.name}
+        </h4>
+        <p className="series-page__meta">{[year, card.meta?.theme].filter(Boolean).join(' · ') || ' '}</p>
+        <div className="series-page__pills">
+          <span className={pill(isRatingLeader)}>
             {card.imdbRating != null ? (
               <>
                 <IconStar />
                 {card.imdbRating.toFixed(1)}
               </>
             ) : (
-              '—'
+              'Puan yok'
             )}
-            {isRatingLeader && <span className="h2h-card__leader">▲ Lider</span>}
+            {isRatingLeader && ' · önde'}
           </span>
-        </div>
-        <div className="h2h-card__metric">
-          <span className="h2h-card__metric-label" title="Seçilen diziler arasındaki göreceli, küresel arama payı">
-            Global Pazar Payı
+          <span className={pill(isShareLeader)} title="Seçilen diziler arasındaki göreceli, küresel arama payı">
+            Arama payı {card.sharePct != null ? `%${card.sharePct}` : '—'}
+            {isShareLeader && ' · önde'}
           </span>
-          <span className="h2h-card__metric-value">
-            {card.sharePct != null ? `%${card.sharePct}` : '—'}
-            {isShareLeader && <span className="h2h-card__leader">▲ Lider</span>}
-          </span>
-        </div>
-        <div className="h2h-card__metric">
           <span
-            className="h2h-card__metric-label"
-            title="Karşılaştırmalı Google Trends verisinde bu dizinin sıfırdan büyük bir arama payı aldığı ülke sayısı — erişim/izlenme değil"
+            className={pill(isCountryLeader)}
+            title="Karşılaştırmalı arama verisinde bu dizinin sıfırdan büyük pay aldığı ülke sayısı — erişim/izlenme değil"
           >
-            Pay Aldığı Ülke Sayısı
-          </span>
-          <span className="h2h-card__metric-value">
-            {card.countryCount ?? '—'}
-            {isCountryLeader && <span className="h2h-card__leader">▲ Lider</span>}
+            {card.countryCount ?? '—'} ülkede pay
+            {isCountryLeader && ' · önde'}
           </span>
         </div>
       </div>
-    </div>
+    </section>
   )
 }
 
@@ -89,7 +85,10 @@ function RegionalDominanceTable({ topRows, cards }) {
       {topRows.map((row) => {
         return (
           <div key={row.iso2} className="regional-dominance__row">
-            <div className="regional-dominance__label">{row.location || row.iso2}</div>
+            <div className="regional-dominance__label series-page__country">
+              {row.iso2 && <Flag iso2={row.iso2} />}
+              {countryNames[row.iso2]?.name || row.location || row.iso2}
+            </div>
             <div className="regional-dominance__bars">
               {cards.map((c) => {
                 const value = row.values.find((v) => v.title === c.name)?.value ?? 0
@@ -120,7 +119,7 @@ function RegionalDominanceTable({ topRows, cards }) {
   )
 }
 
-export default function ComparisonView({ seriesList }) {
+export default function ComparisonView({ seriesList, suggestions = [] }) {
   const [picked, setPicked] = useState([])
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('idle')
@@ -208,6 +207,7 @@ export default function ComparisonView({ seriesList }) {
               placeholder={picked.length === 0 ? 'Bir dizi ara ve seç…' : 'Başka bir dizi daha ekle…'}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
+              onFocus={(e) => e.target.select()}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && seriesList.some((s) => s.name === query)) addSeries(query)
               }}
@@ -222,6 +222,18 @@ export default function ComparisonView({ seriesList }) {
             <button onClick={() => addSeries(query)} disabled={!seriesList.some((s) => s.name === query)}>
               Ekle
             </button>
+          </div>
+        )}
+        {picked.length < MAX_COMPARE && suggestions.some((s) => !picked.some((p) => p.id === s.id)) && (
+          <div className="compare-suggest">
+            <span className="compare-suggest__label">Hızlı ekle:</span>
+            {suggestions
+              .filter((s) => !picked.some((p) => p.id === s.id) && seriesList.some((x) => x.id === s.id))
+              .map((s) => (
+                <button key={s.id} type="button" className="ts-scope__chip" onClick={() => addSeries(s.name)}>
+                  + {s.name}
+                </button>
+              ))}
           </div>
         )}
         {picked.length >= MAX_COMPARE && (
@@ -243,32 +255,34 @@ export default function ComparisonView({ seriesList }) {
 
       {status === 'ready' && cards.length > 0 && (
         <>
-          <section className="dashboard__section">
-            <h3 className="dashboard__section-title">Baş Başa Karşılaştırma</h3>
-            <div className="h2h-grid">
-              {cards.map((c) => (
-                <Head2HeadCard
-                  key={c.id}
-                  card={c}
-                  isRatingLeader={c.imdbRating != null && c.imdbRating === maxRating}
-                  isShareLeader={c.sharePct != null && c.sharePct === maxShare}
-                  isCountryLeader={c.countryCount != null && c.countryCount === maxCountryCount}
+          <div className="h2h-grid">
+            {cards.map((c) => (
+              <Head2HeadCard
+                key={c.id}
+                card={c}
+                isRatingLeader={c.imdbRating != null && c.imdbRating === maxRating}
+                isShareLeader={c.sharePct != null && c.sharePct === maxShare}
+                isCountryLeader={c.countryCount != null && c.countryCount === maxCountryCount}
+              />
+            ))}
+          </div>
+
+          <div className="series-page__grid">
+            <div className="series-page__col">
+              <section className="series-page__section">
+                <h2>Arama ilgisi — son 12 ay · Küresel</h2>
+                <MultiSeriesTrendChart
+                  series={cards.map((c) => ({ name: c.name, color: c.color, timeline: c.timeline }))}
                 />
-              ))}
+              </section>
             </div>
-          </section>
-
-          <section className="dashboard__section">
-            <h3 className="dashboard__section-title">Küresel Zaman Serisi Karşılaştırması</h3>
-            <MultiSeriesTrendChart
-              series={cards.map((c) => ({ name: c.name, color: c.color, timeline: c.timeline }))}
-            />
-          </section>
-
-          <section className="dashboard__section">
-            <h3 className="dashboard__section-title">Karşılaştırılan Dizilerin Ülke İçi İlgi Payı</h3>
-            <RegionalDominanceTable topRows={regionalRows} cards={cards} />
-          </section>
+            <div className="series-page__col">
+              <section className="series-page__section">
+                <h2>Ülke içi ilgi payı</h2>
+                <RegionalDominanceTable topRows={regionalRows} cards={cards} />
+              </section>
+            </div>
+          </div>
         </>
       )}
     </div>

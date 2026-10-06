@@ -1,4 +1,5 @@
 import { mapWithConcurrency } from './utils/concurrency.js'
+import { getCached, setCached } from './cache.js'
 
 const EXTERNAL_TIMEOUT_MS = 15000
 
@@ -190,6 +191,33 @@ export async function getSeriesDetails(seriesId) {
   }
 }
 
+// Katalog yalnızca DİZİLERİ içerir: talk-show, haber, yarışma/realite ve skeç şovları (Konuşanlar, MasterChef,
+// Aşkın Gücü, Güldür Güldür Show…) TMDB'nin Türk yapımı sorgusundan gelse de çıkarılır (kullanıcı kararı,
+// 2026-10-05). TMDB tipi bazen yanlış ("Yalnız Kurt" Reality görünür ama türü Drama); türünde Drama olan
+// yapım her zaman kalır. Sürüm değişince önbellekteki katalog yeniden kurulur (data-pipeline.js).
+export const CATALOG_FILTER = 'scripted-v1'
+const GENRE = { DRAMA: 18, NEWS: 10763, REALITY: 10764, TALK: 10767 }
+const NON_SCRIPTED_TYPES = new Set(['Reality', 'Talk Show', 'News'])
+const SERIES_KIND_TTL_MS = 90 * 24 * 60 * 60 * 1000
+
+export function isScriptedSeries({ genreIds = [], type = null } = {}) {
+  const g = new Set(genreIds)
+  if (g.has(GENRE.DRAMA)) return true
+  if (g.has(GENRE.TALK) || g.has(GENRE.NEWS) || g.has(GENRE.REALITY)) return false
+  return !NON_SCRIPTED_TYPES.has(type)
+}
+
+/** Dizinin TMDB tipi ve türleri (yavaş değişir, 90 gün önbellek). Alınamazsa null → dizi sayılır. */
+async function getSeriesKind(seriesId) {
+  const key = `tmdb-series-kind:${seriesId}`
+  const cached = getCached(key)
+  if (cached) return cached
+  const show = await tmdbGet(`/tv/${seriesId}`)
+  const kind = { type: show.type || null, genreIds: (show.genres || []).map((g) => g.id) }
+  setCached(key, kind, SERIES_KIND_TTL_MS)
+  return kind
+}
+
 /**
  * Katalog: popülerliğe göre ilk N + Netflix Türk yapımları + `supplementIds` (listelere girmiş ama ilk N'in
  * dışında kalan diziler; bkz. data-pipeline-python/catalog_supplement.py). Ek dizi TMDB'de bulunamazsa atlanır.
@@ -210,7 +238,10 @@ export async function getRawSeriesDataForOrigin(
   const extra = (
     await mapWithConcurrency(missing, FETCH_CONCURRENCY, (id) => getSeriesDetails(id).catch(() => null))
   ).filter(Boolean)
-  const series = mergeSeriesLists(discovered, extra)
+  const candidates = mergeSeriesLists(discovered, extra)
+  const kinds = await mapWithConcurrency(candidates, FETCH_CONCURRENCY, (s) => getSeriesKind(s.id).catch(() => null))
+  const series = candidates.filter((s, i) => !kinds[i] || isScriptedSeries(kinds[i]))
+  const excludedNonScripted = candidates.filter((s, i) => kinds[i] && !isScriptedSeries(kinds[i])).map((s) => s.id)
 
   const [providerResults, castResults] = await Promise.all([
     mapWithConcurrency(series, FETCH_CONCURRENCY, (s) => getWatchProviders(s.id).catch(() => ({}))),
@@ -223,7 +254,14 @@ export async function getRawSeriesDataForOrigin(
     s.cast = castResults[idx]
   })
 
-  return { series, providersById, supplementIds: [...supplementIds].sort((a, b) => a - b), castSource: CAST_SOURCE }
+  return {
+    series,
+    providersById,
+    supplementIds: [...supplementIds].sort((a, b) => a - b),
+    castSource: CAST_SOURCE,
+    catalogFilter: CATALOG_FILTER,
+    excludedNonScripted,
+  }
 }
 
 export async function getRawSeriesData({ supplementIds = [] } = {}) {

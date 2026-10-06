@@ -5,6 +5,13 @@ import { resolveIso2FromLabel } from './countryLookup.js'
 const EXTERNAL_TIMEOUT_MS = 15000
 
 const INDEX_URL = 'https://yigm.ktb.gov.tr/TR-249702/sinir-istatistikleri.html'
+// Yıllık bültenler: "T7 — milliyetlere ve aylara göre" sayfası ülke × ay kesin rakamlarını verir. Aylık bülten
+// yalnızca o ayı (3 yıl karşılaştırmalı) verdiği için tablo önceden yalnızca son birkaç ayı içeriyordu.
+const YEARLY_INDEX_URL = 'https://yigm.ktb.gov.tr/TR-249709/yillik-bultenler.html'
+const YEARLY_SHEET_RE = /^T7/
+const YEARLY_FROM = 2016
+const META_YEARLY = 'tourismYearlyImported'
+const MONTH_HEADERS = Object.keys(TURKISH_MONTHS_UPPER())
 const SYNC_INTERVAL_MS = 7 * 24 * 60 * 60 * 1000
 const META_KEY = 'lastTourismSyncAt'
 const SHEET_NAME = 'Milliyet'
@@ -42,6 +49,103 @@ const selectSeriesStmt = db.prepare(
   'SELECT year, month, visitor_count FROM tourist_arrivals WHERE iso2 = ? ORDER BY year, month'
 )
 const selectTrackedIso2Stmt = db.prepare('SELECT DISTINCT iso2 FROM tourist_arrivals')
+
+function TURKISH_MONTHS_UPPER() {
+  return {
+    OCAK: 1,
+    ŞUBAT: 2,
+    MART: 3,
+    NİSAN: 4,
+    MAYIS: 5,
+    HAZİRAN: 6,
+    TEMMUZ: 7,
+    AĞUSTOS: 8,
+    EYLÜL: 9,
+    EKİM: 10,
+    KASIM: 11,
+    ARALIK: 12,
+  }
+}
+
+/** Yıllık bülten bağlantıları (.xlsx; .rar arşivleri atlanır), yıla göre. */
+export async function findYearlyBulletins() {
+  const res = await fetch(YEARLY_INDEX_URL, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
+  if (!res.ok) throw new Error(`Yıllık bülten sayfası alınamadı (${res.status})`)
+  const html = await res.text()
+  const out = []
+  // Bağlantı metni bazı yıllarda iç etiket/&nbsp; taşıyor (2020, 2022): metin etiketlerden arındırılarak okunur.
+  const anchorRe = /<a[^>]+href="([^"]+\.xlsx?[^"]*)"[^>]*>([\s\S]*?)<\/a>/gi
+  let match
+  while ((match = anchorRe.exec(html))) {
+    const href = match[1]
+    const text = match[2].replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ')
+    const year = /(\d{4})\s*Yılı\s*Sınır/i.exec(text)?.[1]
+    if (year) out.push({ year: Number(year), url: new URL(href, YEARLY_INDEX_URL).toString(), title: text.trim() })
+  }
+  return out.sort((a, b) => a.year - b.year)
+}
+
+/** Yıllık bültenin T7 sayfası → [{ iso2, year, month, visitorCount }]. */
+export function parseYearlyBulletin(buffer, year) {
+  const workbook = XLSX.read(buffer, { type: 'buffer' })
+  const sheetName = workbook.SheetNames.find((n) => YEARLY_SHEET_RE.test(n))
+  if (!sheetName) throw new Error('Yıllık bültende milliyet-ay (T7) sayfası bulunamadı')
+  const rows = XLSX.utils.sheet_to_json(workbook.Sheets[sheetName], { header: 1, raw: true })
+  // Başlık satırı ay adlarından tanınır (2016 bülteninde ilk hücre "MİLLİYET" değil, boş).
+  const isMonth = (c) => typeof c === 'string' && MONTH_HEADERS.includes(c.trim().toLocaleUpperCase('tr'))
+  const headerIdx = rows.findIndex((r) => r.filter(isMonth).length === 12)
+  if (headerIdx === -1) throw new Error('T7 sayfasında 12 ay sütunu okunamadı')
+  const monthCols = rows[headerIdx]
+    .map((h, i) => [typeof h === 'string' ? MONTH_HEADERS.indexOf(h.trim().toLocaleUpperCase('tr')) + 1 : 0, i])
+    .filter(([m]) => m > 0)
+  if (monthCols.length !== 12) throw new Error('T7 sayfasında 12 ay sütunu okunamadı')
+
+  const entries = []
+  const unresolvedNames = new Set()
+  for (const row of rows.slice(headerIdx + 1)) {
+    const name = typeof row[0] === 'string' ? row[0].trim() : ''
+    if (!name || SUBTOTAL_ROW_RE.test(name)) continue
+    // Sayfa sonlarında tekrar eden başlık/başlık satırları (sayı taşımaz) eşleşmeyen ad sayılmaz.
+    if (!monthCols.some(([, col]) => typeof row[col] === 'number')) continue
+    const iso2 = resolveIso2FromLabel(name)
+    if (!iso2) {
+      unresolvedNames.add(name)
+      continue
+    }
+    for (const [month, col] of monthCols) {
+      const v = row[col]
+      if (typeof v === 'number' && Number.isFinite(v)) entries.push({ iso2, year, month, visitorCount: Math.round(v) })
+    }
+  }
+  return { entries, unresolvedNames: [...unresolvedNames] }
+}
+
+/**
+ * Geçmiş: yıllık bültenlerden ülke × ay (2016'dan bu yana). Yalnızca henüz alınmamış yıllar indirilir
+ * (meta: tourismYearlyImported); kesin yıllık rakamlar aynı ayın geçici aylık rakamının üzerine yazılır.
+ */
+export async function backfillTourismHistory({ force = false, fetchImpl = fetch } = {}) {
+  const done = new Set(force ? [] : JSON.parse(getMetaStmt.get(META_YEARLY)?.value || '[]'))
+  const bulletins = (await findYearlyBulletins()).filter((b) => b.year >= YEARLY_FROM && !done.has(b.year))
+  const imported = []
+  const unresolved = new Set()
+  for (const b of bulletins) {
+    const res = await fetchImpl(b.url, { signal: AbortSignal.timeout(60000) })
+    if (!res.ok) throw new Error(`Yıllık bülten indirilemedi (${res.status}): ${b.url}`)
+    const { entries, unresolvedNames } = parseYearlyBulletin(Buffer.from(await res.arrayBuffer()), b.year)
+    const now = new Date().toISOString()
+    inTransaction(() => {
+      for (const e of entries) upsertArrivalStmt.run(e.iso2, e.year, e.month, e.visitorCount, b.url, now)
+    })
+    unresolvedNames.forEach((n) => unresolved.add(n))
+    done.add(b.year)
+    imported.push({ year: b.year, rows: entries.length })
+  }
+  setMetaStmt.run(META_YEARLY, JSON.stringify([...done].sort()))
+  if (imported.length)
+    console.log(`[tourismData] yıllık bültenler işlendi: ${imported.map((i) => `${i.year} (${i.rows})`).join(', ')}`)
+  return { imported, unresolvedNames: [...unresolved] }
+}
 
 export async function findLatestBulletin() {
   const res = await fetch(INDEX_URL, { signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS) })
@@ -140,15 +244,14 @@ export async function syncTourismDataIfNeeded() {
   if (Date.now() - lastRunAt < SYNC_INTERVAL_MS) return null
 
   const result = await syncTourismData()
+  // Yeni yayımlanan yıllık bülten (ve hiç alınmamış geçmiş yıllar) haftalık senkronla birlikte alınır.
+  try {
+    result.history = await backfillTourismHistory()
+  } catch (err) {
+    console.error('[tourismData] yıllık bülten geri doldurması başarısız:', err.message)
+  }
   setMetaStmt.run(META_KEY, String(Date.now()))
   return result
-}
-
-const selectVisitorMonthsStmt = db.prepare('SELECT DISTINCT year, month FROM tourist_arrivals')
-
-/** Turist serisinin kapsadığı aylar (tüm ülkeler) — 'YYYY-MM' kümesi. */
-export function getVisitorMonthKeys() {
-  return new Set(selectVisitorMonthsStmt.all().map((r) => `${r.year}-${String(r.month).padStart(2, '0')}`))
 }
 
 export function getVisitorSeries(iso2) {

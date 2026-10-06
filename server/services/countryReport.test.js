@@ -4,12 +4,10 @@ import {
   buildCountryReport,
   buildRanking,
   buildPlatformLists,
-  selectProfile,
+  buildWikiInterest,
   SECTION_KEYS,
   SECTION_NOTES,
   SECTION_TITLES,
-  PROFILES,
-  PROFILE_MIN_ACCESS,
   netflixStaleness,
   STALE_AFTER_WEEKS,
 } from './countryReport.js'
@@ -146,21 +144,12 @@ const SIGNALS = {
 }
 
 const CHARTS = {
-  lists: {
-    now: [
-      {
-        seriesId: 1,
-        name: 'Eşref Rüya',
-        rank: 4,
-        platform: 'Prime Video · Shahid',
-        platforms: ['Prime Video', 'Shahid'],
-        weeksInList: 2,
-        trend: 'yeni',
-        posterPath: '/p.jpg',
-      },
-    ],
-    top: [{ seriesId: 1, name: 'Eşref Rüya', periods: 2, bestRank: 4, platforms: ['Prime Video', 'Shahid'] }],
-    window: { from: '2025-10-06', to: '2026-10-04', weeks: 52 },
+  ownRanking: {
+    to: '2026-10-04',
+    from: '2025-10-06',
+    current: [{ position: 1, seriesId: 1, name: 'Eşref Rüya', weeks: 2, trend: '↑1' }],
+    top: [{ seriesId: 1, name: 'Eşref Rüya', weeks: 2, bestPosition: 1 }],
+    seriesCount: 3,
   },
 }
 
@@ -189,6 +178,7 @@ function deps(over = {}) {
     readNetflixSyncError: () => null,
     getWatchSignals: async () => SIGNALS,
     getCountryCharts: async () => CHARTS,
+    readWikiRows: () => [],
     cache: { get: (k) => cacheStore.get(k) ?? null, set: (k, v) => cacheStore.set(k, v), store: cacheStore },
     now: () => new Date('2026-09-30T12:00:00.000Z'),
     ...over,
@@ -250,13 +240,15 @@ describe('buildCountryReport — sözleşme', () => {
     expect(s.gapAnalysis.data.similarCountries[0].iso2).toBe('FR')
     expect(s.tourismSignal.data.arrivals.value).toBe(1200)
     expect(s.findings.data.items.length).toBeGreaterThan(0)
-    expect(s.findings.data.items.map((f) => f.basis)).toEqual(['ranking', 'trend', 'netflix'])
+    // Platform listeleri (tüm platformlar) Netflix'e özgü bulgudan önce gelir
+    // İzleyiciye dair sinyaller önce; katalog değişimini yansıtan yayın varlığı sonda
+    expect(s.findings.data.items.map((f) => f.basis)).toEqual(['ranking', 'lists', 'pressTone'])
   })
 
   it('ücretli sorgu yapılmaz: bileşik skor cachedOnly ile çağrılır', async () => {
     const d = deps()
     await buildCountryReport('DE', { deps: d })
-    expect(d.calculateCountryCompositeScore).toHaveBeenCalledWith('DE', { cachedOnly: true })
+    expect(d.calculateCountryCompositeScore).toHaveBeenCalledWith('DE', expect.objectContaining({ cachedOnly: true }))
   })
 
   it('arama ilgisi yalnızca önbellekte varsa gelir; yoksa nedeniyle hesaplanamaz', async () => {
@@ -603,24 +595,6 @@ describe('önbellek', () => {
   })
 })
 
-describe('selectProfile', () => {
-  it('yalnızca profil bölümlerini döner, sayılar aynı kalır, sıra korunur', async () => {
-    const r = await buildCountryReport('DE', { deps: deps() })
-    const p = selectProfile(r, 'producer')
-    expect(Object.keys(p.sections)).toEqual(PROFILES.producer)
-    expect(p.sectionOrder).toEqual(PROFILES.producer)
-    expect(p.sections.scores).toBe(r.sections.scores)
-    expect(p.sections.findings).toBeUndefined()
-    expect(p.profileTitle).toBe('Yapımcı / dağıtımcı raporu')
-    for (const g of p.dataGaps) expect(PROFILES.producer).toContain(g.section)
-  })
-
-  it('bilinmeyen profil fırlatır', async () => {
-    const r = await buildCountryReport('DE', { deps: deps() })
-    expect(() => selectProfile(r, 'ceo')).toThrow(/Bilinmeyen rapor profili/)
-  })
-})
-
 describe('bölüm ↔ not ↔ profil eşleşmesi', () => {
   it('her bölümün başlığı ve boş olmayan metodoloji notu var', () => {
     for (const k of SECTION_KEYS) {
@@ -629,44 +603,28 @@ describe('bölüm ↔ not ↔ profil eşleşmesi', () => {
       expect(SECTION_NOTES[k].length, k).toBeGreaterThan(40)
     }
   })
-
-  it('profiller yalnızca bilinen bölümleri kullanır ve her bölüm en az bir profilde yer alır', () => {
-    const kullanilan = new Set()
-    for (const [profil, keys] of Object.entries(PROFILES)) {
-      expect(PROFILE_MIN_ACCESS[profil]).toBeTruthy()
-      for (const k of keys) {
-        expect(SECTION_KEYS, `${profil}:${k}`).toContain(k)
-        kullanilan.add(k)
-      }
-    }
-    expect([...kullanilan].sort()).toEqual([...SECTION_KEYS].sort())
-  })
-
-  it('yetki matrisi: executive viewer+, marketing analyst+, producer admin', () => {
-    expect(PROFILE_MIN_ACCESS).toEqual({ executive: 'viewer', marketing: 'analyst', producer: 'admin' })
-  })
 })
 
-describe('platformLists — tüm platformların Top 10 listeleri', () => {
-  it('panel ile aynı veri: şu an listede olanlar platformlarıyla, 52 haftanın kalıcıları, poster vb. taşınmaz', () => {
+describe('platformLists — platformun kendi sıralaması', () => {
+  it('sıra, dizi, listede kaldığı hafta ve değişim; platform/kaynak adı yok', () => {
     const s = buildPlatformLists(CHARTS)
     expect(s.status).toBe('hesaplandi')
-    expect(s.data.now).toEqual([
-      { seriesId: 1, name: 'Eşref Rüya', rank: 4, platforms: ['Prime Video', 'Shahid'], weeksInList: 2, trend: 'yeni' },
-    ])
-    expect(s.data.top[0]).toMatchObject({ name: 'Eşref Rüya', weeks: 2, bestRank: 4 })
-    expect(s.data.platformsNow).toEqual(['Prime Video', 'Shahid'])
+    expect(s.data.now).toEqual([{ seriesId: 1, name: 'Eşref Rüya', position: 1, weeks: 2, trend: '↑1' }])
+    expect(s.data.top).toEqual([{ seriesId: 1, name: 'Eşref Rüya', weeks: 2, bestPosition: 1 }])
+    expect(s.data.seriesCount).toBe(3)
+    expect(JSON.stringify(s.data)).not.toMatch(/Netflix|Shahid|Prime|Disney|platform/i)
   })
 
-  it('Türk dizisi girmemesi gerçek sonuç (boş liste); hiç kayıt yoksa hesaplanamaz', () => {
-    const bos = buildPlatformLists({ lists: { now: [], top: [], window: { from: 'a', to: 'b', weeks: 52 } } })
-    expect(bos).toMatchObject({ status: 'hesaplandi', data: { now: [], top: [] } })
-    expect(buildPlatformLists({ lists: { now: [], top: [], window: null } }).status).toBe('hesaplanamaz')
+  it('bu hafta Türk dizisi yoksa gerçek sonuç (boş liste); hiç kayıt yoksa hesaplanamaz', () => {
+    const bos = buildPlatformLists({
+      ownRanking: { to: 'b', from: 'a', current: [], top: [{ name: 'X', weeks: 1, bestPosition: 3 }], seriesCount: 1 },
+    })
+    expect(bos).toMatchObject({ status: 'hesaplandi', data: { now: [] } })
+    expect(buildPlatformLists({ ownRanking: null }).status).toBe('hesaplanamaz')
     expect(buildPlatformLists(null).status).toBe('hesaplanamaz')
   })
 
-  it('üç profilde de yer alır; liste okunamazsa rapor çökmez', async () => {
-    for (const keys of Object.values(PROFILES)) expect(keys[1]).toBe('platformLists')
+  it('liste okunamazsa rapor çökmez, eksik veriye düşer', async () => {
     const r = await buildCountryReport('DE', { useCache: false, deps: deps() })
     expect(r.sections.platformLists.status).toBe('hesaplandi')
     expect(r.dataCutoffs.listsLastDate).toBe('2026-10-04')
@@ -680,5 +638,91 @@ describe('platformLists — tüm platformların Top 10 listeleri', () => {
     })
     expect(hatali.sections.platformLists).toMatchObject({ status: 'hesaplanamaz' })
     expect(hatali.dataGaps.map((g) => g.section)).toContain('platformLists')
+  })
+})
+
+describe('öne çıkan diziler — IMDb bağlamı', () => {
+  it('her diziye IMDb puanı ve 7 günlük oy artışı eklenir; IMDb yoksa null, skor değişmez', async () => {
+    const imdb = {
+      1: { status: 'ready', rating: 7.4, votes: 13749, votesGrowth: { d7: { votes: 320, days: 7, since: 'x' } } },
+    }
+    const r = await buildCountryReport('DE', {
+      useCache: false,
+      deps: deps({ getImdbData: async (id) => imdb[id] ?? { status: 'unavailable' } }),
+    })
+    const entries = r.sections.topSeries.data.entries
+    const bir = entries.find((e) => e.tmdbId === 1)
+    expect(bir.imdb).toEqual({ rating: 7.4, votes: 13749, growth7: { votes: 320, days: 7, since: 'x' } })
+    expect(entries.filter((e) => e.tmdbId !== 1).every((e) => e.imdb === null)).toBe(true)
+  })
+})
+
+describe('buildWikiInterest — okunma ilgisi', () => {
+  const satir = (lang, id, ym, views) => ({
+    lang,
+    tmdb_id: id,
+    year: Number(ym.slice(0, 4)),
+    month: Number(ym.slice(5)),
+    views,
+  })
+  const names = (id) => ({ 1: 'Uzak Şehir', 2: 'Kızılcık Şerbeti' })[id]
+
+  it('dil başına aylık seri ve en çok okunanlar; ana gösterge ülkeye özgü dilden, geçen aya göre değişim', () => {
+    const rows = [
+      satir('bg', 1, '2026-07', 300),
+      satir('bg', 2, '2026-07', 100),
+      satir('bg', 1, '2026-08', 500),
+      satir('en', 2, '2026-08', 9000),
+    ]
+    const s = buildWikiInterest(
+      [
+        { lang: 'bg', regional: false },
+        { lang: 'en', regional: true },
+      ],
+      rows,
+      names
+    )
+    expect(s.status).toBe('hesaplandi')
+    const bg = s.data.languages.find((l) => l.lang === 'bg')
+    expect(bg.months).toEqual([
+      { period: '2026-07', views: 400 },
+      { period: '2026-08', views: 500 },
+    ])
+    expect(bg.top[0]).toEqual({ seriesId: 1, name: 'Uzak Şehir', views: 800 })
+    expect(s.data.primary).toMatchObject({ lang: 'bg', last: 500, prev: 400, changePct: 25, topName: 'Uzak Şehir' })
+    expect(s.data.languages.find((l) => l.lang === 'en').regional).toBe(true)
+  })
+
+  it('kaynakta henüz tamamlanmamış son ay (önceki üç ayın %40ının altı) seriye girmez', () => {
+    const rows = ['2026-05', '2026-06', '2026-07', '2026-08'].map((m) => satir('bg', 1, m, 1000))
+    const s = buildWikiInterest([{ lang: 'bg', regional: false }], [...rows, satir('bg', 1, '2026-09', 30)], names, {
+      now: new Date('2026-10-05T12:00:00Z'),
+    })
+    expect(s.data.incompleteMonth).toBe('2026-09')
+    expect(s.data.languages[0].months.at(-1).period).toBe('2026-08')
+    expect(s.data.primary).toMatchObject({ period: '2026-08', last: 1000, prev: 1000, changePct: 0 })
+    // doğal düşüş (%40 üstü) ayıklanmaz
+    const d = buildWikiInterest([{ lang: 'bg', regional: false }], [...rows, satir('bg', 1, '2026-09', 600)], names, {
+      now: new Date('2026-10-05T12:00:00Z'),
+    })
+    expect(d.data.incompleteMonth).toBeNull()
+  })
+
+  it('içinde bulunulan (yarım) ay seriye girmez', () => {
+    const s = buildWikiInterest(
+      [{ lang: 'bg', regional: false }],
+      [satir('bg', 1, '2026-08', 500), satir('bg', 1, '2026-09', 900), satir('bg', 1, '2026-10', 10)],
+      names,
+      { now: new Date('2026-10-05T12:00:00Z') }
+    )
+    expect(s.data.languages[0].months.map((m) => m.period)).toEqual(['2026-08', '2026-09'])
+    expect(s.data.primary).toMatchObject({ period: '2026-09', last: 900, prev: 500 })
+  })
+
+  it('yalnızca ortak dil varsa ana gösterge yok; dil ya da kayıt yoksa hesaplanamaz', () => {
+    const s = buildWikiInterest([{ lang: 'en', regional: true }], [satir('en', 1, '2026-08', 10)], names)
+    expect(s.data.primary).toBeNull()
+    expect(buildWikiInterest([], [], names).status).toBe('hesaplanamaz')
+    expect(buildWikiInterest([{ lang: 'bg', regional: false }], [], names).status).toBe('hesaplanamaz')
   })
 })

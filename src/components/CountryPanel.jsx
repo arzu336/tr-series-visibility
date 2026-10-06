@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
+import { watchLevelText } from '../lib/scale.js'
 import ActorPanel from './ActorPanel.jsx'
+import { CountryTv } from './TvSections.jsx'
 import Avatar from './Avatar.jsx'
 import Flag from './Flag.jsx'
 import { IconReport } from './Icons.jsx'
-import { fetchRegionalInterest, fetchCountryCharts } from '../lib/api.js'
+import { fetchRegionalInterest, fetchCountryCharts, fetchCountryContext } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import PeriodChart from './PeriodChart.jsx'
 import ChartList, { fmtDateTr } from './ChartList.jsx'
@@ -194,6 +196,73 @@ function yearAgoText(ya) {
  * "Şu an listede" + "Bu ülkede en çok izlenenler" — tüm platformların listeleri birlikte (her satırda
  * hangi platform olduğu yazar). Hiçbir platformda liste yoksa Wikipedia okunma sıralamasına düşer.
  */
+/** Liste ya da okunma verisi var mı (yoksa yayın kataloğu olmayan ülkede "en çok izlenenler" bölümü hiç basılmaz). */
+function hasWatchData(charts) {
+  const l = charts?.lists
+  return Boolean(
+    (l && (l.now.length > 0 || l.top.length > 0 || charts.netflix?.status === 'hesaplandi')) || charts?.wiki?.[0]
+  )
+}
+
+const fmtInt = (n) => new Intl.NumberFormat('tr-TR').format(n)
+
+/**
+ * Yayın kataloğu olmayan ülkede boş bölümler yerine eldeki veri (2026-10-06): bağlı olduğu ülkenin bu haftaki
+ * sıralaması, Türkiye'de okuyan öğrenci sayısı, basın taraması özeti.
+ */
+export function CountryContext({ iso2, allCountries, onSelectSeries, onSelectCountry }) {
+  const { status, data } = useAsync(() => fetchCountryContext(iso2), [iso2])
+  if (status === 'loading' || status === 'idle') return <p className="dashboard__empty">Yükleniyor…</p>
+  if (status !== 'ready' || !data) return null
+  const { parent, students, press } = data
+  const parentName = parent ? countryNames[parent.iso2]?.name || parent.iso2 : null
+  const parentCountry = parent ? allCountries?.find((c) => c.iso2 === parent.iso2) : null
+  return (
+    <>
+      {parent && (
+        <>
+          <h3>Bağlı olduğu ülke</h3>
+          <p className="panel__context-line">
+            <Flag iso2={parent.iso2} />{' '}
+            {parentCountry && onSelectCountry ? (
+              <button type="button" className="dashboard__link-btn" onClick={() => onSelectCountry(parentCountry)}>
+                {parentName}
+              </button>
+            ) : (
+              parentName
+            )}{' '}
+            — yayın platformları çoğunlukla bu ülkenin kataloğunu sunar.
+          </p>
+          {parent.now.length > 0 && (
+            <ChartList
+              compact
+              items={parent.now.map((it) => ({ ...it, rank: it.position, kind: 'series' }))}
+              onSelect={onSelectSeries}
+            />
+          )}
+        </>
+      )}
+      <h3>Eldeki veriler</h3>
+      <ul className="panel__context">
+        <li>
+          <strong>Türkiye'de okuyan öğrenci:</strong>{' '}
+          {students
+            ? `${fmtInt(students.students)} (${students.year})${students.changePct != null ? ` · ${students.baseYear}'e göre ${students.changePct > 0 ? '+' : ''}${students.changePct}%` : ''}`
+            : 'kayıt yok'}
+        </li>
+        <li>
+          <strong>Basın:</strong>{' '}
+          {!press
+            ? 'tarama sırada; henüz sonuç yok'
+            : press.withNews > 0
+              ? `${press.series} dizi tarandı, ${press.withNews} taramada haber bulundu (${press.news} haber)${press.tone ? ` · ton ${press.tone}` : ''}`
+              : `${press.scanned} tarama yapıldı, henüz haber bulunamadı`}
+        </li>
+      </ul>
+    </>
+  )
+}
+
 export function WatchLists({ charts, onSelectSeries }) {
   if (!charts) return null
   const nf = charts.netflix
@@ -285,6 +354,11 @@ export default function CountryPanel({
   }, [chartsReq.error])
 
   const sortedSeriesList = useMemo(() => country?.seriesList || [], [country?.seriesList])
+  const seriesNames = useMemo(() => {
+    const m = new Map()
+    for (const c of allCountries || []) for (const sr of c.seriesList || []) if (!m.has(sr.id)) m.set(sr.id, sr.name)
+    return m
+  }, [allCountries])
 
   return (
     <>
@@ -346,15 +420,37 @@ export default function CountryPanel({
                   kullanıcı talebiyle kaldırıldı — veri kaynağı dökümü artık hiçbir yerde
                   gösterilmiyor. Alt başlık ("Arama hacmi endeksi: X/100") ayrı bir gerçek
                   bilgi olduğu için (rozet değil) olduğu gibi kalıyor. */}
-              {country.dataSource === 'proxy' ? (
+              {country.limited ? (
+                <p className="panel__subtitle">
+                  Sınırlı veri: bu ülkede yayın kataloğu tutulmuyor.
+                  {country.watchSignal?.provisional ? ` ${watchLevelText(country.watchSignal)}.` : ''}
+                </p>
+              ) : country.dataSource === 'proxy' ? (
                 <p className="panel__subtitle">Arama hacmi endeksi: {country.searchInterestScore}/100</p>
               ) : (
                 <p className="panel__subtitle">{country.seriesCount} dizi yayında</p>
               )}
 
-              <WatchLists charts={charts} onSelectSeries={(id) => onSelectSeriesGlobal?.(id)} />
+              {(country.dataSource !== 'proxy' || hasWatchData(charts)) && (
+                <WatchLists charts={charts} onSelectSeries={(id) => onSelectSeriesGlobal?.(id)} />
+              )}
 
-              <h3>Listeye giren diziler — zaman içinde</h3>
+              <CountryTv
+                iso2={country.iso2}
+                seriesNames={seriesNames}
+                onSelectSeries={(id) => onSelectSeriesGlobal?.(id)}
+              />
+
+              {country.dataSource === 'proxy' && (
+                <CountryContext
+                  iso2={country.iso2}
+                  allCountries={allCountries}
+                  onSelectSeries={(id) => onSelectSeriesGlobal?.(id)}
+                  onSelectCountry={onSelectCountry}
+                />
+              )}
+
+              {country.dataSource !== 'proxy' && <h3>Listeye giren diziler — zaman içinde</h3>}
               {charts?.timeline?.length ? (
                 <>
                   <PeriodChart
@@ -370,12 +466,8 @@ export default function CountryPanel({
                   />
                   <p className="dashboard__hint">Dönem başına listelere giren farklı Türk dizisi sayısı.</p>
                 </>
-              ) : (
-                <p className="dashboard__empty">
-                  {country.dataSource === 'proxy'
-                    ? EMPTY.visibilityHistoryProxy
-                    : 'Bu ülkede liste kaydı yok; zaman çizelgesi oluşmadı.'}
-                </p>
+              ) : country.dataSource === 'proxy' ? null : (
+                <p className="dashboard__empty">Bu ülkede liste kaydı yok; zaman çizelgesi oluşmadı.</p>
               )}
 
               {country.topSeries && (
@@ -385,12 +477,7 @@ export default function CountryPanel({
                 </>
               )}
 
-              {country.dataSource === 'proxy' ? (
-                <>
-                  <h3>Yayındaki diziler</h3>
-                  <p className="dashboard__empty">Bu ülke için yayın verisi yok.</p>
-                </>
-              ) : (
+              {country.dataSource === 'proxy' ? null : (
                 <>
                   <h3 title={AVAILABILITY_NOTE}>
                     Yayındaki diziler — {country.seriesCount} dizi

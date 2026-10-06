@@ -15,9 +15,8 @@ const Globe3D = lazy(() => import('./components/Globe3D.jsx'))
 const Map2D = lazy(() => import('./components/Map2D.jsx'))
 const AnalystDashboard = lazy(() => import('./components/AnalystDashboard.jsx'))
 const TrendsExplorer = lazy(() => import('./components/TrendsExplorer.jsx'))
-const ImpactAnalysisTabs = lazy(() => import('./components/ImpactAnalysisTabs.jsx'))
+const ReportsHub = lazy(() => import('./components/report/ReportsHub.jsx'))
 const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
-const CountryReportView = lazy(() => import('./components/report/CountryReportView.jsx'))
 const SeriesPage = lazy(() => import('./components/SeriesPage.jsx'))
 const PENDING_APPROVALS_POLL_MS = 60000
 const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
@@ -25,6 +24,7 @@ import { fetchVisibility, logout, fetchAdminUsers, fetchImdbData } from './lib/a
 import { continentCentroid } from './lib/continents.js'
 import countryNames from './data/country-centroids.json'
 import { IconClose } from './components/Icons.jsx'
+import { readYoutubeNotice } from './components/YoutubeConnections.jsx'
 const SIDEBAR_COLLAPSED_KEY = 'gp_sidebar_collapsed'
 const PANEL_COLLAPSED_KEY = 'gp_panel_collapsed'
 
@@ -58,8 +58,22 @@ export default function App() {
   const [panelCollapsed, setPanelCollapsed] = usePersistedState(PANEL_COLLAPSED_KEY, darEkranVarsayilani, boolStorage)
   const [activeSeriesId, setActiveSeriesId] = useState(null)
   const [seriesPageId, setSeriesPageId] = useState(seriesIdFromUrl)
-  const [view, setView] = useState(() => (seriesIdFromUrl() != null ? 'series' : 'map'))
-  const [reportIso2, setReportIso2] = useState(null)
+  const [view, setView] = useState(() =>
+    seriesIdFromUrl() != null ? 'series' : new URLSearchParams(window.location.search).has('yonetim') ? 'admin' : 'map'
+  )
+  // YouTube onay ekranından dönüş (?yonetim=youtube&youtube=…): bildirim yönetim ekranında gösterilir, adres temizlenir.
+  const [youtubeNotice] = useState(() => readYoutubeNotice())
+  useEffect(() => {
+    if (new URLSearchParams(window.location.search).has('yonetim')) {
+      window.history.replaceState(null, '', window.location.pathname)
+    }
+  }, [])
+  // Raporlar menüsü: sekme (kuresel | ulke | dizi) + seçili ülke / dizi
+  const [reports, setReports] = useState({ tab: 'ulke', iso2: null, seriesId: null })
+  const openReports = useCallback((next) => {
+    setReports((r) => ({ ...r, ...next }))
+    setView('reports')
+  }, [])
   const [mapView, setMapView] = usePersistedState(MAP_VIEW_STORAGE_KEY, '2d', {
     parse: (s) => (s === '3d' ? '3d' : '2d'),
   })
@@ -80,7 +94,7 @@ export default function App() {
   }, [showProfileMenu])
 
   useEffect(() => {
-    const YONETICI_GORUNUMLERI = ['dashboard', 'impact', 'admin']
+    const YONETICI_GORUNUMLERI = ['dashboard', 'admin']
     if (!user?.isAdmin && YONETICI_GORUNUMLERI.includes(view)) setView('map')
   }, [user?.isAdmin, view])
 
@@ -115,7 +129,12 @@ export default function App() {
     setSelectedActorId(null)
   }, [])
 
-  // Tarayıcının geri/ileri tuşu: adreste ?dizi= varsa dizi sayfası, yoksa (dizi sayfasındaysak) harita.
+  // Dizi sayfasının açıldığı ekran: geri düğmesi ve tarayıcının geri tuşu oraya döner (Arama İlgisi'nde dizi
+  // arayan kullanıcı aramaya dönebilsin; varsayılan harita).
+  const [seriesReturn, setSeriesReturn] = useState('map')
+  const seriesReturnRef = useRef('map')
+
+  // Tarayıcının geri/ileri tuşu: adreste ?dizi= varsa dizi sayfası, yoksa (dizi sayfasındaysak) açıldığı ekran.
   useEffect(() => {
     const onPopState = () => {
       const id = seriesIdFromUrl()
@@ -123,7 +142,7 @@ export default function App() {
         setSeriesPageId(id)
         setView('series')
       } else {
-        setView((v) => (v === 'series' ? 'map' : v))
+        setView((v) => (v === 'series' ? seriesReturnRef.current : v))
       }
     }
     window.addEventListener('popstate', onPopState)
@@ -176,8 +195,10 @@ export default function App() {
   )
 
   // Herhangi bir yerde diziye tıklamak dizi sayfasını açar (sağ panel yalnızca kısa özet).
-  const handleOpenSeriesPage = useCallback((seriesId) => {
+  const handleOpenSeriesPage = useCallback((seriesId, from = 'map') => {
     if (seriesId == null) return
+    seriesReturnRef.current = from
+    setSeriesReturn(from)
     if (seriesIdFromUrl() !== seriesId) window.history.pushState(null, '', `?dizi=${seriesId}`)
     setSeriesPageId(seriesId)
     setView('series')
@@ -187,6 +208,11 @@ export default function App() {
   const handleBackToMap = useCallback(() => {
     if (seriesIdFromUrl() != null) window.history.pushState(null, '', window.location.pathname)
     setView('map')
+  }, [])
+
+  const handleBackFromSeries = useCallback(() => {
+    if (seriesIdFromUrl() != null) window.history.pushState(null, '', window.location.pathname)
+    setView(seriesReturnRef.current)
   }, [])
 
   const handleSelectActor = useCallback(
@@ -208,10 +234,8 @@ export default function App() {
 
   const handleSelectCountryGlobal = handleSelectCountryFromReport
 
-  const handleOpenReport = useCallback((iso2) => {
-    setReportIso2(iso2)
-    setView('report')
-  }, [])
+  const handleOpenReport = useCallback((iso2) => openReports({ tab: 'ulke', iso2 }), [openReports])
+  const handleOpenSeriesReport = useCallback((seriesId) => openReports({ tab: 'dizi', seriesId }), [openReports])
 
   const handleFocusContinent = useCallback((continentStats) => {
     const target = continentCentroid(continentStats.countries)
@@ -252,24 +276,15 @@ export default function App() {
     setSeriesFilter(null)
   }, [])
 
-  const handleShowSeriesOnMap = useCallback((result) => {
-    setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
-    setHighlightFilter(null)
-    setActorHighlight(null)
-    setView('map')
-  }, [])
-
-  // Dizi sayfasından "Arama ilgisi analizi"ne geçilince analiz sayfasında dizi sayfasına dönüş düğmesi çıkar.
-  // Üst menüden "Arama İlgisi"ne doğrudan gelindiğinde temizlenir (bkz. menü düğmesi).
-  const [analysisReturn, setAnalysisReturn] = useState(null) // { id, name } | null
-
-  const handleGoToSeriesAnalysis = useCallback(
-    (seriesName) => {
-      window.history.pushState(null, '', `?series=${encodeURIComponent(seriesName)}`)
-      setAnalysisReturn(view === 'series' && seriesPageId != null ? { id: seriesPageId, name: seriesName } : null)
-      setView('trends')
+  // Dizi sayfasındaki "İlgiyi haritada göster": haritayı dizinin ülkelere göre arama ilgisiyle boyar.
+  const handleShowInterestFromPage = useCallback(
+    (result) => {
+      setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
+      setHighlightFilter(null)
+      setActorHighlight(null)
+      handleBackToMap()
     },
-    [view, seriesPageId]
+    [handleBackToMap]
   )
 
   // Dizi sayfasındaki "Haritada göster": listeye girdiği ülkeleri işaretleyip haritaya döner.
@@ -356,48 +371,28 @@ export default function App() {
             )}
             <button
               className={view === 'trends' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
-              onClick={() => {
-                setAnalysisReturn(null)
-                setView('trends')
-              }}
+              onClick={() => setView('trends')}
             >
               Arama İlgisi
             </button>
-            {/* Etki & İhracat Analizi artık yalnızca YÖNETİCİ görünümü: karar destek panelinin bu
-                bölümü 11 ayrı analiz bölümü ve ~5900px içerik taşıyor (medya algısı tablosu tek
-                başına 30 satır). Sıradan kullanıcının kendi panelinde bu ayrıntıya ihtiyacı yok;
-                içerik silinmedi, yönetici görünümüne alındı ve PDF raporunda tam hâliyle duruyor.
-                Sunucu tarafında da /api/impact* uçları requireAdmin ile korunuyor — düğmeyi
-                gizlemek tek başına yalnızca görsel bir önlem olurdu. */}
-            {user?.isAdmin && (
-              <button
-                className={view === 'impact' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
-                onClick={() => setView('impact')}
-                title="Ekonomik, Kültürel ve İhracat Etkisi"
-              >
-                Etki & İhracat Analizi
-              </button>
-            )}
+            <button
+              className={view === 'reports' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
+              onClick={() => setView('reports')}
+              title="Küresel görünüm, ülke brifingi ve dizi raporu"
+            >
+              Raporlar
+            </button>
             {user?.isAdmin && (
               <button
                 className={view === 'admin' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
                 onClick={() => setView('admin')}
               >
-                Kullanıcılar
+                Yönetim
                 {pendingApprovals > 0 && (
                   <span className="app__nav-badge" title={`${pendingApprovals} onay bekliyor`}>
                     {pendingApprovals}
                   </span>
                 )}
-              </button>
-            )}
-            {reportIso2 && (
-              <button
-                className={view === 'report' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
-                onClick={() => setView('report')}
-                title={`${countryNames[reportIso2]?.name || reportIso2} ülke raporu`}
-              >
-                Ülke Raporu
               </button>
             )}
             <button className="app__nav-btn app__nav-btn--logout" onClick={handleLogout}>
@@ -440,22 +435,20 @@ export default function App() {
               <AnalystDashboard canEdit={Boolean(user?.isAdmin)} onViewSeriesOnMap={handleOpenSeriesPage} />
             )}
             {view === 'trends' && (
-              <TrendsExplorer
-                onShowOnMap={handleShowSeriesOnMap}
-                backLabel={analysisReturn ? `${analysisReturn.name} sayfasına dön` : null}
-                onBack={analysisReturn ? () => handleOpenSeriesPage(analysisReturn.id) : null}
+              <TrendsExplorer onOpenSeries={(id) => handleOpenSeriesPage(id, 'trends')} countries={countries} />
+            )}
+            {view === 'reports' && (
+              <ReportsHub
+                isAdmin={Boolean(user?.isAdmin)}
+                countries={countries}
+                tab={reports.tab}
+                iso2={reports.iso2}
+                seriesId={reports.seriesId}
+                onChange={(next) => setReports((r) => ({ ...r, ...next }))}
               />
             )}
-            {view === 'impact' && user?.isAdmin && (
-              <ImpactAnalysisTabs onSelectCountry={handleSelectCountryFromReport} />
-            )}
-            {view === 'admin' && user?.isAdmin && <AdminUsersPanel currentUserId={user.id} />}
-            {view === 'report' && reportIso2 && (
-              <CountryReportView
-                iso2={reportIso2}
-                countryName={countryNames[reportIso2]?.name || reportIso2}
-                onBack={() => setView('map')}
-              />
+            {view === 'admin' && user?.isAdmin && (
+              <AdminUsersPanel currentUserId={user.id} youtubeNotice={youtubeNotice} />
             )}
             {view === 'series' && (
               <>
@@ -465,10 +458,13 @@ export default function App() {
                   <SeriesPage
                     seriesId={seriesPageId}
                     allCountries={countries}
-                    onBack={handleBackToMap}
+                    onBack={handleBackFromSeries}
+                    backLabel={seriesReturn === 'trends' ? 'Arama İlgisi’ne dön' : 'Haritaya dön'}
                     onShowOnMap={handleShowSeriesFromPage}
                     onSelectActor={handleSelectActorFromSeriesPage}
-                    onAnalyze={handleGoToSeriesAnalysis}
+                    onShowInterestOnMap={handleShowInterestFromPage}
+                    onOpenReport={handleOpenSeriesReport}
+                    isAdmin={Boolean(user?.isAdmin)}
                   />
                 )}
               </>

@@ -87,30 +87,3 @@ export async function runSocialEnrichmentIfNeeded() {
 export async function enrichSeriesSocialNow(seriesName, countryIso2s) {
   return enrichSeriesAcrossCountries(seriesName, countryIso2s, { throttle: false })
 }
-
-const scanLocalizedSocialStmt = db.prepare(
-  "SELECT value FROM cache_entries WHERE key LIKE 'serp:social-local:%' AND expires_at > ?"
-)
-
-export function getSocialEnrichmentSummary() {
-  const rows = scanLocalizedSocialStmt.all(Date.now())
-  if (rows.length === 0) {
-    return { status: 'pending', scannedCount: 0 }
-  }
-  let withPlatform = 0
-  let withRatings = 0
-  let withTrailer = 0
-  for (const row of rows) {
-    const entry = JSON.parse(row.value)
-    if (entry.knowledgeGraph?.watchPlatforms?.length > 0) withPlatform++
-    if (entry.knowledgeGraph?.ratings?.length > 0) withRatings++
-    if (entry.youtube?.link) withTrailer++
-  }
-  return {
-    status: 'ready',
-    scannedCount: rows.length,
-    withPlatformCount: withPlatform,
-    withRatingsCount: withRatings,
-    withTrailerCount: withTrailer,
-  }
-}

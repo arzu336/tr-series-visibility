@@ -1,60 +1,54 @@
 import express from 'express'
 import { isValidIso2, normalizeIso2 } from '../services/requestGuards.js'
-import {
-  buildCountryReport,
-  selectProfile,
-  PROFILES,
-  PROFILE_MIN_ACCESS,
-  PROFILE_TITLES,
-} from '../services/countryReport.js'
+import { buildCountryReport } from '../services/countryReport.js'
+import { buildBriefing } from '../services/countryBriefing.js'
+import { buildSeriesReport } from '../services/seriesReport.js'
+import { buildGlobalReport } from '../services/globalReport.js'
+import { requireAdmin } from './auth.js'
 import { sanitizeReportPayload } from '../services/claimsGate.js'
 import { direktifIceriyorMu } from '../llm.js'
-import { hasAccessLevel } from './auth.js'
 import { upstream } from './shared.js'
 
-// Ülke raporu: tek veri kaynağı (buildCountryReport), üç profil (yalnızca bölüm seçimi), profil
-// bazlı yetki: executive → viewer+, marketing → analyst+, producer → admin.
+// Ülke brifingi: tek veri kaynağı (buildCountryReport) → brifing biçimi (countryBriefing.js). Oturum açmış
+// her kullanıcı aynı belgeyi görür (profil ve profil bazlı yetki 2026-10-05'te kaldırıldı).
 export const reportRouter = express.Router()
-
-function allowedProfilesFor(user) {
-  return Object.keys(PROFILES).filter((p) => hasAccessLevel(user, PROFILE_MIN_ACCESS[p]))
-}
-
-reportRouter.get('/api/report/profiles', (req, res) => {
-  res.json({
-    profiles: Object.keys(PROFILES).map((p) => ({
-      id: p,
-      title: PROFILE_TITLES[p],
-      minAccess: PROFILE_MIN_ACCESS[p],
-      allowed: hasAccessLevel(req.currentUser, PROFILE_MIN_ACCESS[p]),
-    })),
-  })
-})
 
 reportRouter.get(
   '/api/report/country/:iso2',
   upstream('report/country', async (req, res) => {
     if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
-    const profile = String(req.query.profile || 'executive')
-    if (!PROFILES[profile]) {
-      return res.status(400).json({ error: `Bilinmeyen profil: ${profile}`, profiles: Object.keys(PROFILES) })
-    }
-    const minAccess = PROFILE_MIN_ACCESS[profile]
-    if (!hasAccessLevel(req.currentUser, minAccess)) {
-      return res
-        .status(403)
-        .json({ error: `"${PROFILE_TITLES[profile]}" için en az ${minAccess} erişim düzeyi gerekir` })
-    }
-
     const iso2 = normalizeIso2(req.params.iso2)
     const report = await buildCountryReport(iso2, { useCache: req.query.fresh !== '1' })
-    const selected = selectProfile(report, profile)
+    const selected = buildBriefing(report)
     const { removedClaims, removedDirectives } = sanitizeReportPayload(selected, { direktifIceriyorMu })
     if (removedClaims || removedDirectives) {
-      console.log(
-        `[report] ${iso2}/${profile}: ${removedClaims} doğrulanmamış iddia, ${removedDirectives} direktif elendi`
-      )
+      console.log(`[report] ${iso2}: ${removedClaims} doğrulanmamış iddia, ${removedDirectives} direktif elendi`)
     }
-    res.json({ ...selected, availableProfiles: allowedProfilesFor(req.currentUser) })
+    res.json(selected)
+  })
+)
+
+// Dizi raporu: öncelikli okur dağıtımcılar ve temsilcilikler; ülke brifingiyle aynı biçim ve aynı içerik kapısı.
+reportRouter.get(
+  '/api/report/series/:tmdbId',
+  upstream('report/series', async (req, res) => {
+    const id = Number(req.params.tmdbId)
+    if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Geçersiz dizi kimliği' })
+    const report = await buildSeriesReport(id, { useCache: req.query.fresh !== '1' })
+    if (!report) return res.status(404).json({ error: 'Dizi katalogda yok' })
+    sanitizeReportPayload(report, { direktifIceriyorMu })
+    res.json(report)
+  })
+)
+
+// Küresel görünüm (eski "Etki analizi"): bütün ülkeleri kapsayan veriler yönetici yetkisi ister (önceki
+// eski etki analizi uçlarıyla aynı kural).
+reportRouter.get(
+  '/api/report/global',
+  requireAdmin,
+  upstream('report/global', async (req, res) => {
+    const report = await buildGlobalReport({ useCache: req.query.fresh !== '1' })
+    sanitizeReportPayload(report, { direktifIceriyorMu })
+    res.json(report)
   })
 )

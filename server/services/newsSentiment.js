@@ -1,5 +1,6 @@
 import db from '../db.js'
-import { fetchNewsArticlesGdeltCached } from './gdeltNews.js'
+import { fetchNewsArticlesGdeltCached, TURKISH_CONTEXT } from './gdeltNews.js'
+import { asciiVariant, getEnglishTitles } from './localTitles.js'
 import { analyzeMediaSentiment } from '../llm.js'
 
 const NEWS_SENTIMENT_TTL_MS = 14 * 24 * 60 * 60 * 1000
@@ -193,6 +194,37 @@ function rowToResult(row, extra) {
   }
 }
 
+const updateSentimentStmt = db.prepare(`
+  UPDATE media_sentiment SET positive_score = ?, neutral_score = ?, negative_score = ?, dominant_sentiment = ?,
+    llm_summary = ? WHERE series_id = ? AND country_iso2 = ?
+`)
+
+async function retrySentiment(row, seriesName) {
+  let articles = []
+  try {
+    articles = JSON.parse(row.raw_articles || '[]')
+  } catch {
+    return null
+  }
+  if (!articles.length) return null
+  try {
+    const sentiment = await analyzeMediaSentiment(articles, seriesName)
+    updateSentimentStmt.run(
+      sentiment.positive ?? null,
+      sentiment.neutral ?? null,
+      sentiment.negative ?? null,
+      sentiment.dominant ?? 'yetersiz-veri',
+      sentiment.summary ?? null,
+      row.series_id,
+      row.country_iso2
+    )
+    return getStmt.get(row.series_id, row.country_iso2)
+  } catch (err) {
+    console.error(`[newsSentiment] ${seriesName}/${row.country_iso2} ton analizi yeniden denenemedi:`, err.message)
+    return null
+  }
+}
+
 /**
  * 1. media_sentiment'te geçerli (expires_at > şimdi) bir kayıt varsa SerpAPI/LLM'e hiç
  *    gitmeden onu döner.
@@ -203,20 +235,44 @@ function rowToResult(row, extra) {
  *    dominant_sentiment 'yetersiz-veri' işaretlenir (bkz. themeInsight.js'teki aynı prensip:
  *    ham veri asla LLM'in başarısına bağımlı değil).
  */
-export async function fetchAndAnalyzeSentiment(seriesId, seriesName, localTitle, countryIso2, { priority } = {}) {
+export async function fetchAndAnalyzeSentiment(
+  seriesId,
+  seriesName,
+  localTitle,
+  countryIso2,
+  { priority, englishTitles = getEnglishTitles(seriesId, seriesName) } = {}
+) {
   const iso2 = countryIso2.toUpperCase()
   const existing = getStmt.get(seriesId, iso2)
-  if (existing && Date.now() <= existing.expires_at && existing.source === NEWS_SOURCE) {
+  // Arama: Türkçe ad + Türkçe harfsiz yazımı + İngilizce uluslararası adları + o ülkedeki yerel ad (varsa).
+  // Kaynak yabancı dildeki haberleri İngilizce çevirisinde aradığı için Türkçe ad çoğunlukla bulunmuyordu
+  // (2026-10-06 ölçümü: 323 taramanın 1'i haber buldu; "Kizilcik Serbeti" 0, "Cranberry Sherbet" 15 haber).
+  // İngilizce ya da yerel ad genel bir ifade olabileceğinden o zaman haberde "Turkish/Turkey" de aranır.
+  // Arama değiştiyse kayıt süresi dolmamış olsa da yeniden taranır.
+  const phrases = [...new Set([seriesName, asciiVariant(seriesName), ...englishTitles, localTitle].filter(Boolean))]
+  const context = englishTitles.length || localTitle ? TURKISH_CONTEXT : null
+  const query = phrases.join(' | ') + (context ? ` + ${context}` : '')
+  if (
+    existing &&
+    Date.now() <= existing.expires_at &&
+    existing.source === NEWS_SOURCE &&
+    existing.query_used === query
+  ) {
+    // Haber bulunmuş ama ton analizi (dil modeli) o an başarısız olmuşsa: haberi yeniden aramadan, kayıtlı
+    // haberlerle analiz yeniden denenir. Önceden kayıt 14 gün boyunca "yetersiz veri" kalıyordu.
+    if (existing.total_news_count > 0 && existing.positive_score == null) {
+      const retried = await retrySentiment(existing, seriesName)
+      if (retried) return rowToResult(retried, { stale: false })
+    }
     return rowToResult(existing, { stale: false })
   }
 
-  const query = localTitle || seriesName
   const now = new Date()
   const nowIso = now.toISOString()
 
   let articles
   try {
-    const sonuc = await fetchNewsArticlesGdeltCached(query, iso2, { priority })
+    const sonuc = await fetchNewsArticlesGdeltCached(phrases, iso2, { priority, context })
     if (sonuc.unsupported) {
       return {
         seriesId,
