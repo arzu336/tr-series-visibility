@@ -1,14 +1,15 @@
 import db from '../db.js'
-import { fetchAndAnalyzeSentiment } from './newsSentiment.js'
+import { fetchAndAnalyzeSentiment, retryPendingSentiments } from './newsSentiment.js'
 import { GDELT_PRIORITY } from './gdeltNews.js'
 import { getLocalTitle } from './localTitles.js'
-import { getNewsScanPairs } from './newsScanTargets.js'
+import { getNewsScanPairs, interleaveScanPairs } from './newsScanTargets.js'
 
 const WEEKLY_MS = 7 * 24 * 60 * 60 * 1000
 const META_KEY = 'lastAutoNewsScanAt'
 
 const MAX_RUN_MS = 25 * 60 * 1000
-const DELAY_AFTER_LIVE_CALL_MS = 1500
+// Google Haberler yanıtı 1–2 sn; arada bekleme dil modelinin (ton analizi) art arda istekte geri çevirmemesi için.
+const DELAY_AFTER_LIVE_CALL_MS = 3000
 
 const getMetaStmt = db.prepare('SELECT value FROM meta WHERE key = ?')
 const setMetaStmt = db.prepare(`
@@ -72,8 +73,10 @@ export async function runAutoNewsScanIfNeeded() {
   try {
     // Ülke başına o ülkede ilgili diziler (sıralamaya giren + orada yayında olan), bütün ülkeler.
     // Önceden en popüler 35 dizi × 25 ülkeydi; çiftlerin çoğu dizinin o ülkede bilinmediği eşleşmelerdi.
-    for (const { series, countries } of await getNewsScanPairs()) {
-      const result = await scanSeriesAcrossCountries(series.id, series.name, countries, {
+    // Diziler dönüşümlü taranır (her dizinin en önemli ülkesi önce); taranmış çiftler önbellekten hızla geçer.
+    const pairs = interleaveScanPairs(await getNewsScanPairs())
+    for (const { series, iso2 } of pairs) {
+      const result = await scanSeriesAcrossCountries(series.id, series.name, [iso2], {
         throttle: true,
         deadline,
       })
@@ -85,6 +88,12 @@ export async function runAutoNewsScanIfNeeded() {
         break
       }
     }
+
+    // Haberi bulunup tonu analiz edilemeyen kayıtlar dilimin sonunda yeniden denenir.
+    const adlar = new Map(pairs.map((p) => [p.series.id, p.series.name]))
+    const ton = await retryPendingSentiments({ nameOf: (id) => adlar.get(id), deadline: deadline + 5 * 60 * 1000 })
+    if (ton.analyzed || ton.failed)
+      console.log(`[autoNewsScheduler] ton analizi yeniden denendi: ${ton.analyzed} başarılı, ${ton.failed} başarısız`)
 
     if (tamamlandi) {
       setMetaStmt.run(META_KEY, String(Date.now()))

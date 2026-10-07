@@ -19,7 +19,6 @@ export function ChartSource({ source, periodLabel }) {
   return (
     <p className="chart-source">
       Kaynak: {source.label}
-      {source.platform ? ` · ${source.platform}` : ''}
       {periodLabel ? ` · ${periodLabel}` : ''}
       {source.fetchedAt ? ` · güncelleme ${fmtDateTr(source.fetchedAt, { withTime: true })}` : ''}
     </p>
@@ -103,10 +102,14 @@ export default function ChartList({
                 )}
               </span>
               <span className="chart-list__meta">
-                {periods != null ? `${periods} ${periodWord}${it.trend ? '' : ' listede'}` : ''}
-                {it.bestRank != null ? ` · en iyi #${it.bestRank}` : ''}
-                {it.lastDate ? ` · son ${fmtDateTr(it.lastDate)}` : ''}
-                {it.meta ? ` · ${it.meta}` : ''}
+                {[
+                  periods != null ? `${periods} ${periodWord}${it.trend ? '' : ' listede'}` : null,
+                  it.bestRank != null ? `en iyi #${it.bestRank}` : null,
+                  it.lastDate ? `son ${fmtDateTr(it.lastDate)}` : null,
+                  it.meta || null,
+                ]
+                  .filter(Boolean)
+                  .join(' · ')}
               </span>
             </span>
             <TrendBadge trend={it.trend} />

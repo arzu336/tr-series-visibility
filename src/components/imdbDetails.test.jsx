@@ -44,7 +44,12 @@ describe('EpisodeHeatmap', () => {
   it('özet, sezon ortalaması ve ipuçları; 3ten az puanlı bölümde hiç çizilmez', () => {
     const html = renderToString(<EpisodeHeatmap seasons={seasons} />).replaceAll('<!-- -->', '')
     expect(html).toContain('3/4 bölüm puanlı')
-    expect(html).toContain('en yüksek 1. sezon 1. bölüm')
+    expect(html).toContain('En iyi bölüm')
+    expect(html).toContain('1. sezon 1. bölüm · 80 oy')
+    expect(html).toContain('En zayıf bölüm')
+    expect(html).toContain('2. sezon 1. bölüm · 30 oy')
+    expect(html).toContain('düştü') // 1. sezon 7.8 → 2. sezon 4.8
+    expect(html).toContain('episode-map__cell--best')
     expect(html).toContain('7.8') // 1. sezon ortalaması (9.2 + 6.4) / 2
     expect(html).toContain('1. sezon 3. bölüm: puan yok')
     expect(
@@ -61,5 +66,24 @@ describe('Avatar — fotoğrafsız oyuncu', () => {
     const html = renderToString(<Avatar name="Orhan Becerir" src={null} className="cast-bar__photo" />)
     expect(html).toContain('avatar--initials')
     expect(html).toContain('OB')
+  })
+})
+
+describe('episodeSummary — az oylu bölüm uç değer olamaz', () => {
+  it('birkaç oylu 9.9 bölüm "en iyi" seçilmez', async () => {
+    const { episodeSummary } = await import('./EpisodeHeatmap.jsx')
+    const s = episodeSummary([
+      {
+        season: 1,
+        episodes: [
+          { episode: 1, rating: 7.1, votes: 400 },
+          { episode: 2, rating: 9.9, votes: 3 },
+          { episode: 3, rating: 7.8, votes: 380 },
+          { episode: 4, rating: 6.2, votes: 350 },
+        ],
+      },
+    ])
+    expect(s.best).toMatchObject({ episode: 3, rating: 7.8 })
+    expect(s.worst).toMatchObject({ episode: 4 })
   })
 })

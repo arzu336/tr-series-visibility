@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import Flag from '../Flag.jsx'
 
 /**
@@ -9,6 +9,7 @@ import Flag from '../Flag.jsx'
 export default function SearchPicker({ id, label, placeholder, items, value, onSelect, max = Infinity }) {
   const [query, setQuery] = useState('')
   const [open, setOpen] = useState(false)
+  const inputRef = useRef(null)
   const selected = items.find((i) => i.id === value) ?? null
   const matches = useMemo(() => {
     const q = query.trim().toLocaleLowerCase('tr')
@@ -20,6 +21,9 @@ export default function SearchPicker({ id, label, placeholder, items, value, onS
     onSelect(item.id)
     setQuery('')
     setOpen(false)
+    // Seçimden sonra odak bırakılır: odakta kalan kutuya yeniden tıklamak listeyi açmıyordu (liste yalnızca odak
+    // kazanınca açılıyordu) — "ülke seçtikten sonra değiştiremiyorum" (2026-10-07).
+    inputRef.current?.blur()
   }
 
   return (
@@ -32,6 +36,7 @@ export default function SearchPicker({ id, label, placeholder, items, value, onS
           </span>
         )}
         <input
+          ref={inputRef}
           id={id}
           type="search"
           role="combobox"
@@ -45,6 +50,7 @@ export default function SearchPicker({ id, label, placeholder, items, value, onS
             setOpen(true)
           }}
           onFocus={() => setOpen(true)}
+          onClick={() => setOpen(true)}
           onBlur={() => setTimeout(() => setOpen(false), 150)}
           onKeyDown={(e) => {
             if (e.key === 'Enter' && matches[0]) {

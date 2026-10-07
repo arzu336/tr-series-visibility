@@ -9,6 +9,7 @@ import {
   isRecap,
   buildCountryLists,
   buildOwnRanking,
+  combinedWeekRows,
   mergeAcrossPlatforms,
   weekEndOf,
   collapseSeasons,
@@ -386,5 +387,56 @@ describe('buildOwnRanking — platformun kendi haftalık sıralaması', () => {
   it('kayıt yoksa null', () => {
     expect(buildOwnRanking({ netflixRows: [], flixRows: [], to })).toBeNull()
     expect(buildOwnRanking({ netflixRows: [nf('2026-09-27', 1, 1, 'X')], flixRows: [], to: null })).toBeNull()
+  })
+})
+
+describe('combinedWeekRows — küresel şerit için birleşik hafta', () => {
+  it('Netflix yayımlandığı haftaya, diğer listeler o haftanın günlerinden; ülke × dizi başına en iyi sıra', () => {
+    const nf = (date, iso, rank, id) => ({
+      provider: 'netflix_tudum',
+      country_iso2: iso,
+      period_date: date,
+      rank,
+      series_id: id,
+      title_raw: `D${id}`,
+      segment: 'TV',
+    })
+    const fx = (date, iso, rank, id) => ({
+      provider: 'flixpatrol',
+      country_iso2: iso,
+      period_date: date,
+      rank,
+      series_id: id,
+      title_raw: `D${id}`,
+      segment: 'shahid',
+    })
+    const { rows, weeks } = combinedWeekRows(
+      [nf('2026-09-27', 'SA', 5, 1)],
+      [fx('2026-10-01', 'SA', 2, 1), fx('2026-10-02', 'IQ', 3, 1), fx('2026-09-20', 'IQ', 1, 9)]
+    )
+    expect(weeks).toEqual(['2026-10-04'])
+    expect(rows.map((r) => [r.country_iso2, r.series_id, r.rank, r.period_date]).sort()).toEqual([
+      ['IQ', 1, 3, '2026-10-04'],
+      ['SA', 1, 2, '2026-10-04'],
+    ])
+  })
+
+  it('birleşik sıralama dizinin son görüldüğü haftayı verir', () => {
+    const r = buildOwnRanking({
+      netflixRows: [],
+      flixRows: [
+        {
+          provider: 'flixpatrol',
+          segment: 'shahid',
+          period_date: '2026-09-20',
+          rank: 1,
+          series_id: 5,
+          title_raw: 'X',
+          program_kind: 'series',
+        },
+      ],
+      to: '2026-10-05',
+    })
+    expect(r.all[0]).toMatchObject({ seriesId: 5, lastSeen: '2026-09-21' })
   })
 })

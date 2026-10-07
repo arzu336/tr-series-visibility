@@ -36,7 +36,7 @@ const pressStmt = db.prepare(`
     AVG(CASE WHEN positive_score IS NOT NULL THEN positive_score END) pos,
     AVG(CASE WHEN negative_score IS NOT NULL THEN negative_score END) neg,
     SUM(positive_score IS NOT NULL) analyzed
-  FROM media_sentiment WHERE country_iso2 = ? AND source = 'gdelt'
+  FROM media_sentiment WHERE country_iso2 = ? AND source IN ('google_news', 'gdelt')
 `)
 
 function pressSummary(iso2) {

@@ -236,7 +236,7 @@ export default function Map2D({
                   <br />
                   {entry
                     ? entry.weeks
-                      ? `Netflix Top 10'da ${entry.weeks} hafta`
+                      ? `${entry.weeks} hafta sıralamada`
                       : 'Bu ülkede yayında'
                     : EMPTY.mapNotAvailableHere}
                 </>
@@ -263,13 +263,13 @@ export default function Map2D({
               )
             }
             const w = c.watchSignal
-            const nf = w?.components?.netflix
+            const nf = w?.components?.lists
             return (
               <>
                 <strong>{name}</strong>
                 <br />
                 {watchLevelText(w)}
-                {nf?.present && nf.weeks > 0 ? ` · Netflix Top 10'da ${nf.series} dizi / ${nf.weeks} hafta` : ''}
+                {nf?.present && nf.weeks > 0 ? ` · son 52 haftada ${nf.series} dizi sıralamada` : ''}
                 {c.limited ? ' · sınırlı veri' : c.dataSource === 'proxy' ? ' · yayın verisi yok' : ''}
               </>
             )

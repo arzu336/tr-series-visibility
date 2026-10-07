@@ -12,6 +12,7 @@ import {
 import { useAsync } from '../lib/useAsync.js'
 import countryNames from '../data/country-centroids.json'
 import Flag from './Flag.jsx'
+import ChartList from './ChartList.jsx'
 
 // Televizyon yayınları (izinli DStv rehberi, Afrika) ve dağıtımcı satış kayıtları: ülke paneli, dizi sayfası,
 // yönetim ekranı. Veri yoksa bölümler görünmez.
@@ -19,45 +20,61 @@ import Flag from './Flag.jsx'
 const day = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) : '')
 const period = (s, e) => [s, e].filter(Boolean).join(' – ')
 
-/** Ülke paneli: son 30 günde televizyonda yayınlanan Türk dizileri ve satış kayıtları. */
-export function CountryTv({ iso2, seriesNames, onSelectSeries }) {
+/**
+ * Ülke paneli: son 30 günde televizyonda yayınlanan Türk dizileri ve satış kayıtları — paneldeki diğer listelerle
+ * aynı afişli liste. `seriesInfo`: dizi kimliği → { name, posterPath } (haritanın yüklediği katalogdan).
+ */
+export function CountryTv({ iso2, seriesInfo, onSelectSeries }) {
   const { status, data } = useAsync(() => fetchCountryTv(iso2), [iso2])
   if (status !== 'ready' || (!data.airings.length && !data.sales.length)) return null
-  const nameOf = (id, fallback) => seriesNames.get(id) || fallback || `#${id}`
+  const info = (id, fallback) => ({
+    name: seriesInfo.get(id)?.name || fallback || `#${id}`,
+    posterPath: seriesInfo.get(id)?.posterPath,
+  })
   return (
     <>
       {data.airings.length > 0 && (
         <>
           <h3>Televizyonda — son 30 gün</h3>
-          <ul className="panel__context">
-            {data.airings.map((a) => (
-              <li key={a.seriesId}>
-                <button type="button" className="dashboard__link-btn" onClick={() => onSelectSeries?.(a.seriesId)}>
-                  {nameOf(a.seriesId, a.localTitle)}
-                </button>{' '}
-                <span className="panel__context-meta">
-                  {a.localTitle !== nameOf(a.seriesId) ? `"${a.localTitle}" · ` : ''}
-                  {a.channels.join(', ')} · {a.slots} yayın · son {day(a.last)}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <ChartList
+            compact
+            showPosters
+            items={data.airings.map((a, i) => {
+              const s = info(a.seriesId, a.localTitle)
+              return {
+                rank: i + 1,
+                seriesId: a.seriesId,
+                kind: 'series',
+                ...s,
+                meta: [
+                  a.localTitle !== s.name ? `"${a.localTitle}"` : null,
+                  a.channels.join(', '),
+                  `${a.slots} yayın`,
+                  `son ${day(a.last)}`,
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+              }
+            })}
+            onSelect={onSelectSeries}
+          />
         </>
       )}
       {data.sales.length > 0 && (
         <>
           <h3>Satış kayıtları</h3>
-          <ul className="panel__context">
-            {data.sales.map((s, i) => (
-              <li key={i}>
-                <strong>{nameOf(s.seriesId)}</strong>{' '}
-                <span className="panel__context-meta">
-                  {s.buyer} · {s.distributor}
-                  {period(s.start, s.end) ? ` · ${period(s.start, s.end)}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
+          <ChartList
+            compact
+            showPosters
+            items={data.sales.map((x, i) => ({
+              rank: i + 1,
+              seriesId: x.seriesId,
+              kind: 'series',
+              ...info(x.seriesId),
+              meta: [x.buyer, x.distributor, period(x.start, x.end) || null].filter(Boolean).join(' · '),
+            }))}
+            onSelect={onSelectSeries}
+          />
         </>
       )}
     </>

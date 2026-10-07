@@ -246,11 +246,6 @@ function SearchTrendSection({ data }) {
           <SeriesTrendChart timeline={s.timeline} scopeLabel={scope} />
         </div>
       ))}
-      <p className="report__fine">
-        Değerler 0–100 ölçeğinde ve ülke içinde görelidir: zaman içindeki yönü gösterir, ülkeler ya da diziler arası
-        mutlak hacim karşılaştırması için kullanılmaz.
-        {data.missing?.length > 0 && <> Sorgulanmamış: {data.missing.join(', ')}.</>}
-      </p>
     </>
   )
 }
@@ -311,8 +306,7 @@ function HighlightedSeriesSection({ data }) {
 // hafta içinde ilk günün sırası.
 function trendCaption({ trendBasis, trendSince }) {
   if (trendBasis === 'week') return 'Değişim geçen haftanın sıralamasına göredir.'
-  if (trendBasis === 'days')
-    return `Değişim hafta içinde, ${fmtDate(trendSince)} sıralamasına göredir (geçen haftanın listeleri karşılaştırmaya yetmiyor).`
+  if (trendBasis === 'days') return `Değişim hafta içinde, ${fmtDate(trendSince)} sıralamasına göredir.`
   return null
 }
 
@@ -391,26 +385,16 @@ function PlatformListsSection({ data }) {
 function WikiInterestSection({ data }) {
   return (
     <>
-      {data.incompleteMonth && (
-        <p className="report__fine">
-          {fmtPeriod(data.incompleteMonth)} verisi henüz tamamlanmadığı için gösterilmiyor.
-        </p>
-      )}
       {data.languages.map((l) => (
         <div key={l.lang} className="brief__wiki">
           <p className="report__lead">
             <strong>{l.languageName}</strong>
-            {l.regional ? ' · ortak dil; okunma bu ülkeye ayrılamaz' : ''}
           </p>
           <MonthlyBars
             monthly={l.months.map((m) => ({ period: m.period, avgScore: m.views }))}
             label={`${l.languageName} aylık okunma, ${l.months.length} ay`}
           />
-          {l.top.length > 0 && (
-            <p className="report__caption">
-              En çok okunan diziler — son 12 ayda toplam okunma (çubuk: en çok okunana göre)
-            </p>
-          )}
+          {l.top.length > 0 && <p className="report__caption">En çok okunan diziler</p>}
           {l.top.length > 0 && (
             <BarList
               rows={l.top}
@@ -555,7 +539,7 @@ function GapAnalysisSection({ data }) {
             <tr>
               <th scope="col">Dizi</th>
               <th scope="col">Yayında olduğu benzer ülkeler</th>
-              <th scope="col">Netflix en iyi sıra</th>
+              <th scope="col">Benzer ülkelerde en iyi sıra</th>
               <th scope="col">Boşluk puanı</th>
             </tr>
           </thead>
@@ -564,7 +548,7 @@ function GapAnalysisSection({ data }) {
               <tr key={g.tmdbId}>
                 <td>{g.name}</td>
                 <td>{g.availableIn.map(countryName).join(', ')}</td>
-                <td>{g.netflixBest != null ? g.netflixBest : '—'}</td>
+                <td>{g.listBest ? `#${g.listBest.position} (${countryName(g.listBest.iso2)})` : '—'}</td>
                 <td>{fmtNum(g.gapScore, 1)}</td>
               </tr>
             ))}
@@ -580,78 +564,64 @@ function GapAnalysisSection({ data }) {
   )
 }
 
-function SubSignal({ label, item, render }) {
-  return (
-    <div className="report__kpi">
-      <dt>{label}</dt>
-      {item?.status === 'hesaplandi' ? (
-        render(item)
-      ) : (
-        <>
-          <dd className="report__kpi--empty">—</dd>
-          <small className="report__kpi-warn">{item?.reason || 'hesaplanamadı'}</small>
-        </>
-      )}
-    </div>
-  )
+const ok = (x) => x?.status === 'hesaplandi'
+const artti = (pct) => (pct >= 0 ? 'arttı' : 'azaldı')
+const yuzde = (pct) => `%${fmtNum(Math.abs(pct), 1)}`
+const periodRange = (w) =>
+  String(w)
+    .split('→')
+    .map((p) => fmtPeriod(p.trim()))
+    .join(' – ')
+
+/**
+ * Turizm ilgisi: teknik göstergeler yerine sade cümleler; yalnızca hesaplanan maddeler (2026-10-07, kullanıcı
+ * isteği — "—" ve teknik gerekçe satırları kaldırıldı). Cümleler sayılardan kurallarla kurulur, yorum eklenmez.
+ */
+export function tourismSentences(data) {
+  const out = []
+  const a = data.arrivals
+  if (ok(a)) out.push(`Bu ülkeden Türkiye'ye son ayda (${fmtPeriod(a.latest)}) ${fmtNum(a.value, 0)} ziyaretçi geldi.`)
+  const c = data.correlation
+  if (ok(c)) {
+    const gecikme = c.lagMonths ? `yaklaşık ${c.lagMonths} ay arayla ` : 'aynı aylarda '
+    out.push(
+      c.significant
+        ? `Dizilere ait ansiklopedi okunması ile ziyaretçi sayısı ${gecikme}${c.value >= 0 ? 'birlikte artıp azalıyor' : 'ters yönde hareket ediyor'} (${c.sampleSize} aylık veri, istatistiksel olarak anlamlı).`
+        : `Dizilere ait ansiklopedi okunması ile ziyaretçi sayısı arasında anlamlı bir ilişki bulunmadı (${c.sampleSize} aylık veri).`
+    )
+  }
+  const d = data.didEstimate
+  if (ok(d)) {
+    const fark = d.treatmentChangePct - d.controlChangePct
+    const adlar = (d.controls || []).map((c) => countryName(c.iso2))
+    const grup =
+      adlar.length > 1
+        ? `benzer ${adlar.length} ülkede (${adlar.join(', ')}) ortalama`
+        : `benzer bir ülke olan ${adlar[0]} için`
+    out.push(
+      `${periodRange(d.window)} döneminde bu ülkeden gelen ziyaretçiler ${yuzde(d.treatmentChangePct)} ${artti(d.treatmentChangePct)}; ` +
+        `${grup} değişim ${yuzde(d.controlChangePct)} ${d.controlChangePct >= 0 ? 'artış' : 'azalış'}. ` +
+        `Yani bu ülke, benzerlerinden ${fmtNum(Math.abs(fark), 1)} puan ${fark >= 0 ? 'daha iyi' : 'daha kötü'} seyretti.`
+    )
+  }
+  const l = data.leadingSignal
+  if (ok(l)) {
+    out.push(
+      `Diziye yönelik aramalar ile Türkiye'ye seyahat aramaları ${l.lagWeeks} hafta arayla ${l.value >= 0 ? 'birlikte hareket ediyor' : 'ters yönde hareket ediyor'} (${l.sampleSize} haftalık veri, keşif amaçlı).`
+    )
+  }
+  return out
 }
 
 function TourismSignalSection({ data }) {
+  const items = tourismSentences(data)
+  if (!items.length) return <p className="report__lead">Bu ülke için turizm verisi yok.</p>
   return (
-    <dl className="report__kpis report__kpis--tourism">
-      <SubSignal
-        label="Türkiye'ye gelen ziyaretçi"
-        item={data.arrivals}
-        render={(a) => (
-          <>
-            <dd>{fmtNum(a.value, 0)}</dd>
-            <small>
-              {a.monthCount} ay toplamı, son ay {fmtPeriod(a.latest)}
-            </small>
-          </>
-        )}
-      />
-      <SubSignal
-        label="Okunma ilgisi–ziyaretçi ilişkisi"
-        item={data.correlation}
-        render={(c) => (
-          <>
-            <dd>{fmtNum(c.value, 2)}</dd>
-            <small>
-              {c.lagMonths != null ? `${c.lagMonths} ay gecikmeli · ` : ''}
-              {c.sampleSize != null ? `${c.sampleSize} ay · ` : ''}
-              {c.significant ? 'istatistiksel olarak anlamlı' : 'anlamlı değil'}
-            </small>
-          </>
-        )}
-      />
-      <SubSignal
-        label="Fark-içinde-fark tahmini"
-        item={data.didEstimate}
-        render={(d) => (
-          <>
-            <dd>{fmtNum(d.value, 0)}</dd>
-            <small>
-              ziyaretçi farkı, kontrol {countryName(d.controlIso2)} ({d.controlReason}); ülke{' '}
-              {fmtSignedPct(d.treatmentChangePct)}, kontrol {fmtSignedPct(d.controlChangePct)}; pencere {d.window}
-            </small>
-          </>
-        )}
-      />
-      <SubSignal
-        label="Öncü sinyal (seyahat aramaları)"
-        item={data.leadingSignal}
-        render={(l) => (
-          <>
-            <dd>{fmtNum(l.value, 2)}</dd>
-            <small>
-              {l.direction}, {l.lagWeeks} hafta gecikme, n={l.sampleSize}
-              {l.significant ? ', anlamlı' : ', anlamlı değil'} · sorgu “{l.travelQuery}”
-            </small>
-          </>
-        )}
-      />
-    </dl>
+    <ul className="brief__sentences">
+      {items.map((t) => (
+        <li key={t}>{t}</li>
+      ))}
+    </ul>
   )
 }
 

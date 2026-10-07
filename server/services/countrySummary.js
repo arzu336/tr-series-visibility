@@ -7,7 +7,7 @@ import { getTourismLeadingSignalSummary, LEADING_SIGNAL_SCOPE } from './tourismT
 import { differenceInDifferences } from './tourismCorrelation.js'
 import { TOP_COUNTRY_COUNT, TOP_SERIES_COUNT } from './enrichmentTargets.js'
 import { EMPTY } from '../../src/lib/emptyStates.js'
-import { suggestControlCountry } from '../control-matching.js'
+import { rankControlCountries } from '../control-matching.js'
 
 /**
  * Kaynak güven sınıfları. Resmî kaynaklarla korsan/telemetri sinyallerini AYNI tabloda
@@ -24,6 +24,7 @@ const KAYNAK_GUVEN = {
   imdb: TRUST_OFFICIAL,
   yigm: TRUST_OFFICIAL,
   gdelt: TRUST_OFFICIAL,
+  google_news: TRUST_OFFICIAL,
   'google-trends': TRUST_OFFICIAL,
   'world-bank': TRUST_OFFICIAL,
   netflix: TRUST_OFFICIAL,
@@ -119,7 +120,7 @@ function buildCulturalDimension(iso2, countryRow, kanonik) {
     scannedSeries: diziler,
     scanCount: taramalar.length,
     sources: [
-      { source: 'gdelt', trust: trustOf('gdelt'), note: 'basın taraması' },
+      { source: 'google_news', trust: trustOf('google_news'), note: 'basın taraması (yedek: GDELT)' },
       { source: 'tmdb', trust: trustOf('tmdb'), note: 'dizi kataloğu ve tema' },
     ],
   }
@@ -133,6 +134,8 @@ function buildCulturalDimension(iso2, countryRow, kanonik) {
  * burada `hesaplanamaz` olarak dışarı taşınır, sahte bir anlamlılık iddiası üretilmez.
  */
 const ay2 = (m) => String(m).padStart(2, '0')
+const KONTROL_ADAY = 15 // benzerlik sırasıyla bakılan aday sayısı
+const MAX_KONTROL = 5 // ortalamaya giren en fazla kontrol ülkesi
 
 function sayiMi(n) {
   return typeof n === 'number' && Number.isFinite(n)
@@ -152,7 +155,7 @@ export async function buildTourismDimension(iso2, countryRow, deps = {}) {
   const {
     getVisitorSeries: seriAl = getVisitorSeries,
     pickBeforeAfterPair: ciftSec = pickBeforeAfterPair,
-    suggestControlCountry: kontrolOner = suggestControlCountry,
+    rankControlCountries: kontrolAdaylari = rankControlCountries,
     differenceInDifferences: didHesapla = differenceInDifferences,
     leadingSignalFor: onculSinyal = leadingSignalFor,
     readingSeriesFor: okumaAl = readingSeriesFor,
@@ -176,33 +179,53 @@ export async function buildTourismDimension(iso2, countryRow, deps = {}) {
   let didEstimate = yetersiz('kontrol ülkesi eşleştirilemedi')
   if (ciftler && sayiMi(ciftler.before) && sayiMi(ciftler.after)) {
     try {
-      const kontrol = await kontrolOner(iso2, new Set([iso2]))
-      if (kontrol?.iso2) {
-        const kontrolSeri = seriAl(kontrol.iso2)
-        const kontrolCift = kontrolSeri?.length ? ciftSec(kontrolSeri) : null
-        if (kontrolCift && sayiMi(kontrolCift.before) && sayiMi(kontrolCift.after)) {
-          const did = didHesapla({
-            treatmentBefore: ciftler.before,
-            treatmentAfter: ciftler.after,
-            controlBefore: kontrolCift.before,
-            controlAfter: kontrolCift.after,
-          })
-          if (sayiMi(did?.didEstimate)) {
-            didEstimate = OK(Math.round(did.didEstimate * 10) / 10, {
-              controlIso2: kontrol.iso2,
-              controlReason: kontrol.reason ?? null,
-              treatmentChangePct: did.treatmentChangePct ?? null,
-              controlChangePct: did.controlChangePct ?? null,
-              unit: 'ziyaretci-fark',
-              window: `${ciftler.beforeYear}-${ay2(ciftler.month)} → ${ciftler.afterYear}-${ay2(ciftler.month)}`,
-              controlWindow: `${kontrolCift.beforeYear}-${ay2(kontrolCift.month)} → ${kontrolCift.afterYear}-${ay2(kontrolCift.month)}`,
-            })
-          } else {
-            didEstimate = yetersiz('DiD sonucu sayısal değil — hesaplama sözleşmesi kontrol edilmeli')
-          }
-        } else {
-          didEstimate = yetersiz(`kontrol ülkesi ${kontrol.iso2} için turist serisi yok`)
+      // Kontrol grubu: benzerlik sırasıyla, aynı iki ay için verisi olan en fazla MAX_KONTROL ülke; ülkelerin
+      // yüzde değişimlerinin eşit ağırlıklı ortalaması (2026-10-07'ye kadar tek ülkeydi — tek ülkenin kendi
+      // olağan dışı yılı sonucu belirliyordu). Büyüklükleri farklı ülkeler karşılaştırıldığı için fark yüzde puandır.
+      const adaylar = (await kontrolAdaylari(iso2, new Set([iso2]), KONTROL_ADAY)) || []
+      const ayDegeri = (s, yil) => s?.find((r) => r.year === yil && r.month === ciftler.month)?.visitorCount
+      const kontroller = []
+      let sozlesmeBozuk = false
+      for (const k of adaylar) {
+        if (kontroller.length >= MAX_KONTROL) break
+        const ks = seriAl(k.iso2)
+        const once = ayDegeri(ks, ciftler.beforeYear)
+        const sonra = ayDegeri(ks, ciftler.afterYear)
+        if (!sayiMi(once) || !sayiMi(sonra) || once <= 0) continue
+        const did = didHesapla({
+          treatmentBefore: ciftler.before,
+          treatmentAfter: ciftler.after,
+          controlBefore: once,
+          controlAfter: sonra,
+        })
+        if (!sayiMi(did?.treatmentChangePct) || !sayiMi(did?.controlChangePct)) {
+          sozlesmeBozuk = true
+          continue
         }
+        kontroller.push({
+          iso2: k.iso2,
+          reason: k.reason ?? null,
+          changePct: did.controlChangePct,
+          tPct: did.treatmentChangePct,
+        })
+      }
+      if (kontroller.length) {
+        const r1 = (n) => Math.round(n * 10) / 10
+        const tPct = kontroller[0].tPct
+        const cPct = kontroller.reduce((t, k) => t + k.changePct, 0) / kontroller.length
+        didEstimate = OK(r1(tPct - cPct), {
+          unit: 'yuzde-puan',
+          treatmentChangePct: r1(tPct),
+          controlChangePct: r1(cPct),
+          controls: kontroller.map(({ iso2: c, reason, changePct }) => ({ iso2: c, reason, changePct: r1(changePct) })),
+          window: `${ciftler.beforeYear}-${ay2(ciftler.month)} → ${ciftler.afterYear}-${ay2(ciftler.month)}`,
+        })
+      } else if (sozlesmeBozuk) {
+        didEstimate = yetersiz('DiD sonucu sayısal değil — hesaplama sözleşmesi kontrol edilmeli')
+      } else if (adaylar.length) {
+        didEstimate = yetersiz(
+          `benzer ülkelerin (${adaylar.map((a) => a.iso2).join(', ')}) hiçbirinde aynı aylar için turist serisi yok`
+        )
       }
     } catch (err) {
       didEstimate = yetersiz(`kontrol ülkesi önerisi alınamadı: ${err.message}`)

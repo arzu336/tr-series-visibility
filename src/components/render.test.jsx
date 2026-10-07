@@ -392,7 +392,8 @@ describe('Ülke brifingi — SSR', () => {
     )
     expect(html).toContain('Almanya')
     expect(html).toContain('Ülke brifingi')
-    expect(html).toContain('Hafta sonu:')
+    expect(html).not.toContain('Hafta sonu:')
+    expect(html).toContain('Hazırlanma:')
     expect(html.indexOf('brief__summary')).toBeLessThan(html.indexOf('brief__chapter'))
     expect(html).not.toContain('brief__appendix')
     expect(html).not.toContain('Yöntem')
@@ -425,7 +426,7 @@ describe('Ülke brifingi — SSR', () => {
       expect(html).not.toContain(t)
     }
     expect(html).toContain('arama payı faktörü önbellekte olmadığı için dışlandı')
-    expect(html).toMatch(/Sorgulanmamış:.*Eşref Rüya/)
+    expect(html).not.toContain('Sorgulanmamış') // 2026-10-07: teknik not kaldırıldı
   })
 
   it('bölümler sunucunun verdiği sırayla; benzer ülkeler ad + gerekçe + deneysel, benzerlik sayısı yok', () => {
@@ -446,7 +447,7 @@ describe('Ülke brifingi — SSR', () => {
     expect(html).not.toContain('0,997')
     expect(html).toContain('Son 10 ayda Top 10 kaydı yok')
     expect(html).toContain('43 hafta')
-    expect(html).toContain('turist serisiyle aynı aylara henüz ulaşmadı')
+    expect(html).not.toContain('turist serisiyle aynı aylara henüz ulaşmadı') // hesaplanmayan madde gizlenir
   })
 
   it('istemci sıralamayı belirlemez: yalnızca sunucunun başlıklarındaki bölümler basılır; bilinmeyen anahtar çökmez', () => {
@@ -519,7 +520,7 @@ describe('Boş durum metinleri — neden söyleyen sabitler (emptyStates.js)', (
     expect(html).not.toContain('Veri yok.')
   })
 
-  it('rapor: turizm korelasyonu "Aylık seri birikiyor: 2/3 ay" nedenini gösterir', () => {
+  it('rapor: turizm bölümü yalnızca hesaplanan maddeleri sade cümleyle yazar', () => {
     const r = rapor('producer', {
       tourismSignal: ok('tourismSignal', 'Turizm / etki sinyali', {
         arrivals: { status: 'hesaplandi', value: 1000, monthCount: 9, latest: '2026-08' },
@@ -534,8 +535,29 @@ describe('Boş durum metinleri — neden söyleyen sabitler (emptyStates.js)', (
       }),
     })
     const html = renderToString(<CountryReportDocument report={r} countryName="Almanya" />)
-    expect(html).toContain('Aylık seri birikiyor: 2/3 ay')
-    expect(html).toContain('Kapsam: görünürlükte ilk 15 ülke; bu ülke tarama kapsamında değil')
+    expect(html).toContain('Bu ülkeden Türkiye&#x27;ye son ayda (Ağu 2026) 1.000 ziyaretçi geldi')
+    expect(html).not.toContain('Aylık seri birikiyor')
+    expect(html).not.toContain('tarama kapsamında değil')
+    expect(html).not.toContain('kontrol ülkesi eşleştirilemedi')
+  })
+
+  it('rapor: fark-içinde-fark sonucu teknik terim olmadan, iki ülkenin değişimiyle anlatılır', () => {
+    const r = rapor('producer', {
+      tourismSignal: ok('tourismSignal', 'Turizm / etki sinyali', {
+        didEstimate: {
+          status: 'hesaplandi',
+          window: '2025-06 → 2026-06',
+          treatmentChangePct: -11.3,
+          controlChangePct: -16,
+          controls: [{ iso2: 'BE' }, { iso2: 'NL' }],
+        },
+      }),
+    })
+    const html = renderToString(<CountryReportDocument report={r} countryName="Almanya" />)
+    expect(html).toContain('Haz 2025 – Haz 2026 döneminde bu ülkeden gelen ziyaretçiler %11,3 azaldı')
+    expect(html).toContain('benzer 2 ülkede (Belçika, Hollanda) ortalama değişim %16 azalış')
+    expect(html).toContain('benzerlerinden 4,7 puan daha iyi seyretti')
+    expect(html).not.toContain('Fark-içinde-fark')
   })
 
   it('küresel görünüm: okunma–ziyaretçi tablosu sonucu ve rastlantı beklentisini yazar', () => {
@@ -644,6 +666,16 @@ describe('Kilit test — kaldırılan gösterge adları', () => {
 })
 
 describe('WatchLists — tüm platformlar, afişler, Türkiye TV', () => {
+  it('liste yoksa okunma sıralaması da afişle gelir (katalogdaki afiş kullanılır)', () => {
+    const charts = {
+      lists: { now: [], top: [] },
+      wiki: [{ items: [{ seriesId: 7, name: 'Muhteşem Yüzyıl', views: 375000 }] }],
+    }
+    const html = renderToString(<WatchLists charts={charts} seriesInfo={new Map([[7, { posterPath: '/my.jpg' }]])} />)
+    expect(html).toContain('/my.jpg')
+    expect(html).toContain('375k okunma')
+  })
+
   const charts = {
     netflix: { status: 'hesaplandi', yearAgo: null },
     lists: {
@@ -689,10 +721,10 @@ describe('WatchLists — tüm platformlar, afişler, Türkiye TV', () => {
     },
   }
 
-  it('satırlarda platform ve afiş; afişi olmayan satırda yer tutucu', () => {
+  it('satırlarda afiş, platform adı yok; afişi olmayan satırda yer tutucu', () => {
     const html = renderToString(<WatchLists charts={charts} />)
-    expect(html).toContain('Shahid')
-    expect(html).toContain('Netflix, Shahid')
+    expect(html).not.toContain('Shahid')
+    expect(html).not.toContain('Netflix')
     expect(html).toContain('https://image.tmdb.org/t/p/w92/uzak.jpg')
     expect(html).toContain('chart-list__poster--empty')
   })

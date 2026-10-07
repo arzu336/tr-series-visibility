@@ -50,7 +50,7 @@ const oncul = () => ({ status: 'hesaplanamaz', reason: 'test' })
 const deps = {
   getVisitorSeries: seri,
   pickBeforeAfterPair: cift,
-  suggestControlCountry: async () => ({ iso2: 'PL', reason: 'benzer GSYH' }),
+  rankControlCountries: async () => [{ iso2: 'PL', reason: 'benzer GSYH' }],
   differenceInDifferences: did,
   leadingSignalFor: oncul,
 }
@@ -69,18 +69,40 @@ describe('buildTourismDimension — gerçek sözleşmeyle', () => {
     const r = await buildTourismDimension('DE', { score: 500 }, deps)
 
     expect(r.arrivals).toMatchObject({ status: 'hesaplandi', value: 1200, monthCount: 3, latest: '2025-07' })
-    // DE +200, PL +50 → DiD +150 ziyaretçi.
+    // DE %20, PL %10 → 10 yüzde puan.
     expect(r.didEstimate).toMatchObject({
       status: 'hesaplandi',
-      value: 150,
-      controlIso2: 'PL',
-      unit: 'ziyaretci-fark',
+      value: 10,
+      unit: 'yuzde-puan',
       window: '2024-07 → 2025-07',
-      controlWindow: '2024-07 → 2025-07',
       treatmentChangePct: 20,
       controlChangePct: 10,
+      controls: [{ iso2: 'PL', reason: 'benzer GSYH', changePct: 10 }],
     })
     hicNaNYok(r)
+  })
+
+  it('kontrol grubu: benzer ülkelerin yüzde değişimlerinin ortalaması; aynı ayda verisi olmayan atlanır', async () => {
+    const seriler = {
+      ...Object.fromEntries(['DE', 'PL'].map((i) => [i, seri(i)])),
+      CZ: [
+        { year: 2024, month: 7, visitorCount: 200 },
+        { year: 2025, month: 7, visitorCount: 260 },
+      ],
+      AT: [{ year: 2025, month: 7, visitorCount: 900 }],
+    }
+    const r = await buildTourismDimension(
+      'DE',
+      { score: 500 },
+      {
+        ...deps,
+        getVisitorSeries: (i) => seriler[i] || [],
+        rankControlCountries: async () => [{ iso2: 'AT' }, { iso2: 'PL' }, { iso2: 'CZ' }],
+      }
+    )
+    // PL %10, CZ %30 → ortalama %20; DE %20 → fark 0 puan. AT'nin 2024-07 verisi yok.
+    expect(r.didEstimate).toMatchObject({ status: 'hesaplandi', value: 0, controlChangePct: 20 })
+    expect(r.didEstimate.controls.map((c) => c.iso2)).toEqual(['PL', 'CZ'])
   })
 
   it('korelasyon: ülkenin dili ortak dilse (okunma ülkeye ayrılamaz) nedeniyle hesaplanamaz', async () => {
@@ -151,7 +173,7 @@ describe('buildTourismDimension — gerçek sözleşmeyle', () => {
   })
 
   it('kontrol ülkesi bulunamazsa DiD hesaplanamaz, arrivals yine gelir', async () => {
-    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, suggestControlCountry: async () => null })
+    const r = await buildTourismDimension('DE', { score: 500 }, { ...deps, rankControlCountries: async () => [] })
     expect(r.arrivals.status).toBe('hesaplandi')
     expect(r.didEstimate).toMatchObject({ status: 'hesaplanamaz', reason: 'kontrol ülkesi eşleştirilemedi' })
   })
@@ -160,9 +182,9 @@ describe('buildTourismDimension — gerçek sözleşmeyle', () => {
     const r = await buildTourismDimension(
       'DE',
       { score: 500 },
-      { ...deps, suggestControlCountry: async () => ({ iso2: 'ZZ' }) }
+      { ...deps, rankControlCountries: async () => [{ iso2: 'ZZ' }] }
     )
-    expect(r.didEstimate.reason).toMatch(/ZZ için turist serisi yok/)
+    expect(r.didEstimate.reason).toMatch(/\(ZZ\) hiçbirinde aynı aylar için turist serisi yok/)
   })
 
   it('kontrol ülkesi servisi fırlatırsa çökmez', async () => {
@@ -171,7 +193,7 @@ describe('buildTourismDimension — gerçek sözleşmeyle', () => {
       { score: 500 },
       {
         ...deps,
-        suggestControlCountry: async () => {
+        rankControlCountries: async () => {
           throw new Error('World Bank erişilemedi')
         },
       }
@@ -266,7 +288,7 @@ describe('basinTonu — hiç taranmamış ile taranmış-ama-haber-yok ayrımı'
       { dominant_sentiment: 'yetersiz-veri', positive_score: null },
     ]
     const r = basinTonu('CA', taramalar)
-    expect(r.reason).toBe("CA için 2 dizi tarandı, GDELT'te yeterli haber bulunamadı")
+    expect(r.reason).toBe('CA için 2 dizi tarandı, yeterli haber bulunamadı')
     expect(r).toMatchObject({ scanned: true, scanCount: 2 })
   })
 

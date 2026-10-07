@@ -18,6 +18,7 @@ import { syncForeignStudentsIfNeeded } from './services/foreignStudents.js'
 import { runYoutubeSyncIfNeeded } from './services/youtubeAnalytics.js'
 import { runYoutubePublicIfNeeded } from './services/youtubePublic.js'
 import { runTvGuideIfNeeded } from './services/tvGuide.js'
+import { runSearchFillIfNeeded } from './services/searchFill.js'
 
 const CHECK_INTERVAL_MS = 30 * 60 * 1000
 const REFRESH_INTERVAL_MS = 24 * 60 * 60 * 1000
@@ -50,9 +51,28 @@ function gunlukTazelemeSirasiGeldi() {
   return Date.now() - lastRunAt >= REFRESH_INTERVAL_MS
 }
 
-export async function runScheduledRefreshInner() {
-  if (gunlukTazelemeSirasiGeldi()) {
-    await runGunlukTazeleme()
+// Günlük tazeleme (TMDB verisi + yapay zekâ sınıflandırması) uzarsa en fazla bu kadar beklenir; sonra arka planda
+// sürer ve zenginleştirme zinciri (basın taraması, arama doldurma, TV rehberi…) sırasını kaybetmez. Önceden
+// tazeleme takıldığında (2026-10-05'ten beri) zincirin hiçbir işi çalışmıyordu.
+export const DAILY_REFRESH_WAIT_MS = 10 * 60 * 1000
+let gunlukCalisiyor = false
+
+export async function runScheduledRefreshInner({ dailyWaitMs = DAILY_REFRESH_WAIT_MS } = {}) {
+  if (gunlukTazelemeSirasiGeldi() && !gunlukCalisiyor) {
+    gunlukCalisiyor = true
+    const tazeleme = runGunlukTazeleme().finally(() => {
+      gunlukCalisiyor = false
+    })
+    let zamanAsimi
+    const bekle = new Promise((resolve) => {
+      zamanAsimi = setTimeout(() => {
+        console.warn('[scheduler] günlük tazeleme uzadı; arka planda sürüyor, zincire geçiliyor')
+        resolve()
+      }, dailyWaitMs)
+      zamanAsimi.unref?.()
+    })
+    await Promise.race([tazeleme, bekle])
+    clearTimeout(zamanAsimi)
   }
   await runZenginlestirmeZinciri()
 }
@@ -132,6 +152,13 @@ async function runZenginlestirmeZinciri() {
     await runTvGuideIfNeeded()
   } catch (err) {
     console.error('[scheduler] televizyon rehberi toplaması başarısız:', err.message)
+  }
+
+  // Aylık arama verisi doldurma (SerpApi; brifinglerin arama ilgisi ve arama payı, Türkçe öğrenme ilgisi).
+  try {
+    await runSearchFillIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] aylık arama verisi doldurma başarısız:', err.message)
   }
 
   // YouTube herkese açık veri (YOUTUBE_API_KEY yoksa hiçbir şey yapmaz).

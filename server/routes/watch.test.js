@@ -22,7 +22,7 @@ const sahteSinyal = {
   },
   meta: { universe: 1, indexed: 1, weights: { netflix: 0.5, wiki: 0.3, search: 0.2, press: 0 } },
   generatedAt: '2026-09-30T00:00:00.000Z',
-  netflixWindow: { weeks: 52, from: '2025-09-28', available: true },
+  listsWindow: { weeks: 52, from: '2025-09-28', available: true },
   contract: 'izlenme-sinyali-v1',
 }
 
@@ -107,7 +107,7 @@ describe('/api/visibility içinde watchSignal', () => {
     const fr = res.body.countries.find((c) => c.iso2 === 'FR')
     expect(de.watchSignal.index).toBe(42)
     expect(fr.watchSignal).toBeNull()
-    expect(res.body.watchSignalMeta).toMatchObject({ universe: 1, netflixWindow: { weeks: 52 } })
+    expect(res.body.watchSignalMeta).toMatchObject({ universe: 1, listsWindow: { weeks: 52 } })
   })
 
   it('sinyal hesaplanamazsa görünürlük yine döner, watchSignal null', async () => {

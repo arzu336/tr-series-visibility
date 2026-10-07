@@ -5,12 +5,29 @@ const GDELT_URL = 'https://api.gdeltproject.org/api/v2/doc/doc'
 
 const REQUEST_TIMEOUT_MS = 90000
 
+// Bağlantı açık tutulur: GDELT'te TLS el sıkışması ~10 sn sürüyor (2026-10-07 ölçümü); varsayılan 4 sn'lik
+// boşta kalma süresiyle 20 sn aralıklı her istek yeni bağlantı kuruyordu.
 const gdeltAgent = new Agent({
   connect: { timeout: 30000 },
   headersTimeout: REQUEST_TIMEOUT_MS,
   bodyTimeout: REQUEST_TIMEOUT_MS,
+  keepAliveTimeout: 60000,
+  keepAliveMaxTimeout: 300000,
 })
 const MIN_GAP_MS = 20000
+// Uyarlanır aralık: hız sınırı (429) yanıtında aralık ikiye katlanır (en fazla MAX_GAP_MS), başarılı yanıtta
+// yarıya iner (en az MIN_GAP_MS). Önceden sabit 20 sn + 30/60 sn geri çekilmeyle 429 alan her çift ~2,5 dk
+// harcıyor, saatte ancak ~12 çift taranabiliyordu.
+const MAX_GAP_MS = 120000
+let aralik = MIN_GAP_MS
+
+export function gdeltGapMs() {
+  return aralik
+}
+
+function hizSiniriMi(res, text) {
+  return res.status === 429 || /limit requests/i.test(text)
+}
 const MAX_ATTEMPTS = 3
 const BACKOFF_MS = [30000, 60000]
 
@@ -82,7 +99,7 @@ async function kuyruguIsle() {
   try {
     while (bekleyenler.length > 0) {
       const gecen = Date.now() - sonIstekZamani
-      if (gecen < MIN_GAP_MS) await new Promise((r) => setTimeout(r, MIN_GAP_MS - gecen))
+      if (gecen < aralik) await new Promise((r) => setTimeout(r, aralik - gecen))
       const kayit = bekleyenler.shift() // bekleme sırasında öne geçen olabilir; en son burada seçilir
       try {
         kayit.resolve(await kayit.fn())
@@ -129,7 +146,14 @@ async function gdeltGet(query, priority) {
       )
       const text = await res.text()
       if (text.trim().startsWith('{')) {
+        aralik = Math.max(MIN_GAP_MS, Math.round(aralik / 2))
         return JSON.parse(text)
+      }
+      if (hizSiniriMi(res, text)) {
+        // Bekleme kuyruğun büyüyen aralığıyla sağlanır; ayrıca geri çekilmeye gerek yok.
+        aralik = Math.min(MAX_GAP_MS, aralik * 2)
+        sonHata = new Error('GDELT hız sınırı (429)')
+        continue
       }
       // Kalıcı ret: yeniden denemek aynı yanıtı döndürür.
       if (/phrase is too short/i.test(text)) {

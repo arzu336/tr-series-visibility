@@ -12,8 +12,9 @@ function normalizeSeriesKey(seriesName) {
   return seriesName.trim().toLocaleLowerCase('tr')
 }
 
+// v2 (2026-10-06): düşük arama hacimli ülkeler de dahil (Afrika, küçük pazarlar); eski anahtarlar okunmaya devam eder.
 export function trendsCacheKey(seriesName) {
-  return `serp:trends:${normalizeSeriesKey(seriesName)}`
+  return `serp:trends:v2:${normalizeSeriesKey(seriesName)}`
 }
 export function actorTrendsCacheKey(actorName) {
   return `serp:actor-trends:${normalizeSeriesKey(actorName)}`
@@ -135,10 +136,60 @@ const reserveUsageStmt = db.prepare(`
 `)
 const releaseUsageStmt = db.prepare(`UPDATE meta SET value = CAST(value AS INTEGER) - 1 WHERE key = ?`)
 
+// Hesabın gerçek kullanımı (serpapi.com/account.json — sorgu hakkından düşmez). Kendi sayacımız yalnızca bu
+// sunucunun yaptığı sorguları sayıyor; elle yapılan ve başka araçlardan gelen sorgular hesaba ayrıca yansıyor
+// (2026-10-07: sayaç 515, hesap 1077). Kota korumaları ikisinden büyüğüne bakar. 10 dk bellekte tutulur.
+const ACCOUNT_TTL_MS = 10 * 60 * 1000
+let accountUsage = null // { used, budget, at }
+let accountInFlight = null
+
+export async function refreshSerpApiAccountUsage({ force = false, fetchFn = fetch } = {}) {
+  if (!force && accountUsage && Date.now() - accountUsage.at < ACCOUNT_TTL_MS) return accountUsage
+  const apiKey = process.env.SERPAPI_API_KEY
+  if (!apiKey) return null
+  if (!accountInFlight) {
+    accountInFlight = (async () => {
+      try {
+        const res = await fetchFn(`https://serpapi.com/account.json?api_key=${encodeURIComponent(apiKey)}`, {
+          signal: AbortSignal.timeout(EXTERNAL_TIMEOUT_MS),
+        })
+        if (!res.ok) throw new Error(`hesap bilgisi alınamadı (${res.status})`)
+        const d = await res.json()
+        const used = Number(d.this_month_usage)
+        const budget = Number(d.searches_per_month)
+        if (Number.isFinite(used) && Number.isFinite(budget) && budget > 0)
+          accountUsage = { used, budget, at: Date.now() }
+      } catch (err) {
+        console.error('[serpApiCache] SerpApi hesap kullanımı okunamadı:', err.message)
+      } finally {
+        accountInFlight = null
+      }
+      return accountUsage
+    })()
+  }
+  return accountInFlight
+}
+
+/** Yalnızca testler için. */
+export function _setSerpApiAccountUsageForTests(v) {
+  accountUsage = v
+}
+
 export function getSerpApiUsageThisMonth(now = new Date()) {
   const monthKey = currentUsageMonthKey(now)
   const row = getMetaStmt.get(monthKey)
-  return { used: row ? Number(row.value) : 0, budget: getSerpApiMonthlyBudget() }
+  const own = row ? Number(row.value) : 0
+  const budget = getSerpApiMonthlyBudget()
+  // Hesap bilgisi taze ise gerçek kullanım (hangisi büyükse) ve planın gerçek sınırı (hangisi küçükse).
+  if (accountUsage && Date.now() - accountUsage.at < 2 * ACCOUNT_TTL_MS) {
+    return {
+      used: Math.max(own, accountUsage.used),
+      budget: Math.min(budget, accountUsage.budget),
+      ownCounter: own,
+      source: 'account',
+    }
+  }
+  return { used: own, budget, ownCounter: own, source: 'counter' }
 }
 
 export async function serpapiGet(params) {
@@ -148,9 +199,10 @@ export async function serpapiGet(params) {
   }
 
   const monthKey = currentUsageMonthKey()
-  const budget = getSerpApiMonthlyBudget()
+  await refreshSerpApiAccountUsage()
+  const { used: gercekKullanim, budget } = getSerpApiUsageThisMonth()
   const reserved = reserveUsageStmt.get(monthKey).value
-  if (reserved > budget) {
+  if (reserved > budget || gercekKullanim >= budget) {
     releaseUsageStmt.run(monthKey)
     const kotaHatasi = new Error(`Aylık kota dolmuş görünüyor (429). (${reserved - 1}/${budget})`)
     kotaHatasi.status = 429
@@ -197,6 +249,8 @@ export async function fetchTrendsByCountryRaw(seriesName) {
     q: seriesName,
     data_type: 'GEO_MAP_0',
     hl: 'tr',
+    // Düşük hacimli ülkeler olmadan Afrika ve küçük pazarlar hiç görünmüyordu (Kuruluş Osman: 18 → 47 ülke).
+    include_low_search_volume: 'true',
   })
   const byCountry = (data.interest_by_region || [])
     .map((r) => ({ country: r.geo || r.location, value: r.extracted_value ?? r.value }))

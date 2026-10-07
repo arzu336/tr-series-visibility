@@ -12,7 +12,9 @@ vi.mock('undici', () => ({
 }))
 vi.mock('../cache.js', () => ({ getCached: () => null, setCached: () => {} }))
 
-const { fetchNewsArticlesGdelt, GDELT_PRIORITY, gdeltQueueStats, TURKISH_CONTEXT } = await import('./gdeltNews.js')
+const { fetchNewsArticlesGdelt, GDELT_PRIORITY, gdeltQueueStats, TURKISH_CONTEXT, gdeltGapMs } =
+  await import('./gdeltNews.js')
+const { fetch: sahteFetch } = await import('undici')
 
 // Kuyruğun "son istek zamanı" modül durumunda yaşar; her test sahte saati bir saat ileri kurar
 // ki önceki testin ileri alınmış saati yeni testte "geleceğe" düşüp aralığı uzatmasın.
@@ -68,6 +70,24 @@ describe('GDELT kuyruğu — öncelik', () => {
     expect(cagrilar).toHaveLength(2)
     await hepsiniAkit()
     await Promise.all(sozler)
+  })
+
+  it('hız sınırı (429) aralığı ikiye katlar, başarılı yanıt yeniden 20 sn aralığa indirir', async () => {
+    vi.mocked(sahteFetch).mockImplementationOnce(async (url) => {
+      cagrilar.push(new URL(url).searchParams.get('query'))
+      return { status: 429, text: async () => 'Please limit requests to one every 5 seconds' }
+    })
+    const soz = fetchNewsArticlesGdelt('limitli', 'DE')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(cagrilar).toHaveLength(1)
+    expect(gdeltGapMs()).toBe(40_000)
+    await vi.advanceTimersByTimeAsync(30_000) // eski sabit 20 sn'de yeniden denenirdi
+    expect(cagrilar).toHaveLength(1)
+    await vi.advanceTimersByTimeAsync(11_000)
+    expect(cagrilar).toHaveLength(2)
+    await hepsiniAkit()
+    await soz
+    expect(gdeltGapMs()).toBe(20_000)
   })
 
   it('desteklenmeyen ülke kuyruğa hiç girmez', async () => {

@@ -6,6 +6,7 @@ import {
   opportunityOf,
   computeWatchSignals,
   netflixFromRows,
+  listsFromRows,
   wikiFromRows,
   searchFromRows,
   distributionFromRows,
@@ -44,10 +45,10 @@ describe('percentileRank / levelOf / confidenceOf / opportunityOf', () => {
   })
 
   it('güven: ≥3 bileşen + Netflix ya da tek dilli Wikipedia → yüksek; 2 → orta; 1 → düşük', () => {
-    expect(confidenceOf([{ key: 'netflix' }, { key: 'wiki', regional: true }, { key: 'search' }])).toBe('yüksek')
+    expect(confidenceOf([{ key: 'lists' }, { key: 'wiki', regional: true }, { key: 'search' }])).toBe('yüksek')
     expect(confidenceOf([{ key: 'wiki', regional: true }, { key: 'search' }, { key: 'press' }])).toBe('orta')
     expect(confidenceOf([{ key: 'wiki', regional: false }, { key: 'search' }, { key: 'press' }])).toBe('yüksek')
-    expect(confidenceOf([{ key: 'netflix' }, { key: 'search' }])).toBe('orta')
+    expect(confidenceOf([{ key: 'lists' }, { key: 'search' }])).toBe('orta')
     expect(confidenceOf([{ key: 'search' }])).toBe('düşük')
     expect(confidenceOf([])).toBeNull()
   })
@@ -77,7 +78,7 @@ describe('computeWatchSignals — ağırlıklar, eksik bileşen, en az 2 bileşe
   const inputs = {
     countries,
     markets: new Set(['TR', 'BG', 'RS', 'DE', 'JP']),
-    netflix: new Map([
+    lists: new Map([
       ['TR', { series: 10, weeks: 200, points: 1500, bestRank: 1 }],
       ['BG', { series: 4, weeks: 11, points: 80, bestRank: 1 }],
       ['RS', { series: 4, weeks: 14, points: 100, bestRank: 1 }],
@@ -131,9 +132,9 @@ describe('computeWatchSignals — ağırlıklar, eksik bileşen, en az 2 bileşe
   })
 
   it('Netflix pazarında kayıt olmaması 0 değerli bileşendir; pazar dışı ülke için bileşen yok', () => {
-    expect(r.byIso2.DE.components.netflix).toMatchObject({ present: true, weeks: 0, p: 17 }) // DE ve JP 0 puan → ortalama sıra
-    expect(r.byIso2.AD.components.netflix.present).toBe(false)
-    expect(r.byIso2.DE.reason).toMatch(/Netflix Top 10: son 52 haftada Türk dizisi yok/)
+    expect(r.byIso2.DE.components.lists).toMatchObject({ present: true, weeks: 0, p: 17 }) // DE ve JP 0 puan → ortalama sıra
+    expect(r.byIso2.AD.components.lists.present).toBe(false)
+    expect(r.byIso2.DE.reason).toMatch(/Listeler: son 52 haftada Türk dizisi yok/)
   })
 
   it('bölgesel Wikipedia ağırlığı yarıya iner ve uyarı üretir; tek dilli tam ağırlık', () => {
@@ -157,7 +158,7 @@ describe('computeWatchSignals — ağırlıklar, eksik bileşen, en az 2 bileşe
     expect(r.byIso2.BG.confidence).toBe('yüksek')
     expect(r.byIso2.RS.confidence).toBe('orta')
     expect(r.byIso2.BG.reason).toMatch(
-      /^Netflix Top 10: 4 dizi, 11 hafta, en iyi sıra 1; Wikipedia okunması \(bg\) medyanın [\d,.]+ katı; arama ilgisi 10 diziden 8'inde ölçülebilir/
+      /^Listeler: 4 dizi, 11 hafta, en iyi sıra 1; Okunma \(bg\) medyanın [\d,.]+ katı; arama ilgisi 10 diziden 8'inde ölçülebilir/
     )
   })
 
@@ -187,7 +188,7 @@ describe('computeWatchSignals — ağırlıklar, eksik bileşen, en az 2 bileşe
   })
 
   it('ağırlıklar ve eşik parametreyle değişebilir (varsayılan 0,50/0,30/0,20/0)', () => {
-    expect(r.meta.weights).toEqual({ netflix: 0.5, wiki: 0.3, search: 0.2, press: 0 })
+    expect(r.meta.weights).toEqual({ lists: 0.5, wiki: 0.3, search: 0.2, press: 0 })
     const r2 = computeWatchSignals(inputs, { minComponents: 1 })
     expect(r2.byIso2.AD.index).not.toBeNull()
     const r3 = computeWatchSignals(inputs, { weights: { press: 0.1 } })
@@ -196,6 +197,21 @@ describe('computeWatchSignals — ağırlıklar, eksik bileşen, en az 2 bileşe
 })
 
 describe('girdi dönüştürücüler', () => {
+  it('listsFromRows: Netflix haftalık + diğer listeler günlük haftaya toplanır; aynı hafta en iyi sıra bir kez sayılır', () => {
+    const m = listsFromRows(
+      [{ country_iso2: 'SA', week: '2026-09-27', tmdb_id: 1, rank: 4 }], // +7 gün → 2026-10-04 haftası
+      [
+        { country_iso2: 'SA', period_date: '2026-10-05', series_id: 1, rank: 2 }, // aynı hafta, daha iyi sıra
+        { country_iso2: 'SA', period_date: '2026-10-06', series_id: 1, rank: 6 },
+        { country_iso2: 'SA', period_date: '2026-10-06', series_id: 2, rank: 9 },
+        { country_iso2: 'IQ', period_date: '2025-01-01', series_id: 3, rank: 1 }, // pencere dışı
+      ],
+      '2025-10-06'
+    )
+    expect(m.get('SA')).toEqual({ weeks: 2, points: 9 + 2, bestRank: 2, series: 2 })
+    expect(m.has('IQ')).toBe(false)
+  })
+
   it('netflixFromRows: pencere dışı haftalar atılır, puan 11−sıra, dizi sayısı tekil', () => {
     const rows = [
       { country_iso2: 'BG', week: '2026-09-27', tmdb_id: 1, rank: 1 },
@@ -305,7 +321,7 @@ describe("pickNetflixMarkets — Netflix'in çekildiği pazar veriden düşer", 
     const r = computeWatchSignals({
       countries: [ulke('RU', 55), ulke('AR', 53), ulke('BR', 60)],
       markets: new Set(['AR', 'BR']),
-      netflix: new Map([['AR', { series: 6, weeks: 13, points: 90, bestRank: 1 }]]),
+      lists: new Map([['AR', { series: 6, weeks: 13, points: 90, bestRank: 1 }]]),
       wiki: new Map([
         ['RU', { value: 900, regional: true, langs: ['ru*'] }],
         ['AR', { value: 100, regional: true, langs: ['es*'] }],
@@ -316,9 +332,9 @@ describe("pickNetflixMarkets — Netflix'in çekildiği pazar veriden düşer", 
         ['AR', { hitShare: 0.3, meanValue: 2, seriesWithInterest: 3, seriesQueried: 10 }],
       ]),
     })
-    expect(r.byIso2.RU.components.netflix.present).toBe(false)
+    expect(r.byIso2.RU.components.lists.present).toBe(false)
     expect(r.byIso2.RU.componentCount).toBe(2)
     expect(r.byIso2.RU.index).not.toBeNull()
-    expect(r.byIso2.BR.components.netflix).toMatchObject({ present: true, weeks: 0 })
+    expect(r.byIso2.BR.components.lists).toMatchObject({ present: true, weeks: 0 })
   })
 })

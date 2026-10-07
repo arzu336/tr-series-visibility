@@ -279,21 +279,28 @@ export default function App() {
   // Dizi sayfasındaki "İlgiyi haritada göster": haritayı dizinin ülkelere göre arama ilgisiyle boyar.
   const handleShowInterestFromPage = useCallback(
     (result) => {
-      setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry })
+      setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry, fromSeriesId: seriesPageId })
       setHighlightFilter(null)
       setActorHighlight(null)
       handleBackToMap()
     },
-    [handleBackToMap]
+    [handleBackToMap, seriesPageId]
   )
 
   // Dizi sayfasındaki "Haritada göster": listeye girdiği ülkeleri işaretleyip haritaya döner.
   const handleShowSeriesFromPage = useCallback(
     (seriesName, countryEntries) => {
       handleShowSeriesAvailability(seriesName, countryEntries)
+      setHighlightFilter((f) => (f ? { ...f, fromSeriesId: seriesPageId } : f))
       handleBackToMap()
     },
-    [handleShowSeriesAvailability, handleBackToMap]
+    [handleShowSeriesAvailability, handleBackToMap, seriesPageId]
+  )
+
+  // Haritadaki filtre şeridinden, filtreyi açan dizi sayfasına geri dönüş (2026-10-07).
+  const handleReturnToSeries = useCallback(
+    (seriesId) => handleOpenSeriesPage(seriesId, seriesReturnRef.current),
+    [handleOpenSeriesPage]
   )
 
   const clearSeriesFilter = useCallback(() => {
@@ -490,8 +497,13 @@ export default function App() {
                       {seriesFilter && (
                         <div className="series-filter-badge">
                           <span>
-                            Gösterilen Veri: <strong>{seriesFilter.seriesName}</strong> Küresel İlgi Dağılımı
+                            Gösterilen veri: <strong>{seriesFilter.seriesName}</strong> — ülkelere göre arama ilgisi
                           </span>
+                          {seriesFilter.fromSeriesId != null && (
+                            <button type="button" onClick={() => handleReturnToSeries(seriesFilter.fromSeriesId)}>
+                              ← Diziye dön
+                            </button>
+                          )}
                           <button type="button" onClick={clearSeriesFilter}>
                             <IconClose size={13} inline />
                             Filtreyi temizle
@@ -511,6 +523,11 @@ export default function App() {
                               </>
                             )}
                           </span>
+                          {highlightFilter.fromSeriesId != null && (
+                            <button type="button" onClick={() => handleReturnToSeries(highlightFilter.fromSeriesId)}>
+                              ← Diziye dön
+                            </button>
+                          )}
                           <button type="button" onClick={clearHighlightFilter}>
                             <IconClose size={13} inline />
                             Filtreyi temizle
@@ -547,7 +564,7 @@ export default function App() {
                       <Legend
                         caption={
                           seriesFilter
-                            ? `"${seriesFilter.seriesName}" için ülke bazlı Google Trends arama ilgisi (0-100) — gerçek izlenme rakamı değil, arama ilgisine dayalı bir yakınsama (proxy) göstergesidir.`
+                            ? `"${seriesFilter.seriesName}" için ülke bazlı arama ilgisi (0-100) — gerçek izlenme rakamı değil, arama ilgisine dayalı bir yakınsama göstergesidir.`
                             : highlightFilter
                               ? highlightFilter.kind === 'actor'
                                 ? `"${highlightFilter.label}" oyuncusunun takip edilen dizilerinden en az birinin gerçekten yayınlandığı ülkeler işaretlenir.`

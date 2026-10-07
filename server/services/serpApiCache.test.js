@@ -6,6 +6,8 @@ import {
   getSerpApiUsageThisMonth,
   inFlightCount,
   readStoredSerpApi,
+  refreshSerpApiAccountUsage,
+  _setSerpApiAccountUsageForTests,
 } from './serpApiCache.js'
 
 const silCache = db.prepare("DELETE FROM cache_entries WHERE key LIKE 'test:%'")
@@ -72,12 +74,43 @@ describe('cacheFirstSerpApi — uçuş içi tekilleştirme', () => {
   })
 })
 
+describe('gerçek hesap kullanımı (serpapi.com/account.json)', () => {
+  beforeEach(() => {
+    process.env.SERPAPI_API_KEY = 'test-key'
+    process.env.SERPAPI_MONTHLY_BUDGET = '5000'
+  })
+  afterEach(() => _setSerpApiAccountUsageForTests(null))
+
+  it('hesap kullanımı sayaçtan büyükse o kullanılır; kota dolduysa canlı çağrı yapılmaz', async () => {
+    const fetchFn = vi.fn(async () => okYanitHesap({ this_month_usage: 5000, searches_per_month: 5000 }))
+    await refreshSerpApiAccountUsage({ force: true, fetchFn })
+    expect(getSerpApiUsageThisMonth()).toMatchObject({ used: 5000, budget: 5000, source: 'account' })
+    const ag = vi.fn()
+    vi.stubGlobal('fetch', ag)
+    await expect(serpapiGet({ q: 'x' })).rejects.toThrow(/kota/i)
+    expect(ag).not.toHaveBeenCalled()
+    vi.unstubAllGlobals()
+  })
+
+  it('hesap bilgisi alınamazsa kendi sayacına düşer', async () => {
+    _setSerpApiAccountUsageForTests(null)
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    await refreshSerpApiAccountUsage({ force: true, fetchFn: async () => ({ ok: false, status: 500 }) })
+    expect(getSerpApiUsageThisMonth().source).toBe('counter')
+    vi.restoreAllMocks()
+  })
+})
+
+const okYanitHesap = (body) => ({ ok: true, status: 200, json: async () => body })
+
 describe('serpapiGet — aylık bütçe sayacı', () => {
   const oncekiEnv = { key: process.env.SERPAPI_API_KEY, budget: process.env.SERPAPI_MONTHLY_BUDGET }
 
   beforeEach(() => {
     process.env.SERPAPI_API_KEY = 'test-key'
     process.env.SERPAPI_MONTHLY_BUDGET = '2'
+    // Hesap bilgisi taze: serpapiGet hesap ucunu çağırmaz, sayaç davranışı tek başına sınanır.
+    _setSerpApiAccountUsageForTests({ used: 0, budget: 1e9, at: Date.now() })
   })
 
   afterEach(() => {
@@ -94,7 +127,7 @@ describe('serpapiGet — aylık bütçe sayacı', () => {
       vi.fn(async () => okYanit({ sonuc: 1 }))
     )
     await serpapiGet({ engine: 'google_trends', q: 'x' })
-    expect(getSerpApiUsageThisMonth()).toEqual({ used: 1, budget: 2 })
+    expect(getSerpApiUsageThisMonth()).toMatchObject({ used: 1, budget: 2, ownCounter: 1 })
   })
 
   it('api_key sorgu parametresi olarak gider, params korunur', async () => {

@@ -3,7 +3,7 @@ import { SERIES_SECTION_COMPONENTS } from './SeriesSections.jsx'
 import { GLOBAL_SECTION_COMPONENTS } from './GlobalSections.jsx'
 
 const COMPONENTS = { ...SECTION_COMPONENTS, ...SERIES_SECTION_COMPONENTS, ...GLOBAL_SECTION_COMPONENTS }
-import { fmtDate, fmtDateTime } from './format.js'
+import { fmtDateTime } from './format.js'
 
 // Ülke brifingi (sözleşme ulke-brifingi-v1), dizi raporu ve küresel görünüm: özet kartı → başlıklar.
 // Saf bileşen — ağ çağrısı yok; SSR testleri ve baskı ölçümü bunu doğrudan basar. Hangi bölümün hangi
@@ -40,9 +40,7 @@ export default function CountryReportDocument({ report, countryName }) {
       <header className="report__head">
         <p className="report__kicker">{report.title || 'Ülke brifingi'}</p>
         <h1>{countryName}</h1>
-        <p className="report__meta">
-          {report.week ? `Hafta sonu: ${fmtDate(report.week)} · ` : ''}Hazırlanma: {fmtDateTime(report.generatedAt)}
-        </p>
+        <p className="report__meta">Hazırlanma: {fmtDateTime(report.generatedAt)}</p>
       </header>
 
       {report.isTracked === false && (

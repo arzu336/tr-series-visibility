@@ -368,11 +368,14 @@ export function buildOwnRanking({
   const positions = perWindow.map(rankOf)
   const weeks = new Map()
   const bestPos = new Map()
-  for (const pos of positions)
+  const lastWin = new Map() // dizinin göründüğü en yeni pencere (0 = bu hafta)
+  positions.forEach((pos, w) => {
     for (const [k, p] of pos) {
       weeks.set(k, (weeks.get(k) || 0) + 1)
       bestPos.set(k, Math.min(bestPos.get(k) ?? 99, p))
+      if (!lastWin.has(k)) lastWin.set(k, w)
     }
+  })
   const comparable = windows > 1 && [...providers[0]].every((p) => providers[1].has(p))
   const dayKeys = [...days.keys()].sort()
   const byDays = !comparable && dayKeys.length > 1
@@ -396,7 +399,12 @@ export function buildOwnRanking({
     trend: trendOf(k, p),
   }))
   const all = [...weeks.keys()]
-    .map((k) => ({ ...names.get(k), weeks: weeks.get(k), bestPosition: bestPos.get(k) }))
+    .map((k) => ({
+      ...names.get(k),
+      weeks: weeks.get(k),
+      bestPosition: bestPos.get(k),
+      lastSeen: addDays(to, -7 * lastWin.get(k)),
+    }))
     .sort((a, b) => b.weeks - a.weeks || a.bestPosition - b.bestPosition || a.name.localeCompare(b.name, 'tr'))
   // `all`: 52 haftada sıralamaya giren her dizi (dizi raporu için); `top`: ilk 10 (ülke brifingi için).
   return {
@@ -523,17 +531,40 @@ export async function getChartsMeta() {
   }
 }
 
+/**
+ * Küresel şerit (birleşik; 2026-10-06'ya kadar yalnızca Netflix): her hafta için Netflix'in listesi (yayımlandığı
+ * haftaya, +7 gün) ve diğer platformların o haftaki günlük listeleri tek haftalık satıra indirilir — ülke × dizi
+ * başına en iyi sıra. Hafta seçenekleri Netflix haftalarından türetilir.
+ */
+export function combinedWeekRows(netflixRows, otherRows) {
+  const best = new Map()
+  const put = (r, date) => {
+    const k = `${r.country_iso2}|${date}|${keyOf(r)}`
+    const cur = best.get(k)
+    if (!cur || r.rank < cur.rank) best.set(k, { ...r, period_date: date })
+  }
+  const weeks = [...new Set(netflixRows.map((r) => addDays(r.period_date, 7)))].sort()
+  for (const r of netflixRows) put(r, addDays(r.period_date, 7))
+  for (const r of otherRows) {
+    const end = weeks.find((w) => r.period_date <= w && r.period_date > addDays(w, -7)) ?? null
+    if (end) put(r, end)
+  }
+  return { rows: [...best.values()], weeks }
+}
+
 export async function getGlobalTop({ week } = {}) {
   const conn = getPipelineDb()
   if (!conn) return { status: 'hesaplanamaz', reason: EMPTY.netflixDbMissing, items: [] }
-  const rows = readRows(conn, "provider='netflix_tudum'", [])
-  const weeks = [...new Set(rows.map((r) => r.period_date))].sort()
+  const { rows, weeks } = combinedWeekRows(
+    readRows(conn, "provider='netflix_tudum'", []),
+    readRows(conn, "provider='flixpatrol' AND program_kind='series'", [])
+  )
   const w = week && weeks.includes(week) ? week : weeks.at(-1)
   if (!w) return { status: 'hesaplanamaz', reason: EMPTY.netflixTableMissing, items: [] }
   const nameOf = await namer()
   const items = globalTopForWeek(rows, w, { nameOf })
   const ya = yearAgoGlobal(rows, w, nameOf)
-  return { status: 'hesaplandi', week: w, weeks, items, yearAgo: ya, source: sourceOf('netflix_tudum', rows) }
+  return { status: 'hesaplandi', week: w, weeks, items, yearAgo: ya }
 }
 
 function yearAgoGlobal(rows, week, nameOf) {
@@ -606,7 +637,7 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
   const prev = latest ? (allWeeks[allWeeks.indexOf(latest) - 1] ?? null) : null
   const from = latest ? addDays(latest, -(WINDOW_WEEKS * 7 - 1)) : null
   const inWindow = latest ? rows.filter((r) => r.period_date >= from && r.period_date <= latest) : []
-  const netflixActive = Boolean(sig?.components?.netflix?.present)
+  const netflixActive = Boolean(sig?.components?.lists?.present)
   const facts = []
 
   // 1) Netflix
@@ -791,16 +822,15 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
 
 /** Kıta paneli: lider (izlenme düzeyi), en çok izlenen dizi (52 hafta ülke-hafta), bu hafta listede kaç Türk dizisi. */
 export async function getContinentCharts(continentByIso2, continents) {
-  const conn = getPipelineDb()
-  const [{ data }, signals] = await Promise.all([getEnrichedVisibility(), getWatchSignals().catch(() => null)])
-  const nameOf = await namer()
-  const rows = conn ? readRows(conn, "provider='netflix_tudum'", []) : []
-  const weeks = [...new Set(rows.map((r) => r.period_date))].sort()
-  const latest = weeks.at(-1) ?? null
-  const from = latest ? addDays(latest, -(WINDOW_WEEKS * 7 - 1)) : null
+  // Birleşik sıralama (bütün yayın listeleri; 2026-10-06'ya kadar yalnızca Netflix Top 10'du).
+  const [{ data }, signals, rankings] = await Promise.all([
+    getEnrichedVisibility(),
+    getWatchSignals().catch(() => null),
+    getAllOwnRankings(),
+  ])
+  const latest = [...rankings.values()][0]?.to ?? null
   return continents.map(({ id, name }) => {
     const isos = data.countries.filter((c) => continentByIso2[c.iso2] === id && c.iso2 !== 'TR').map((c) => c.iso2)
-    const set = new Set(isos)
     const scored = isos
       .map((i) => [i, signals?.byIso2?.[i]])
       .filter(([, s]) => s?.index != null)
@@ -808,15 +838,36 @@ export async function getContinentCharts(continentByIso2, continents) {
     const leader = scored[0] ? { iso2: scored[0][0], level: scored[0][1].level, index: scored[0][1].index } : null
     const levels = {}
     for (const [, s] of scored) levels[s.level] = (levels[s.level] || 0) + 1
-    const cont = rows.filter((r) => set.has(r.country_iso2))
-    const top = latest ? topInWindow(cont, from, latest, { nameOf, limit: 3 }) : []
-    const thisWeek = latest ? new Set(cont.filter((r) => r.period_date === latest).map((r) => keyOf(r))).size : 0
+    const agg = new Map()
+    const thisWeek = new Set()
+    for (const iso of isos) {
+      const own = rankings.get(iso)
+      for (const it of own?.current || []) thisWeek.add(it.seriesId ?? it.name)
+      for (const r of own?.all || []) {
+        const k = r.seriesId ?? r.name
+        const a = agg.get(k) || {
+          seriesId: r.seriesId ?? null,
+          name: r.name,
+          kind: 'series',
+          periods: 0,
+          bestRank: 99,
+          lastDate: null,
+        }
+        a.periods += r.weeks
+        a.bestRank = Math.min(a.bestRank, r.bestPosition)
+        if (!a.lastDate || r.lastSeen > a.lastDate) a.lastDate = r.lastSeen
+        agg.set(k, a)
+      }
+    }
+    const top = [...agg.values()]
+      .sort((a, b) => b.periods - a.periods || a.bestRank - b.bestRank || a.name.localeCompare(b.name, 'tr'))
+      .slice(0, 3)
     const topCountries = isos
       .map((i) => ({
         iso2: i,
         index: signals?.byIso2?.[i]?.index ?? null,
         level: signals?.byIso2?.[i]?.level ?? null,
-        weeks: cont.filter((r) => r.country_iso2 === i && latest && r.period_date >= from).length,
+        weeks: (rankings.get(i)?.all || []).reduce((n, r) => n + r.weeks, 0),
       }))
       .filter((c) => c.index != null)
       .sort((a, b) => b.index - a.index)
@@ -829,7 +880,7 @@ export async function getContinentCharts(continentByIso2, continents) {
       levels,
       topSeries: top[0] ? { ...top[0], countryWeeks: top[0].periods } : null,
       topSeriesList: top,
-      thisWeekSeriesCount: thisWeek,
+      thisWeekSeriesCount: thisWeek.size,
       topCountries,
       latestWeek: latest,
     }

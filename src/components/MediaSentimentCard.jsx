@@ -53,8 +53,8 @@ export default function MediaSentimentCard({ seriesId, iso2 }) {
     return (
       <div className="media-sentiment media-sentiment--empty">
         <p className="dashboard__empty">
-          Dizi adı (“{state.data.queryUsed}”) basın taraması için çok kısa — haber kaynağımız (GDELT) 5 harften kısa
-          adları aramıyor.
+          Dizi adı (“{state.data.queryUsed}”) basın taraması için çok kısa — haber kaynağımız 5 harften kısa adları
+          aramıyor.
         </p>
       </div>
     )
@@ -64,7 +64,7 @@ export default function MediaSentimentCard({ seriesId, iso2 }) {
     return (
       <div className="media-sentiment media-sentiment--empty">
         <p className="dashboard__empty">
-          Bu ülke için basın taraması desteklenmiyor — haber kaynağımız (GDELT) bu ülkeyi ayrı bir yayın ülkesi olarak
+          Bu ülke için basın taraması desteklenmiyor — haber kaynağımız bu ülkeyi ayrı bir yayın ülkesi olarak
           sınıflandırmıyor.
         </p>
       </div>

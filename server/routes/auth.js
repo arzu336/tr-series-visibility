@@ -47,9 +47,11 @@ const registerLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: 'Çok fazla kayıt denemesi yapıldı. Lütfen daha sonra tekrar deneyin.' },
 })
+// Oturum başına 15 dk'da 1500 istek (2026-10-07; önceden 300). Tek sayfalık arayüzde bir dizi sayfası ~10, harita
+// ve paneller onlarca istek atıyor; 300 yoğun kullanımda doluyor ve rapor gibi istekler "Çok fazla istek" alıyordu.
 const generalApiLimiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  limit: 300,
+  limit: 1500,
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {

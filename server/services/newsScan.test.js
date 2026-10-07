@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { buildGdeltPhrase, gdeltNewsCacheKey, fetchNewsArticlesGdelt } from './gdeltNews.js'
 import { pickLocalTitle, foldTitle, asciiVariant, pickEnglishTitles, getEnglishTitles } from './localTitles.js'
-import { selectNewsScanPairs } from './newsScanTargets.js'
+import { selectNewsScanPairs, interleaveScanPairs } from './newsScanTargets.js'
 
 describe('GDELT sorgusu — Türkçe ad + yerel ad', () => {
   it('tek ad tırnakla, birden çok ad parantez içinde OR ile', () => {
@@ -66,6 +66,19 @@ describe('selectNewsScanPairs — ülke başına ilgili diziler', () => {
     })
     const byId = Object.fromEntries(pairs.map((p) => [p.series.id, p.countries]))
     expect(byId).toEqual({ 1: ['MN', 'SA'], 4: ['MN'], 2: ['SA'] })
+  })
+})
+
+describe('interleaveScanPairs — diziler dönüşümlü', () => {
+  it('her dizinin ilk ülkesi, sonra ikinci ülkesi…; kısa liste bitince atlanır', () => {
+    const a = { id: 1, name: 'A' }
+    const b = { id: 2, name: 'B' }
+    const sira = interleaveScanPairs([
+      { series: a, countries: ['DE', 'FR', 'IT'] },
+      { series: b, countries: ['SA'] },
+    ]).map((p) => `${p.series.name}:${p.iso2}`)
+    expect(sira).toEqual(['A:DE', 'B:SA', 'A:FR', 'A:IT'])
+    expect(interleaveScanPairs([])).toEqual([])
   })
 })
 

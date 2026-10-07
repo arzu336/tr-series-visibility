@@ -108,6 +108,13 @@ export function getJob(id) {
   return publicJob(jobs.get(String(id)))
 }
 
+/** Anahtara bağlı son iş (süren ya da saklama süresi dolmamış biten); yoksa null. */
+export function getJobByKey(key) {
+  prune()
+  const id = byKey.get(key)
+  return id ? publicJob(jobs.get(id)) : null
+}
+
 /** Test/izleme: kayıttaki tüm işlerin özeti. */
 export function listJobs() {
   prune()

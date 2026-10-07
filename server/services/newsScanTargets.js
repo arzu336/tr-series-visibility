@@ -7,7 +7,8 @@ import { isGdeltSupportedCountry } from './gdeltNews.js'
 // Önceden "en popüler 35 dizi × 25 ülke" taranıyordu: çiftlerin çoğu dizinin o ülkede hiç bilinmediği
 // eşleşmelerdi ve basın tonu kayıtlarının %58'i "yetersiz veri" çıkıyordu. Türkiye (kaynak ülke) taranmaz.
 
-export const SERIES_PER_COUNTRY = 4
+// Google Haberler sorgusu ücretli (SerpApi kotası): ülke başına 2 dizi (2026-10-07; GDELT döneminde 4'tü).
+export const SERIES_PER_COUNTRY = 2
 // Yayın kataloğu olmayan ülkeler (yalnızca arama ilgisi ya da sınırlı veri): orada yayında olan dizi bilinmediği
 // için en popüler diziler taranır; GDELT hız sınırı nedeniyle ülke başına daha az.
 export const SERIES_PER_UNCATALOGED_COUNTRY = 2
@@ -84,6 +85,18 @@ export function selectNewsScanPairs({
     }
   }
   return [...groups.values()].sort((a, b) => b.countries.length - a.countries.length)
+}
+
+/**
+ * Dizi gruplarını dönüşümlü tek listeye çevirir: önce her dizinin en önemli ülkesi, sonra ikincisi… Önceden tarama
+ * dizi dizi ilerliyordu; 124 ülkeli ilk dizi saatlerce kuyruğu tutuyor, diğer dizilerin sırası gelmiyordu.
+ */
+export function interleaveScanPairs(groups) {
+  const out = []
+  const longest = Math.max(0, ...groups.map((g) => g.countries.length))
+  for (let i = 0; i < longest; i++)
+    for (const g of groups) if (i < g.countries.length) out.push({ series: g.series, iso2: g.countries[i] })
+  return out
 }
 
 export async function getNewsScanPairs({ conn = getPipelineDb() } = {}) {

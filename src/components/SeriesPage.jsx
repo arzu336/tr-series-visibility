@@ -26,6 +26,24 @@ import { SeriesTv } from './TvSections.jsx'
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w342'
 
+/** Sayfa içi yönlendirme: üstteki özet çipleri ilgili bölüme kaydırır. */
+function scrollToSection(id) {
+  document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' })
+}
+
+function JumpPill({ target, children, title }) {
+  return (
+    <button
+      type="button"
+      className="map-popup-card__pill map-popup-card__pill--link"
+      onClick={() => scrollToSection(target)}
+      title={title}
+    >
+      {children}
+    </button>
+  )
+}
+
 function nameOf(iso2) {
   return countryNames[iso2]?.name || iso2
 }
@@ -83,6 +101,23 @@ export function seriesFromCountries(allCountries, seriesId) {
   return base ? { ...base, availability } : null
 }
 
+/** Ülke başına tek satır: bütün listeler birlikte (platform adı gösterilmez) — en iyi sıra, en uzun süre, son tarih. */
+export function mergeListingsByCountry(listings) {
+  const by = new Map()
+  for (const l of listings || []) {
+    const cur = by.get(l.iso2)
+    if (!cur) by.set(l.iso2, { iso2: l.iso2, bestRank: l.bestRank, weeks: l.weeks, lastDate: l.lastDate })
+    else {
+      cur.bestRank = Math.min(cur.bestRank, l.bestRank)
+      cur.weeks = Math.max(cur.weeks, l.weeks)
+      if (l.lastDate > cur.lastDate) cur.lastDate = l.lastDate
+    }
+  }
+  return [...by.values()].sort((a, b) =>
+    b.lastDate > a.lastDate ? 1 : b.lastDate < a.lastDate ? -1 : a.bestRank - b.bestRank
+  )
+}
+
 function ListingsTable({ listings }) {
   return (
     <div className="series-page__table-wrap">
@@ -90,19 +125,17 @@ function ListingsTable({ listings }) {
         <thead>
           <tr>
             <th>Ülke</th>
-            <th>Platform</th>
             <th>En iyi sıra</th>
             <th>Hafta</th>
             <th>Son</th>
           </tr>
         </thead>
         <tbody>
-          {listings.map((l) => (
-            <tr key={`${l.iso2}-${l.platform}`}>
+          {mergeListingsByCountry(listings).map((l) => (
+            <tr key={l.iso2}>
               <td>
                 <Country iso2={l.iso2} />
               </td>
-              <td>{l.platform}</td>
               <td>#{l.bestRank}</td>
               <td>{l.weeks}</td>
               <td>{fmtDateTr(l.lastDate)}</td>
@@ -212,13 +245,20 @@ export default function SeriesPage({
               .join(' · ')}
           </p>
           <div className="series-page__pills">
-            {imdb?.rating != null && (
-              <span className="map-popup-card__pill">
-                <IconStar />
-                {imdb.rating.toFixed(1)}
-                {imdb.votes != null ? ` (${formatVotes(imdb.votes)} oy)` : ''}
-              </span>
-            )}
+            {imdb?.rating != null &&
+              (seasons.length > 0 ? (
+                <JumpPill target="bolum-puanlari" title="Bölüm puanlarına git">
+                  <IconStar />
+                  {imdb.rating.toFixed(1)}
+                  {imdb.votes != null ? ` (${formatVotes(imdb.votes)} oy)` : ''}
+                </JumpPill>
+              ) : (
+                <span className="map-popup-card__pill">
+                  <IconStar />
+                  {imdb.rating.toFixed(1)}
+                  {imdb.votes != null ? ` (${formatVotes(imdb.votes)} oy)` : ''}
+                </span>
+              ))}
             {imdb?.votesGrowth?.d7?.votes > 0 && (
               <span
                 className="map-popup-card__pill series-page__pill--up"
@@ -228,8 +268,14 @@ export default function SeriesPage({
               </span>
             )}
             {enrichment?.dizilah?.channel && <span className="map-popup-card__pill">{enrichment.dizilah.channel}</span>}
-            <span className="map-popup-card__pill">{series.availability.length} ülkede yayında</span>
-            {listedCountries > 0 && <span className="map-popup-card__pill">{listedCountries} ülkede listede</span>}
+            <JumpPill target="nerede-yayinda" title="Yayında olduğu ülkelere git">
+              {series.availability.length} ülkede yayında
+            </JumpPill>
+            {listedCountries > 0 && (
+              <JumpPill target="listeler" title="Listelere git">
+                {listedCountries} ülkede listede
+              </JumpPill>
+            )}
             {kg?.userReviewsPct != null && (
               <span className="map-popup-card__pill">İzleyici beğenisi %{kg.userReviewsPct}</span>
             )}
@@ -261,11 +307,7 @@ export default function SeriesPage({
               <IconMap />
               Haritada göster
             </button>
-            <button
-              type="button"
-              className="series-page__btn"
-              onClick={() => document.getElementById('arama-ilgisi')?.scrollIntoView({ behavior: 'smooth' })}
-            >
+            <button type="button" className="series-page__btn" onClick={() => scrollToSection('arama-ilgisi')}>
               <IconChart />
               Arama ilgisi
             </button>
@@ -283,7 +325,7 @@ export default function SeriesPage({
 
       <div className="series-page__grid">
         <div className="series-page__col">
-          <section className="series-page__section">
+          <section className="series-page__section" id="listeler">
             <h2>Listeler</h2>
             {chartsReq.status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
             {charts && listings.length > 0 && <ListingsTable listings={listings} />}
@@ -292,7 +334,7 @@ export default function SeriesPage({
             )}
           </section>
 
-          <section className="series-page__section">
+          <section className="series-page__section" id="nerede-yayinda">
             <h2 title={AVAILABILITY_NOTE}>Nerede yayında — {series.availability.length} ülke ⓘ</h2>
             {series.availability.length ? (
               <ul className="series-page__rows">
@@ -311,7 +353,7 @@ export default function SeriesPage({
           <SeriesTv seriesId={seriesId} />
 
           {seasons.length > 0 && (
-            <section className="series-page__section">
+            <section className="series-page__section" id="bolum-puanlari">
               <h2>Bölüm puanları</h2>
               <EpisodeHeatmap seasons={seasons} />
             </section>

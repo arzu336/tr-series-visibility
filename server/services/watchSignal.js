@@ -18,7 +18,7 @@ import { LANG_COUNTRIES, languagesOfCountry } from '../../src/lib/langCountries.
 // yüzdelik. En az 2 bileşen; Türkiye (kaynak ülke) evren dışı. Uydurma/sentetik veri yok.
 
 export const SOURCE_COUNTRY = 'TR'
-export const WEIGHTS = { netflix: 0.5, wiki: 0.3, search: 0.2, press: 0 }
+export const WEIGHTS = { lists: 0.5, wiki: 0.3, search: 0.2, press: 0 }
 export const REGIONAL_FACTOR = 0.5
 export const MIN_COMPONENTS = 2
 export const OPPORTUNITY_THRESHOLD = 50
@@ -32,7 +32,7 @@ export const WIKI_WINDOW_MONTHS = 12
 export const LINEAR_TV_DISTRIBUTION_MIN_P = 60
 export const LINEAR_TV_GAP_MIN_P = 30
 export const LINEAR_TV_INTEREST_MIN_P = 40
-export const CACHE_KEY = 'watch-signal:v2'
+export const CACHE_KEY = 'watch-signal:v4'
 export const CACHE_TTL_MS = 60 * 60 * 1000
 // IMDb "yerel başlık" sayımında dışlanan İngilizce pazarlar: buradaki AKA'lar çeviri değil İngilizce ad.
 export const ENGLISH_AKA_REGIONS = new Set([
@@ -83,11 +83,11 @@ export function levelOf(index) {
   return 'Çok düşük'
 }
 
-/** yüksek: ≥3 bileşen ve içinde Netflix ya da tek dilli Wikipedia; orta: 2 bileşen; düşük: tek bileşen. */
+/** yüksek: ≥3 bileşen ve içinde yayın listeleri ya da tek dilli okunma; orta: 2 bileşen; düşük: tek bileşen. */
 export function confidenceOf(comps) {
   const n = comps.length
   if (n === 0) return null
-  const guclu = comps.some((c) => c.key === 'netflix' || (c.key === 'wiki' && !c.regional))
+  const guclu = comps.some((c) => c.key === 'lists' || (c.key === 'wiki' && !c.regional))
   if (n >= 3 && guclu) return 'yüksek'
   if (n >= 2) return 'orta'
   return 'düşük'
@@ -120,7 +120,7 @@ export function computeWatchSignals(inputs, opts = {}) {
   const regionalFactor = opts.regionalFactor ?? REGIONAL_FACTOR
   const {
     countries,
-    netflix = new Map(),
+    lists = new Map(),
     markets = new Set(),
     wiki = new Map(),
     search = new Map(),
@@ -132,7 +132,7 @@ export function computeWatchSignals(inputs, opts = {}) {
   const isos = universe.map((c) => c.iso2)
   const byIso = new Map(universe.map((c) => [c.iso2, c]))
 
-  const netflixP = percentileRank(isos.filter((i) => markets.has(i)).map((i) => [i, netflix.get(i)?.points || 0]))
+  const listsP = percentileRank(isos.filter((i) => markets.has(i)).map((i) => [i, lists.get(i)?.points || 0]))
   const wikiP = percentileRank(isos.filter((i) => wiki.has(i)).map((i) => [i, wiki.get(i).value]))
   const searchP = percentileRank(
     isos
@@ -150,7 +150,7 @@ export function computeWatchSignals(inputs, opts = {}) {
   const rows = new Map()
   for (const iso of isos) {
     const comps = []
-    if (netflixP.has(iso)) comps.push({ key: 'netflix', p: netflixP.get(iso), w: weights.netflix })
+    if (listsP.has(iso)) comps.push({ key: 'lists', p: listsP.get(iso), w: weights.lists })
     if (wikiP.has(iso)) {
       const w = wiki.get(iso)
       comps.push({
@@ -174,23 +174,23 @@ export function computeWatchSignals(inputs, opts = {}) {
     const c = byIso.get(iso)
     const { comps, score } = rows.get(iso)
     const index = indexP.has(iso) ? Math.round(indexP.get(iso)) : null
-    const n = netflix.get(iso)
+    const n = lists.get(iso)
     const w = wiki.get(iso)
     const s = search.get(iso)
     const pr = press.get(iso)
     const d = distribution.get(iso)
     const hasAccess = c.dataSource !== 'proxy'
     const components = {
-      netflix: netflixP.has(iso)
+      lists: listsP.has(iso)
         ? {
             present: true,
-            p: Math.round(netflixP.get(iso)),
+            p: Math.round(listsP.get(iso)),
             series: n?.series ?? 0,
             weeks: n?.weeks ?? 0,
             points: n?.points ?? 0,
             bestRank: n?.bestRank ?? null,
           }
-        : { present: false, reason: 'Netflix bu ülke için Top 10 yayımlamıyor' },
+        : { present: false, reason: 'bu ülke için yayın listesi yok' },
       wiki: wikiP.has(iso)
         ? {
             present: true,
@@ -217,20 +217,20 @@ export function computeWatchSignals(inputs, opts = {}) {
     }
     const dist = d ? { titles: d.titles, p: Math.round(distP.get(iso)) } : null
     const warnings = []
-    const netflixGap = !components.netflix.present || dist?.p - components.netflix.p >= LINEAR_TV_GAP_MIN_P
+    const listGap = !components.lists.present || dist?.p - components.lists.p >= LINEAR_TV_GAP_MIN_P
     const ilgiVar =
       (components.wiki.present && components.wiki.p >= LINEAR_TV_INTEREST_MIN_P) ||
       (components.search.present && components.search.p >= LINEAR_TV_INTEREST_MIN_P)
-    if (dist && dist.p >= LINEAR_TV_DISTRIBUTION_MIN_P && netflixGap && ilgiVar) {
+    if (dist && dist.p >= LINEAR_TV_DISTRIBUTION_MIN_P && listGap && ilgiVar) {
       warnings.push({
         code: 'linear-tv',
-        text: `Bu ülkede ${dist.titles} Türk dizisi yerel adla dağıtılmış (IMDb yerel başlık; yüzdelik konum ${dist.p}/100) ama Netflix Top 10'da ${components.netflix.present ? 'zayıf' : 'ölçülemiyor'}: izlenme ağırlıkla lineer TV ya da diğer kanallarda olabilir; endeks bunu görmez.`,
+        text: `Bu ülkede ${dist.titles} Türk dizisi yerel adla dağıtılmış (yüzdelik konum ${dist.p}/100) ama yayın listelerinde ${components.lists.present ? 'zayıf' : 'ölçülemiyor'}: izlenme ağırlıkla televizyonda ya da diğer kanallarda olabilir; endeks bunu görmez.`,
       })
     }
     if (components.wiki.present && components.wiki.regional) {
       warnings.push({
         code: 'regional-wiki',
-        text: `Wikipedia sinyali ortak dile dayanır (${w.langs.join(', ')}); okunma bu ülkeye ayrılamaz.`,
+        text: `Okunma sinyali ortak dile dayanır (${w.langs.join(', ')}); okunma bu ülkeye ayrılamaz.`,
       })
     }
     if (index == null && comps.length === 1) {
@@ -254,7 +254,7 @@ export function computeWatchSignals(inputs, opts = {}) {
       access: hasAccess ? { p: Math.round(accessP.get(iso)), seriesCount: c.seriesCount || 0 } : null,
       opportunity: opportunityOf(index, hasAccess ? accessP.get(iso) : null, hasAccess),
       reason: reasonLine({
-        netflix: components.netflix,
+        lists: components.lists,
         wiki: components.wiki,
         search: components.search,
         press: components.press,
@@ -272,7 +272,7 @@ export function computeWatchSignals(inputs, opts = {}) {
       minComponents,
       regionalFactor,
       coverage: {
-        netflix: netflixP.size,
+        lists: listsP.size,
         wiki: wikiP.size,
         wikiRegional: [...wikiP.keys()].filter((i) => wiki.get(i).regional).length,
         search: searchP.size,
@@ -285,18 +285,18 @@ export function computeWatchSignals(inputs, opts = {}) {
   }
 }
 
-export function reasonLine({ netflix, wiki, search, press }) {
+export function reasonLine({ lists, wiki, search, press }) {
   const parts = []
-  if (netflix?.present) {
+  if (lists?.present) {
     parts.push(
-      netflix.weeks > 0
-        ? `Netflix Top 10: ${netflix.series} dizi, ${netflix.weeks} hafta, en iyi sıra ${netflix.bestRank}`
-        : 'Netflix Top 10: son 52 haftada Türk dizisi yok'
+      lists.weeks > 0
+        ? `Listeler: ${lists.series} dizi, ${lists.weeks} hafta, en iyi sıra ${lists.bestRank}`
+        : 'Listeler: son 52 haftada Türk dizisi yok'
     )
   }
   if (wiki?.present) {
     parts.push(
-      `Wikipedia okunması (${wiki.langs.join(', ')}${wiki.regional ? ', ortak dil' : ''}) medyanın ${wiki.vsMedian ?? '?'} katı`
+      `Okunma (${wiki.langs.join(', ')}${wiki.regional ? ', ortak dil' : ''}) medyanın ${wiki.vsMedian ?? '?'} katı`
     )
   }
   if (search?.present)
@@ -319,6 +319,43 @@ export function netflixFromRows(rows, cutoffWeek) {
     c.points += 11 - r.rank
     c.bestRank = Math.min(c.bestRank, r.rank)
     out.set(r.country_iso2, c)
+  }
+  for (const c of out.values()) {
+    c.series = c.seriesIds.size
+    delete c.seriesIds
+  }
+  return out
+}
+
+const WEEK_MS = 7 * 24 * 60 * 60 * 1000
+const weekBucket = (date) => Math.floor(Date.parse(`${date}T00:00:00Z`) / WEEK_MS)
+const plusDays = (date, n) => new Date(Date.parse(`${date}T00:00:00Z`) + n * 86400000).toISOString().slice(0, 10)
+
+/**
+ * Birleşik yayın listeleri (2026-10-06; önceden yalnızca Netflix Top 10): Netflix'in haftalık listesi ve diğer
+ * platformların günlük listeleri haftalara toplanır; aynı hafta aynı dizi birden çok listede/günde ise en iyi
+ * sırası sayılır. Netflix listesi yayımlandığı haftaya sayılır (+7 gün; ülke sıralamasıyla aynı kural).
+ * Puan = Σ(11 − sıra), hafta = dizi-hafta sayısı. netflixRows: {country_iso2, week, tmdb_id, rank};
+ * otherRows: {country_iso2, period_date, series_id, rank}.
+ */
+export function listsFromRows(netflixRows, otherRows, cutoffDate) {
+  const best = new Map()
+  const add = (iso, date, id, rank) => {
+    if (id == null || !date || date < cutoffDate) return
+    const k = `${iso}|${weekBucket(date)}|${id}`
+    best.set(k, Math.min(best.get(k) ?? 99, rank))
+  }
+  for (const r of netflixRows) add(r.country_iso2, plusDays(r.week, 7), r.tmdb_id, r.rank)
+  for (const r of otherRows) add(r.country_iso2, r.period_date, r.series_id, r.rank)
+  const out = new Map()
+  for (const [k, rank] of best) {
+    const [iso, , id] = k.split('|')
+    const c = out.get(iso) || { seriesIds: new Set(), weeks: 0, points: 0, bestRank: 99 }
+    c.seriesIds.add(id)
+    c.weeks += 1
+    c.points += Math.max(0, 11 - rank)
+    c.bestRank = Math.min(c.bestRank, rank)
+    out.set(iso, c)
   }
   for (const c of out.values()) {
     c.series = c.seriesIds.size
@@ -434,12 +471,14 @@ export function pickNetflixMarkets(meta = {}) {
   return parse(meta.netflix_active_countries_52w) || parse(meta.netflix_market_countries) || new Set()
 }
 
-function readNetflix(conn, now) {
-  if (!conn) return { netflix: new Map(), markets: new Set(), available: false }
-  let rows = []
+function readLists(conn, now) {
+  if (!conn) return { lists: new Map(), markets: new Set(), available: false }
+  const cutoff = cutoffWeekBefore(now, NETFLIX_WINDOW_WEEKS)
+  let netflixRows = []
+  let otherRows = []
   let markets = new Set()
   try {
-    rows = conn.prepare('SELECT country_iso2, week, tmdb_id, rank FROM netflix_weekly_ranks').all()
+    netflixRows = conn.prepare('SELECT country_iso2, week, tmdb_id, rank FROM netflix_weekly_ranks').all()
     const meta = Object.fromEntries(
       conn
         .prepare(
@@ -450,12 +489,29 @@ function readNetflix(conn, now) {
     )
     markets = pickNetflixMarkets(meta)
   } catch {
-    return { netflix: new Map(), markets: new Set(), available: false }
+    // Netflix tablosu yoksa yalnızca diğer listeler
+  }
+  try {
+    otherRows = conn
+      .prepare(
+        `SELECT country_iso2, period_date, series_id, rank FROM chart_entries
+         WHERE provider = 'flixpatrol' AND program_kind = 'series' AND series_id IS NOT NULL AND period_date >= ?`
+      )
+      .all(cutoff)
+    // Liste tutulan her ülke "pazar"dır: listede Türk dizisi olmaması 0 değerli bir ölçümdür.
+    for (const r of conn.prepare("SELECT DISTINCT country_iso2 FROM chart_entries WHERE provider = 'flixpatrol'").all())
+      markets.add(r.country_iso2)
+  } catch {
+    // diğer listeler yoksa yalnızca Netflix
   }
   return {
-    netflix: netflixFromRows(rows, cutoffWeekBefore(now, NETFLIX_WINDOW_WEEKS)),
+    lists: listsFromRows(
+      netflixRows.filter((r) => r.week >= cutoff),
+      otherRows,
+      cutoff
+    ),
     markets,
-    available: rows.length > 0,
+    available: netflixRows.length > 0 || otherRows.length > 0,
   }
 }
 
@@ -471,13 +527,26 @@ function readWiki(demographics, now) {
 
 function readSearch(seriesIdByName) {
   const rows = []
+  // Yalnızca katalogdaki diziler: "Turkish series" gibi genel sorgular dizi sayılmaz (önceden sayılıyordu).
+  const byLowerName = new Map([...seriesIdByName].map(([n, id]) => [n.toLocaleLowerCase('tr'), id]))
+  const idOf = (name) => seriesIdByName.get(name) ?? byLowerName.get(String(name || '').toLocaleLowerCase('tr'))
   for (const r of db.prepare('SELECT series_name, by_country FROM trends_cache').all()) {
+    const id = idOf(r.series_name)
+    if (id == null) continue
     try {
-      rows.push({
-        seriesKey: seriesIdByName.get(r.series_name) ?? `name:${r.series_name}`,
-        byCountry: JSON.parse(r.by_country),
-        local: false,
-      })
+      rows.push({ seriesKey: id, byCountry: JSON.parse(r.by_country), local: false })
+    } catch {
+      /* bozuk satır atlanır */
+    }
+  }
+  // Güncel dünya geneli sorgular (önbellek; v2 düşük hacimli ülkeleri de içerir). Önceden yalnızca eski
+  // trends_cache tablosu okunuyordu: sonradan sorgulanan diziler haritaya hiç ulaşmıyordu.
+  for (const r of db.prepare("SELECT value FROM cache_entries WHERE key LIKE 'serp:trends:%'").all()) {
+    try {
+      const v = JSON.parse(r.value)
+      const id = idOf(v.seriesName)
+      if (id == null) continue
+      rows.push({ seriesKey: id, byCountry: v.byCountry || [], local: false })
     } catch {
       /* bozuk satır atlanır */
     }
@@ -530,10 +599,10 @@ export async function getWatchSignals({ fresh = false, now = new Date() } = {}) 
   ])
   const conn = getPipelineDb()
   const seriesIdByName = new Map(raw.series.map((s) => [s.name, s.id]))
-  const { netflix, markets, available } = readNetflix(conn, now)
+  const { lists, markets, available } = readLists(conn, now)
   const result = computeWatchSignals({
     countries: data.countries,
-    netflix,
+    lists,
     markets,
     wiki: readWiki(demographics, now),
     search: readSearch(seriesIdByName),
@@ -543,7 +612,7 @@ export async function getWatchSignals({ fresh = false, now = new Date() } = {}) 
   const out = {
     ...result,
     generatedAt: now.toISOString(),
-    netflixWindow: { weeks: NETFLIX_WINDOW_WEEKS, from: cutoffWeekBefore(now, NETFLIX_WINDOW_WEEKS), available },
+    listsWindow: { weeks: NETFLIX_WINDOW_WEEKS, from: cutoffWeekBefore(now, NETFLIX_WINDOW_WEEKS), available },
     wikiWindowMonths: WIKI_WINDOW_MONTHS,
     contract: 'izlenme-sinyali-v1',
   }

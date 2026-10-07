@@ -34,7 +34,7 @@ dataRouter.get(
       ...data,
       countries: data.countries.map((c) => ({ ...c, watchSignal: signals?.byIso2?.[c.iso2] ?? null })),
       watchSignalMeta: signals
-        ? { ...signals.meta, generatedAt: signals.generatedAt, netflixWindow: signals.netflixWindow }
+        ? { ...signals.meta, generatedAt: signals.generatedAt, listsWindow: signals.listsWindow }
         : null,
     })
   })

@@ -92,6 +92,11 @@ export async function enrichSeriesNow(seriesId) {
   return handle(await fetch(`/api/series/enrich-now/${seriesId}`, { method: 'POST' }))
 }
 
+/** Dizinin süren (ya da son 30 dk'da biten) basın+sosyal tarama işi; yoksa { job: null }. */
+export async function fetchSeriesEnrichJob(seriesId) {
+  return handle(await fetch(`/api/series/${encodeURIComponent(seriesId)}/enrich-job`))
+}
+
 // YouTube bağlantıları (yönetici)
 export async function fetchYoutubeStatus() {
   return handle(await fetch('/api/youtube/status'))
@@ -150,7 +155,7 @@ export async function fetchJob(jobId) {
 }
 
 /** İş bitene kadar (done/failed) yoklar; her yoklamada onProgress(job) çağrılır. */
-export async function waitForJob(jobId, { intervalMs = 2000, onProgress, signal } = {}) {
+export async function waitForJob(jobId, { intervalMs = 4000, onProgress, signal } = {}) {
   for (;;) {
     if (signal?.aborted) throw new Error('İzleme iptal edildi')
     const job = await fetchJob(jobId)

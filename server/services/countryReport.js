@@ -9,7 +9,7 @@ import { getPipelineDb } from './pipelineDb.js'
 import { readCachedSerpApi, timeSeriesCacheKey } from './serpApiCache.js'
 import { findSimilarCountries } from './similarCountries.js'
 import { getWatchSignals } from './watchSignal.js'
-import { getCountryCharts } from './charts.js'
+import { getCountryCharts, getAllOwnRankings } from './charts.js'
 import { getImdbDataForTmdbSeries } from '../imdb.js'
 import { languagesOfCountry } from '../../src/lib/langCountries.js'
 import { getForeignStudentSummary } from './foreignStudents.js'
@@ -131,14 +131,14 @@ function buildScores(countryRow, raw, iso2, signal) {
         for (const p of e[k] || []) platforms.add(p.provider_name || String(p.provider_id))
     }
   }
-  const nf = signal?.components?.netflix
+  const nf = signal?.components?.lists
   return OK(
     {
       level: signal?.level ?? null,
       index: signal?.index ?? null,
       confidence: signal?.confidence ?? null,
-      netflix: nf?.present ? { series: nf.series, weeks: nf.weeks, bestRank: nf.bestRank } : null,
-      netflixReason: nf && !nf.present ? nf.reason : null,
+      lists: nf?.present ? { series: nf.series, weeks: nf.weeks, bestRank: nf.bestRank } : null,
+      listsReason: nf && !nf.present ? nf.reason : null,
       access:
         countryRow.dataSource === 'proxy'
           ? null
@@ -242,9 +242,14 @@ function buildHighlightedSeries(topSeries) {
   return OK({ items, criteria })
 }
 
+/** Brifingin arama ilgisi bölümündeki diziler: ülkede yayında olan en popüler 3 dizi (doldurma işi de bunu kullanır). */
+export function searchTrendCandidates(countryRow) {
+  return [...(countryRow?.seriesList || [])].sort((a, b) => b.popularity - a.popularity).slice(0, SEARCH_TREND_SERIES)
+}
+
 function buildSearchTrend(iso2, countryRow, readCache) {
   if (!countryRow?.seriesList?.length) return yetersiz('yayın verisi yok')
-  const adaylar = [...countryRow.seriesList].sort((a, b) => b.popularity - a.popularity).slice(0, SEARCH_TREND_SERIES)
+  const adaylar = searchTrendCandidates(countryRow)
   const series = []
   const eksik = []
   for (const s of adaylar) {
@@ -481,23 +486,17 @@ function buildNetflixHistory(iso2, raw, pipelineConn, readSyncError) {
   )
 }
 
-async function buildGapAnalysis(iso2, raw, countries, pipelineConn, similarFn, similarOpts) {
+async function buildGapAnalysis(iso2, raw, countries, rankings, similarFn, similarOpts) {
   const similar = await similarFn(iso2, countries, similarOpts)
   if (similar.candidates.length === 0) return yetersiz(EMPTY.gapNoSimilar(similar.note))
 
-  const netflixBest = new Map()
-  if (pipelineConn) {
-    for (const c of similar.candidates) {
-      try {
-        for (const r of netflixRowsFor(pipelineConn, c.iso2)) {
-          const cur = netflixBest.get(r.tmdb_id)
-          if (!cur || r.rank_score > cur.rankScore) {
-            netflixBest.set(r.tmdb_id, { iso2: c.iso2, rankScore: r.rank_score, peakRank: r.peak_rank })
-          }
-        }
-      } catch {
-        /* tablo yok — Netflix bonusu olmadan devam */
-      }
+  // Benzer ülkelerin birleşik sıralamasında (bütün yayın listeleri, son 52 hafta) dizinin en iyi yeri.
+  // Önceden yalnızca Netflix Top 10'dan geliyordu.
+  const listBest = new Map()
+  for (const c of similar.candidates) {
+    for (const r of rankings?.get(c.iso2)?.all || []) {
+      const cur = listBest.get(r.seriesId)
+      if (!cur || r.bestPosition < cur.position) listBest.set(r.seriesId, { iso2: c.iso2, position: r.bestPosition })
     }
   }
 
@@ -508,16 +507,17 @@ async function buildGapAnalysis(iso2, raw, countries, pipelineConn, similarFn, s
       .filter((c) => isStreamable(raw.providersById[s.id]?.[c.iso2]))
       .map((c) => c.iso2)
     if (availableIn.length === 0) continue
-    const nb = netflixBest.get(s.id) || null
+    const lb = listBest.get(s.id) || null
     items.push({
       tmdbId: s.id,
       name: s.name,
       popularity: s.popularity,
       availableIn,
-      netflixBest: nb,
+      listBest: lb,
       gapScore:
-        Math.round((availableIn.length * 10 + (nb ? nb.rankScore / 10 : 0) + Math.min(10, s.popularity / 10)) * 10) /
-        10,
+        Math.round(
+          (availableIn.length * 10 + (lb ? Math.max(0, 11 - lb.position) : 0) + Math.min(10, s.popularity / 10)) * 10
+        ) / 10,
     })
   }
   items.sort((a, b) => b.gapScore - a.gapScore)
@@ -740,8 +740,9 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
   const netflixHistory = await guarded('netflixHistory', () =>
     buildNetflixHistory(iso2, raw, pipelineConn, readSyncError)
   )
+  const ownRankings = await (deps.getAllOwnRankings || getAllOwnRankings)().catch(() => null)
   const gapAnalysis = await guarded('gapAnalysis', () =>
-    buildGapAnalysis(iso2, raw, countries, pipelineConn, similarFn, deps.similarOpts)
+    buildGapAnalysis(iso2, raw, countries, ownRankings, similarFn, deps.similarOpts)
   )
   const tourismSignal = section('tourismSignal', buildTourismSignal(convergence))
   const wikiInterest = await guarded('wikiInterest', () => {

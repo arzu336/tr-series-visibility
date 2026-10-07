@@ -193,8 +193,8 @@ function yearAgoText(ya) {
 }
 
 /**
- * "Şu an listede" + "Bu ülkede en çok izlenenler" — tüm platformların listeleri birlikte (her satırda
- * hangi platform olduğu yazar). Hiçbir platformda liste yoksa Wikipedia okunma sıralamasına düşer.
+ * "Şu an listede" + "Bu ülkede en çok izlenenler" — tüm platformların listeleri birlikte (platform adı
+ * gösterilmez). Hiçbir platformda liste yoksa ansiklopedi okunma sıralamasına düşer.
  */
 /** Liste ya da okunma verisi var mı (yoksa yayın kataloğu olmayan ülkede "en çok izlenenler" bölümü hiç basılmaz). */
 function hasWatchData(charts) {
@@ -210,7 +210,7 @@ const fmtInt = (n) => new Intl.NumberFormat('tr-TR').format(n)
  * Yayın kataloğu olmayan ülkede boş bölümler yerine eldeki veri (2026-10-06): bağlı olduğu ülkenin bu haftaki
  * sıralaması, Türkiye'de okuyan öğrenci sayısı, basın taraması özeti.
  */
-export function CountryContext({ iso2, allCountries, onSelectSeries, onSelectCountry }) {
+export function CountryContext({ iso2, allCountries, onSelectSeries, onSelectCountry, seriesInfo }) {
   const { status, data } = useAsync(() => fetchCountryContext(iso2), [iso2])
   if (status === 'loading' || status === 'idle') return <p className="dashboard__empty">Yükleniyor…</p>
   if (status !== 'ready' || !data) return null
@@ -236,7 +236,13 @@ export function CountryContext({ iso2, allCountries, onSelectSeries, onSelectCou
           {parent.now.length > 0 && (
             <ChartList
               compact
-              items={parent.now.map((it) => ({ ...it, rank: it.position, kind: 'series' }))}
+              showPosters
+              items={parent.now.map((it) => ({
+                ...it,
+                rank: it.position,
+                kind: 'series',
+                posterPath: it.posterPath ?? seriesInfo?.get(it.seriesId)?.posterPath ?? null,
+              }))}
               onSelect={onSelectSeries}
             />
           )}
@@ -263,7 +269,7 @@ export function CountryContext({ iso2, allCountries, onSelectSeries, onSelectCou
   )
 }
 
-export function WatchLists({ charts, onSelectSeries }) {
+export function WatchLists({ charts, onSelectSeries, seriesInfo }) {
   if (!charts) return null
   const nf = charts.netflix
   const lists = charts.lists
@@ -275,7 +281,7 @@ export function WatchLists({ charts, onSelectSeries }) {
           <ChartList
             compact
             showPosters
-            items={lists.now.map((it) => ({ ...it, meta: it.platform }))}
+            items={lists.now.map((it) => ({ ...it, meta: null }))}
             emptyText="Bu hafta listelerde Türk dizisi yok."
             onSelect={onSelectSeries}
           />
@@ -296,7 +302,7 @@ export function WatchLists({ charts, onSelectSeries }) {
         <h3>Bu ülkede en çok izlenenler</h3>
         <ChartList
           showPosters
-          items={lists.top.map((t, i) => ({ ...t, rank: i + 1, meta: t.platforms.join(', ') }))}
+          items={lists.top.map((t, i) => ({ ...t, rank: i + 1, meta: null }))}
           emptyText="Son 52 haftada listelere Türk dizisi girmedi."
           onSelect={onSelectSeries}
         />
@@ -310,12 +316,14 @@ export function WatchLists({ charts, onSelectSeries }) {
       <h3>Bu ülkede en çok izlenenler</h3>
       {wiki ? (
         <ChartList
+          showPosters
           items={wiki.items.map((it, i) => ({
             rank: i + 1,
             seriesId: it.seriesId,
             name: it.name,
             kind: 'series',
             meta: `${Math.round(it.views / 1000)}k okunma`,
+            posterPath: it.posterPath ?? seriesInfo?.get(it.seriesId)?.posterPath ?? null,
           }))}
           onSelect={onSelectSeries}
         />
@@ -354,9 +362,10 @@ export default function CountryPanel({
   }, [chartsReq.error])
 
   const sortedSeriesList = useMemo(() => country?.seriesList || [], [country?.seriesList])
-  const seriesNames = useMemo(() => {
+  const seriesInfo = useMemo(() => {
     const m = new Map()
-    for (const c of allCountries || []) for (const sr of c.seriesList || []) if (!m.has(sr.id)) m.set(sr.id, sr.name)
+    for (const c of allCountries || [])
+      for (const sr of c.seriesList || []) if (!m.has(sr.id)) m.set(sr.id, { name: sr.name, posterPath: sr.posterPath })
     return m
   }, [allCountries])
 
@@ -432,17 +441,22 @@ export default function CountryPanel({
               )}
 
               {(country.dataSource !== 'proxy' || hasWatchData(charts)) && (
-                <WatchLists charts={charts} onSelectSeries={(id) => onSelectSeriesGlobal?.(id)} />
+                <WatchLists
+                  charts={charts}
+                  seriesInfo={seriesInfo}
+                  onSelectSeries={(id) => onSelectSeriesGlobal?.(id)}
+                />
               )}
 
               <CountryTv
                 iso2={country.iso2}
-                seriesNames={seriesNames}
+                seriesInfo={seriesInfo}
                 onSelectSeries={(id) => onSelectSeriesGlobal?.(id)}
               />
 
               {country.dataSource === 'proxy' && (
                 <CountryContext
+                  seriesInfo={seriesInfo}
                   iso2={country.iso2}
                   allCountries={allCountries}
                   onSelectSeries={(id) => onSelectSeriesGlobal?.(id)}

@@ -119,13 +119,13 @@ const compositeOk = {
   shareOfSearchMeta: { skipped: 'cache-miss' },
 }
 
-// İzlenme sinyali (watchSignal) — rapor bunu sadece okur: düzey, yüzdelik, Netflix bileşeni.
-const sinyal = (index, level, netflix, extra = {}) => ({
+// İzlenme sinyali (watchSignal) — rapor bunu sadece okur: düzey, yüzdelik, birleşik liste bileşeni.
+const sinyal = (index, level, lists, extra = {}) => ({
   index,
   level,
   confidence: 'orta',
   componentCount: 2,
-  components: { netflix },
+  components: { lists },
   warnings: [],
   ...extra,
 })
@@ -211,7 +211,7 @@ describe('buildCountryReport — sözleşme', () => {
     expect(s.scores.data).toMatchObject({
       level: 'yüksek',
       index: 80,
-      netflix: { series: 3, weeks: 21, bestRank: 1 },
+      lists: { series: 3, weeks: 21, bestRank: 1 },
       access: { seriesCount: 25, platformCount: 2 }, // DE: Netflix (Terzi) + Apple TV (Atiye)
     })
     expect(JSON.stringify(s.scores)).not.toMatch(/scorePerCapita|"score"/)
@@ -293,7 +293,7 @@ describe('buildCountryReport — eksik veri gizlenmez', () => {
 
   it('Netflix: pipeline.db yok / tablo yok / kayıt yok — üç farklı neden', async () => {
     const dbYok = await buildCountryReport('DE', { deps: deps({ pipelineDb: null }) })
-    expect(dbYok.sections.netflixHistory.reason).toMatch(/pipeline\.db açılamadı/)
+    expect(dbYok.sections.netflixHistory.reason).toMatch(/Liste veritabanı açılamadı/)
 
     const tabloYok = await buildCountryReport('DE', { deps: deps({ pipelineDb: pipelineDb({ withTable: false }) }) })
     expect(tabloYok.sections.netflixHistory.reason).toMatch(/tablosu yok/)
@@ -306,7 +306,7 @@ describe('buildCountryReport — eksik veri gizlenmez', () => {
         readNetflixSyncError: () => '2026-09-28 deneme 8/12 başarısız',
       }),
     })
-    expect(kayitYok.sections.netflixHistory.reason).toMatch(/FR için Netflix Top 10 kaydı yok/)
+    expect(kayitYok.sections.netflixHistory.reason).toMatch(/FR için liste kaydı yok/)
     expect(kayitYok.sections.netflixHistory.reason).toMatch(/kısmen indirildiği/)
     expect(kayitYok.sections.netflixHistory.reason).toMatch(/son senkron hatası/)
   })
@@ -354,7 +354,7 @@ describe('buildCountryReport — eksik veri gizlenmez', () => {
       })
       expect(r.sections.netflixHistory.status).toBe('hesaplanamaz')
       expect(r.sections.netflixHistory.reason).toBe(
-        'Netflix bu ülke için Top 10 listesi yayımlamıyor; yayın varlığı bölümüne bakın'
+        'Bu ülke için yayın listesi yayımlanmıyor; yayın varlığı bölümüne bakın'
       )
     })
 
@@ -373,7 +373,7 @@ describe('buildCountryReport — eksik veri gizlenmez', () => {
           }),
         }),
       })
-      expect(r.sections.netflixHistory.reason).toMatch(/yayımlamıyor/)
+      expect(r.sections.netflixHistory.reason).toMatch(/yayımlanmıyor/)
     })
 
     it('c) dosya kısmi, ülke indirilen kısımda yok, pazar listesi bilinmiyor → kısmi indirme + kesilen ülke', async () => {
@@ -393,9 +393,9 @@ describe('buildCountryReport — eksik veri gizlenmez', () => {
       })
       const s = r.sections.netflixHistory
       expect(s.status).toBe('hesaplanamaz')
-      expect(s.reason).toMatch(/PL için Netflix Top 10 kaydı yok — kaynak dosya kısmen indirildiği/)
+      expect(s.reason).toMatch(/PL için liste kaydı yok — kaynak dosya kısmen indirildiği/)
       expect(s.reason).toMatch(/dosya PH ülkesinde kesildi/)
-      expect(s.reason).not.toMatch(/yayımlamıyor/)
+      expect(s.reason).not.toMatch(/yayımlanmıyor/)
     })
 
     it('c2) pazar listesi var ve ülke pazar ama bu koşuda okunmamış (kısmi) → kısmi indirme', async () => {

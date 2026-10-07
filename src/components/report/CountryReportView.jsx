@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { fetchCountryReport } from '../../lib/api.js'
 import { useAsync } from '../../lib/useAsync.js'
 import { usePrintWhenReady } from '../../lib/usePrintWhenReady.js'
@@ -8,7 +9,8 @@ import { IconBack, IconPrint } from '../Icons.jsx'
 // Baskı: usePrintWhenReady yükleme göstergesi (.report__loading) kalmayınca window.print() çağırır;
 // hazırlanırken .report--printing sınıfı ekranda da açık baskı temasını gösterir (önizleme).
 export default function CountryReportView({ iso2, countryName, onBack }) {
-  const reportReq = useAsync(() => fetchCountryReport(iso2), [iso2], { keepPrevious: true })
+  const [attempt, setAttempt] = useState(0)
+  const reportReq = useAsync(() => fetchCountryReport(iso2), [iso2, attempt], { keepPrevious: true })
   const { printAreaRef, printing, requestPrint } = usePrintWhenReady({ pendingSelector: '.report__loading' })
   const hazir = reportReq.status === 'ready' && reportReq.data?.iso2 === iso2
 
@@ -51,7 +53,10 @@ export default function CountryReportView({ iso2, countryName, onBack }) {
       )}
       {reportReq.status === 'error' && (
         <p className="report__error" role="alert">
-          Rapor alınamadı: {reportReq.error}
+          Rapor alınamadı: {reportReq.error}{' '}
+          <button type="button" className="dashboard__link-btn" onClick={() => setAttempt((n) => n + 1)}>
+            Yeniden dene
+          </button>
         </p>
       )}
       {reportReq.data && (

@@ -163,7 +163,7 @@ export function provisionalColor(level) {
 }
 
 export const SOURCE_LABELS = {
-  netflix: 'Netflix Top 10',
+  lists: 'yayın listeleri',
   wiki: 'ansiklopedi okunması',
   search: 'arama ilgisi',
   press: 'basın',

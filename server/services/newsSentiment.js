@@ -1,12 +1,13 @@
 import db from '../db.js'
-import { fetchNewsArticlesGdeltCached, TURKISH_CONTEXT } from './gdeltNews.js'
+import { TURKISH_CONTEXT } from './gdeltNews.js'
+import { fetchPressArticles, googleNewsAvailable, GOOGLE_NEWS_SOURCE } from './googleNews.js'
 import { asciiVariant, getEnglishTitles } from './localTitles.js'
 import { analyzeMediaSentiment } from '../llm.js'
 
 const NEWS_SENTIMENT_TTL_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_STORED_ARTICLES = 20
 
-const NEWS_SOURCE = 'gdelt'
+// Kayıttaki `source`: 'google_news' (2026-10-07'den beri asıl kaynak) ya da 'gdelt' (yedek).
 
 const getStmt = db.prepare('SELECT * FROM media_sentiment WHERE series_id = ? AND country_iso2 = ?')
 const upsertStmt = db.prepare(`
@@ -225,6 +226,30 @@ async function retrySentiment(row, seriesName) {
   }
 }
 
+const pendingToneStmt = db.prepare(`
+  SELECT * FROM media_sentiment
+  WHERE total_news_count > 0 AND positive_score IS NULL AND raw_articles IS NOT NULL
+  ORDER BY total_news_count DESC LIMIT ?
+`)
+
+/**
+ * Haberi bulunmuş ama ton analizi (dil modeli) başarısız olmuş kayıtları yeniden dener — taramanın sonunda,
+ * aralıklı. Google Haberler hızlı olduğu için dil modeli art arda isteklerde geri çevirebiliyor (2026-10-07:
+ * ilk 16 haberli kaydın hepsi tonsuz kaldı). `nameOf(seriesId)` dizi adını verir.
+ */
+export async function retryPendingSentiments({ nameOf, limit = 50, delayMs = 3000, deadline } = {}) {
+  let analyzed = 0
+  let failed = 0
+  for (const row of pendingToneStmt.all(limit)) {
+    if (deadline && Date.now() >= deadline) break
+    const sonuc = await retrySentiment(row, nameOf?.(row.series_id) ?? String(row.series_id))
+    if (sonuc?.positive_score != null) analyzed++
+    else failed++
+    if (delayMs) await new Promise((r) => setTimeout(r, delayMs))
+  }
+  return { analyzed, failed }
+}
+
 /**
  * 1. media_sentiment'te geçerli (expires_at > şimdi) bir kayıt varsa SerpAPI/LLM'e hiç
  *    gitmeden onu döner.
@@ -240,7 +265,7 @@ export async function fetchAndAnalyzeSentiment(
   seriesName,
   localTitle,
   countryIso2,
-  { priority, englishTitles = getEnglishTitles(seriesId, seriesName) } = {}
+  { priority, englishTitles = getEnglishTitles(seriesId, seriesName), fetchArticles = fetchPressArticles } = {}
 ) {
   const iso2 = countryIso2.toUpperCase()
   const existing = getStmt.get(seriesId, iso2)
@@ -252,12 +277,10 @@ export async function fetchAndAnalyzeSentiment(
   const phrases = [...new Set([seriesName, asciiVariant(seriesName), ...englishTitles, localTitle].filter(Boolean))]
   const context = englishTitles.length || localTitle ? TURKISH_CONTEXT : null
   const query = phrases.join(' | ') + (context ? ` + ${context}` : '')
-  if (
-    existing &&
-    Date.now() <= existing.expires_at &&
-    existing.source === NEWS_SOURCE &&
-    existing.query_used === query
-  ) {
+  // GDELT ile (yedek kaynakla) alınmış kayıt, Google Haberler kullanılabiliyorsa süresi dolmadan yenilenir.
+  const kaynakGecerli =
+    existing?.source === GOOGLE_NEWS_SOURCE || (existing?.source === 'gdelt' && !googleNewsAvailable())
+  if (existing && Date.now() <= existing.expires_at && kaynakGecerli && existing.query_used === query) {
     // Haber bulunmuş ama ton analizi (dil modeli) o an başarısız olmuşsa: haberi yeniden aramadan, kayıtlı
     // haberlerle analiz yeniden denenir. Önceden kayıt 14 gün boyunca "yetersiz veri" kalıyordu.
     if (existing.total_news_count > 0 && existing.positive_score == null) {
@@ -271,8 +294,11 @@ export async function fetchAndAnalyzeSentiment(
   const nowIso = now.toISOString()
 
   let articles
+  let source
   try {
-    const sonuc = await fetchNewsArticlesGdeltCached(phrases, iso2, { priority, context })
+    const turkishNames = [seriesName, asciiVariant(seriesName)].filter(Boolean)
+    const sonuc = await fetchArticles({ phrases, englishTitles, turkishNames, iso2, priority, context })
+    source = sonuc.source
     if (sonuc.unsupported) {
       return {
         seriesId,
@@ -315,7 +341,7 @@ export async function fetchAndAnalyzeSentiment(
       JSON.stringify([]),
       nowIso,
       expiresAt,
-      NEWS_SOURCE
+      source
     )
     return rowToResult(getStmt.get(seriesId, iso2), { fromCache: false, stale: false })
   }
@@ -340,7 +366,7 @@ export async function fetchAndAnalyzeSentiment(
     JSON.stringify(rawArticles),
     nowIso,
     expiresAt,
-    NEWS_SOURCE
+    source
   )
 
   return rowToResult(getStmt.get(seriesId, iso2), { fromCache: false, stale: false })

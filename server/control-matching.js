@@ -74,13 +74,17 @@ export async function getGdpPerCapita() {
   return gdpInFlight
 }
 
-export async function suggestControlCountry(targetIso2, excludeIso2Set) {
+/**
+ * Benzerlik puanına göre sıralı aday kontrol ülkeleri (bölge, gelir grubu, kişi başı GSYH). Gerekçesi olmayan
+ * (hiçbir ölçütte benzemeyen) aday listeye girmez.
+ */
+export async function rankControlCountries(targetIso2, excludeIso2Set, limit = 10) {
   const [meta, gdp] = await Promise.all([getCountryMeta(), getGdpPerCapita()])
   const target = meta[targetIso2]
   const targetGdp = gdp[targetIso2]
-  if (!target) return null
+  if (!target) return []
 
-  let best = null
+  const all = []
   for (const [iso2, candidate] of Object.entries(meta)) {
     if (iso2 === targetIso2 || excludeIso2Set.has(iso2)) continue
 
@@ -103,11 +107,14 @@ export async function suggestControlCountry(targetIso2, excludeIso2Set) {
       score += 0.01
     }
 
-    if (!best || score > best.score) {
-      best = { iso2, name: candidate.name, score, reasons }
-    }
+    if (reasons.length) all.push({ iso2, name: candidate.name, score, reason: reasons.join(', ') })
   }
+  return all
+    .sort((a, b) => b.score - a.score || a.iso2.localeCompare(b.iso2))
+    .slice(0, limit)
+    .map(({ iso2, name, reason }) => ({ iso2, name, reason }))
+}
 
-  if (!best || best.reasons.length === 0) return null
-  return { iso2: best.iso2, name: best.name, reason: best.reasons.join(', ') }
+export async function suggestControlCountry(targetIso2, excludeIso2Set) {
+  return (await rankControlCountries(targetIso2, excludeIso2Set, 1))[0] ?? null
 }

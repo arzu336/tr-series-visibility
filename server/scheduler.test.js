@@ -36,6 +36,10 @@ vi.mock('./services/flixpatrolRunner.js', () => ({ runFlixpatrolSyncIfNeeded: ka
 vi.mock('./services/imdbRunner.js', () => ({ runImdbSyncIfNeeded: kaydet('zincir:imdb') }))
 vi.mock('./services/wikiMonthlyRefresh.js', () => ({ runWikiMonthlyRefreshIfNeeded: kaydet('zincir:wiki') }))
 vi.mock('./services/foreignStudents.js', () => ({ syncForeignStudentsIfNeeded: kaydet('zincir:students') }))
+vi.mock('./services/youtubeAnalytics.js', () => ({ runYoutubeSyncIfNeeded: kaydet('zincir:youtube') }))
+vi.mock('./services/youtubePublic.js', () => ({ runYoutubePublicIfNeeded: kaydet('zincir:youtubePublic') }))
+vi.mock('./services/tvGuide.js', () => ({ runTvGuideIfNeeded: kaydet('zincir:tv') }))
+vi.mock('./services/searchFill.js', () => ({ runSearchFillIfNeeded: kaydet('zincir:searchFill') }))
 
 const { runScheduledRefreshInner, startScheduler, META_KEY } = await import('./scheduler.js')
 
@@ -53,6 +57,18 @@ describe('zamanlanmış tetikleme', () => {
     expect(cagriSirasi).toContain('gunluk:visibility')
     expect(cagriSirasi).toContain('zincir:news')
     expect(cagriSirasi).toContain('zincir:tourismTrends')
+  })
+
+  it('günlük tazeleme takılırsa en fazla bekleme süresi kadar beklenir, zincir yine çalışır', async () => {
+    const { getEnrichedVisibility } = await import('./data-pipeline.js')
+    let bitir
+    vi.mocked(getEnrichedVisibility).mockImplementationOnce(() => new Promise((r) => (bitir = r))) // takılan tazeleme
+    await runScheduledRefreshInner({ dailyWaitMs: 20 })
+    expect(cagriSirasi).toEqual(expect.arrayContaining(['zincir:news', 'zincir:tv', 'zincir:searchFill']))
+    expect(cagriSirasi).not.toContain('gunluk:rollup')
+    bitir() // arka planda süren tazeleme biter; sonraki testler temiz başlar
+    await new Promise((r) => setTimeout(r, 0))
+    expect(cagriSirasi).toContain('gunluk:rollup')
   })
 
   it('günlük kapı KAPALIYKEN zincir YİNE DE çalışır (açlık regresyonunun tam senaryosu)', async () => {

@@ -28,10 +28,11 @@ async function fetchRegionInterest(term) {
   return byCountry
 }
 
-export async function getTurkishLearningIndex() {
+/** `force`: süre dolmadan yeniden sorgula (zamanlayıcı ya da elle tazeleme; 3 ücretli arama). */
+export async function getTurkishLearningIndex({ force = false } = {}) {
   const row = getStmt.get(CACHE_KEY)
   const ageMs = row?.queried_at ? Date.now() - new Date(row.queried_at).getTime() : null
-  if (row && ageMs != null && ageMs < TTL_MS) {
+  if (!force && row && ageMs != null && ageMs < TTL_MS) {
     return { queriedAt: row.queried_at, byCountry: JSON.parse(row.by_country), fromCache: true }
   }
 

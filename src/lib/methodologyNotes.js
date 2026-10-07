@@ -1,12 +1,11 @@
 /** Haritanın rengi: izlenme düzeyi. */
 export const WATCH_LEVEL_NOTE =
-  'Renk, ülkenin izlenme düzeyini gösterir (Çok yüksek → Çok düşük). Düzey üç gerçek kaynağın ' +
-  'birleşiminden gelir: Netflix Top 10 (son 52 hafta, resmî haftalık liste), dizi Wikipedia ' +
-  'makalelerinin okunması (ülkenin dilinde, milyon internet kullanıcısı başına) ve Google Trends arama ' +
-  'ilgisi (yalnızca önbellekteki sorgular). Gerçek izlenme sayısı ülke bazında kamuya açık değildir; bu ' +
-  'yüzden düzey bir sinyaldir, ölçüm değil. En az iki kaynak yoksa ülke gri kalır. Lineer TV izlenmesi ' +
-  '(Antena 3, Canale 5, Domashniy gibi kanallar) hiçbir kaynağa yansımaz; ilgili ülkelerde panel bunu ' +
-  'ayrıca uyarır.'
+  'Renk, ülkenin izlenme düzeyini gösterir (Çok yüksek → Çok düşük). Düzey üç kaynağın birleşiminden ' +
+  'gelir: yayın listeleri (son 52 hafta, bütün izlenen platformların birleşik sıralaması), dizi ansiklopedi ' +
+  'maddelerinin okunması (ülkenin dilinde, milyon internet kullanıcısı başına) ve arama ilgisi. Gerçek ' +
+  'izlenme sayısı ülke bazında kamuya açık değildir; bu yüzden düzey bir sinyaldir, ölçüm değil. En az iki ' +
+  'kaynak yoksa ülke gri (tek kaynak varsa taralı tahmin) kalır. Televizyon izlenmesi bu kaynaklara ' +
+  'yansımaz; ilgili ülkelerde panel bunu ayrıca uyarır.'
 
 /** Haritanın renk ölçeğinin nasıl kurulduğu. */
 export const MAP_SCALE_NOTE =
@@ -15,15 +14,15 @@ export const MAP_SCALE_NOTE =
 
 /** Liste kaynağı — her listenin altında yazılır. */
 export const CHART_SOURCE_NOTE =
-  'Listeler kaynağın kendi yayımladığı sıralamadır: Netflix Top 10 (Tudum, haftalık, 94 pazar) ve Türkiye TV ' +
-  'günlük Top 10 (reytingtv.com, TİAK sırası; sayısal reyting yayımlanmaz). Yalnızca kataloğumuzdaki Türk ' +
-  'dizileri eşleştirilir; "katalog dışı" ve "dizi değil" satırlar süzgeç açıldığında görünür.'
+  'Listeler, izlenen yayın platformlarının yayımladığı sıralamaların birleşimidir (haftalık ve günlük) ve ' +
+  'Türkiye televizyonunun günlük ilk 10 listesidir (sayısal reyting yayımlanmaz). Yalnızca kataloğumuzdaki ' +
+  'Türk dizileri eşleştirilir.'
 
-/** Netflix Top 10 verisinin sınırı. */
+/** Yayın listesi verisinin sınırı. */
 export const NETFLIX_RANK_NOTE =
-  "Netflix'in ülke bazlı resmî Top 10 dosyasına dayanır. Bu dosyada izlenme saati YOKTUR; yalnızca " +
-  "haftalık sıra (1-10) ve Top 10'da kalınan hafta sayısı vardır. Netflix'in hizmet vermediği ya da " +
-  'çekildiği pazarlarda (ör. Rusya, 2022) liste yayımlanmaz; panel bunu açıkça yazar.'
+  'Platformların ülke bazlı ilk 10 listelerine dayanır. Listelerde izlenme saati YOKTUR; yalnızca sıra ' +
+  've listede kalınan süre vardır. Platformun hizmet vermediği pazarlarda liste yayımlanmaz; panel bunu ' +
+  'açıkça yazar.'
 
 /** Ülke raporu — Türk dizileri sıralaması (platformun kendi haftalık sıralaması). */
 export const PLATFORM_LISTS_NOTE =
@@ -35,19 +34,19 @@ export const PLATFORM_LISTS_NOTE =
 /** Yayın varlığı — sayılabilir gerçek, izlenme değil. */
 export const AVAILABILITY_NOTE =
   'Hangi dizinin bu ülkede hangi platformda (abonelik, ücretsiz, reklamlı, kiralama, satın alma) ' +
-  'bulunduğunu gösterir; kaynak TMDB/JustWatch, anlık görüntüdür. Erişilebilirliği ölçer, izlenmeyi ' +
+  'bulunduğunu gösterir; anlık görüntüdür. Erişilebilirliği ölçer, izlenmeyi ' +
   'değil; platform kataloğu haftadan haftaya değişebilir.'
 
 /** Lineer TV kör noktası. */
 export const LINEAR_TV_NOTE =
-  'IMDb yerel başlık kaydı bir dizinin o pazarda yerel adla dağıtıldığını gösterir (İngilizce pazarlar ' +
-  'hariç). Dağıtım izi güçlü ama Netflix Top 10 zayıfsa ve ülkede ilgi sinyali varsa izlenme lineer TV ' +
-  'ya da diğer kanallarda olabilir; hiçbir kaynağımız lineer TV izlenmesini ölçmez.'
+  'Yerel ad kaydı bir dizinin o pazarda yerel adla dağıtıldığını gösterir (İngilizce pazarlar hariç). ' +
+  'Dağıtım izi güçlü ama yayın listelerinde zayıfsa ve ülkede ilgi sinyali varsa izlenme televizyonda ya ' +
+  'da diğer kanallarda olabilir; televizyon izlenmesi doğrudan ölçülmez.'
 
-/** Küresel pazar payı — ihracat değil, TMDB popülerlik payı. */
+/** Küresel pazar payı — ihracat değil, popülerlik payı. */
 export const MARKET_SHARE_NOTE =
   'Gerçek ihracat/lisans geliri değildir: dört menşe ülkenin (TR, US, KR, ES) en popüler ' +
-  'dizilerinin toplam TMDB popülerliği içinde Türkiye’nin payıdır. Ticari bir pazar payı ' +
+  'dizilerinin toplam popülerliği içinde Türkiye’nin payıdır. Ticari bir pazar payı ' +
   'göstergesi olarak değil, katalog görünürlüğü göstergesi olarak okunmalıdır.'
 
 /** Medya tonu — temsilî olmayan örneklem. */
@@ -57,7 +56,7 @@ export const MEDIA_TONE_NOTE =
 
 /** Destinasyon payı — LLM etiketlemesine dayanır. */
 export const DESTINATION_SHARE_NOTE =
-  'Dizi özetlerinden LLM ile çıkarılan destinasyon etiketlerine dayanır; bir yapımın gerçekte ' +
+  'Dizi özetlerinden otomatik çıkarılan destinasyon etiketlerine dayanır; bir yapımın gerçekte ' +
   'nerede çekildiğini değil, anlatısında hangi destinasyonun geçtiğini yansıtır.'
 
 /** Okunma ilgisi × ziyaretçi sayısı (turizm sekmesi, ülke brifingi). */
@@ -79,8 +78,8 @@ export const COMPOSITE_SCORE_NOTE =
   'ülkede listelere girmiş dizilerden, kalan yer en popüler dizilerden seçilir. İzleyici puanı ve oy ' +
   'artışı küresel olduğu için skora girmez, ' +
   'bağlam olarak gösterilir. Bir faktör için veri yoksa o faktör dışlanır ve kalan ağırlıklar ' +
-  'kendi aralarında yeniden dağıtılır — eksik veri sıfır puan sayılmaz. Rapor üretiminde ücretli ' +
-  'arama sorgusu yapılmaz; arama payı yalnızca daha önce önbelleğe alınmışsa hesaba girer.'
+  'kendi aralarında yeniden dağıtılır — eksik veri sıfır puan sayılmaz. Arama payı ayda bir arka planda ' +
+  'güncellenir.'
 
 /** Ülke raporu — boşluk analizi. */
 export const GAP_ANALYSIS_NOTE =
@@ -90,13 +89,13 @@ export const GAP_ANALYSIS_NOTE =
 
 /** Ülke raporu — arama ilgisi zaman serisi. */
 export const SEARCH_INTEREST_NOTE =
-  'Google Trends değerleri her seri için 0-100 arasında GÖRELİdir: 100 o serinin kendi zirvesidir. ' +
+  'Arama ilgisi değerleri her seri için 0-100 arasında GÖRELİdir: 100 o serinin kendi zirvesidir. ' +
   'Farklı diziler ya da ülkeler arasında mutlak hacim karşılaştırması yapılamaz; yalnızca zaman ' +
-  'içindeki yön okunur. Rapor yalnızca önceden sorgulanmış (önbellekteki) serileri gösterir.'
+  'içindeki yön okunur. Seriler ayda bir arka planda güncellenir.'
 
 /** Ülke raporu — benzer ülke tanımı (deneysel). */
 export const SIMILAR_COUNTRY_NOTE =
-  'Deneysel: aday havuzu aynı Dünya Bankası bölgesi veya gelir grubu; sıralama tema dağılımı ' +
+  'Deneysel: aday havuzu aynı bölge veya gelir grubu; sıralama tema dağılımı ' +
   'benzerliği (kosinüs) ile yapılır ve küçük kataloglu ülkeler güven çarpanıyla aşağı çekilir. Tema ' +
   'dağılımı katalog büyüklüğünden etkilenir; benzerlik izleyici zevkinin doğrudan ölçümü değildir.'
 

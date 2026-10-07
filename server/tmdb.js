@@ -64,6 +64,7 @@ async function getTopSeriesByOrigin(originCountry, originalLanguage, n = TOP_N_S
     name: show.original_name || show.name,
     popularity: show.popularity,
     posterPath: show.poster_path,
+    backdropPath: show.backdrop_path || null,
     firstAirDate: show.first_air_date || null,
     overview: show.overview || '',
   }))
@@ -159,6 +160,7 @@ async function getNetflixSeriesByOrigin(originCountry, pages = NETFLIX_DISCOVERY
       name: show.original_name || show.name,
       popularity: show.popularity,
       posterPath: show.poster_path,
+      backdropPath: show.backdrop_path || null,
       firstAirDate: show.first_air_date || null,
       overview: show.overview || '',
       netflixOriginal: true,
@@ -185,6 +187,7 @@ export async function getSeriesDetails(seriesId) {
     name: show.original_name || show.name,
     popularity: show.popularity,
     posterPath: show.poster_path,
+    backdropPath: show.backdrop_path || null,
     firstAirDate: show.first_air_date || null,
     overview: show.overview || '',
     catalogSupplement: true,

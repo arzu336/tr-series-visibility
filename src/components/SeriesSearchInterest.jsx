@@ -6,6 +6,7 @@ import {
   fetchTrendsInsight,
   fetchMediaSentimentSummary,
   enrichSeriesNow,
+  fetchSeriesEnrichJob,
   waitForJob,
 } from '../lib/api.js'
 import { safeExternalUrl } from '../lib/safeUrl.js'
@@ -52,10 +53,18 @@ export function useSearchInterest(seriesName) {
       const d = await fetchTrendsTimeSeries(name, iso2, { cachedOnly })
       if (d.notCached) return set({ status: 'notCached' })
       const ok = d.timeline?.length > 1
-      set({ status: ok ? 'ready' : 'unavailable', timeline: d.timeline })
+      set({ status: ok ? 'ready' : 'unavailable', timeline: d.timeline, insightStatus: ok ? 'loading' : null })
       if (!ok) return
-      const ins = await fetchTrendsInsight(name, iso2, { cachedOnly }).catch(() => null)
-      if (t === tsTokenRef.current) setSeries((s) => ({ ...s, insight: ins?.insightText ?? null }))
+      // Yapay zekâ yorumu: önce kayıtlı yorum; yoksa grafik zaten elde olduğu için yorum hemen üretilir
+      // (2026-10-07, kullanıcı isteği — önceden yalnızca kayıtlı yorum gösteriliyordu, çoğu grafikte boş kalıyordu).
+      let ins = await fetchTrendsInsight(name, iso2, { cachedOnly: true }).catch(() => null)
+      if (!ins?.insightText) ins = await fetchTrendsInsight(name, iso2).catch(() => null)
+      if (t === tsTokenRef.current)
+        setSeries((s) => ({
+          ...s,
+          insight: ins?.insightText ?? null,
+          insightStatus: ins?.insightText ? 'ready' : 'unavailable',
+        }))
     } catch (err) {
       set({ status: 'unavailable', error: err.message })
     }
@@ -90,7 +99,10 @@ export function useSearchInterest(seriesName) {
     result: data.name === seriesName ? data.result : null,
     social: data.name === seriesName ? data.social : null,
     geo,
-    series: series.key === tsKey ? series : { status: 'loading', timeline: null, insight: null, error: null },
+    series:
+      series.key === tsKey
+        ? series
+        : { status: 'loading', timeline: null, insight: null, insightStatus: null, error: null },
     query: () => {
       setData((d) => ({ ...d, name: seriesName, status: 'querying' }))
       setGeoState({ name: seriesName, iso2: null })
@@ -118,7 +130,7 @@ function ScopePicker({ byCountry, value, onChange, disabled }) {
     .slice(0, 12)
   return (
     <div className="ts-scope">
-      <span className="ts-scope__label">Kapsam:</span>
+      <span className="ts-scope__label">Grafikte göster:</span>
       <div className="ts-scope__chips">
         <button
           type="button"
@@ -128,7 +140,7 @@ function ScopePicker({ byCountry, value, onChange, disabled }) {
           aria-pressed={value === null}
         >
           <IconGlobe size={13} inline />
-          Küresel
+          Dünya geneli
         </button>
         {ulkeler.map((row) => (
           <button
@@ -184,7 +196,7 @@ function QueryCta({ text, label, onClick, busy }) {
 export function SearchInterestSection({ si, onShowOnMap }) {
   const { status, result, series, geo } = si
   const interestCount = (result?.byCountry || []).filter((r) => r.value > 0).length
-  const scope = geo ? ulkeAdi(geo) : 'Küresel'
+  const scope = geo ? ulkeAdi(geo) : 'Dünya geneli'
   return (
     <section className="series-page__section series-interest" id="arama-ilgisi">
       <h2>Arama ilgisi</h2>
@@ -219,6 +231,10 @@ export function SearchInterestSection({ si, onShowOnMap }) {
                 onChange={si.setGeo}
                 disabled={series.status === 'loading'}
               />
+              <p className="ts-scope__hint">
+                Grafik dizinin Google'da aranma eğilimini gösterir. Bir ülke seçerseniz yalnızca o ülkedeki aramalar
+                çizilir; seçenekler dizinin en çok arandığı ülkelerdir.
+              </p>
               {series.status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
               {series.status === 'notCached' && (
                 <QueryCta
@@ -236,15 +252,17 @@ export function SearchInterestSection({ si, onShowOnMap }) {
                 <>
                   <SeriesTrendChart timeline={series.timeline} scopeLabel={geo ? scope : null} />
                   <p className="ts-scope__note">
-                    0–100 ölçeği <strong>her kapsam için kendi içinde bağıldır</strong>: grafik{' '}
-                    {geo ? `${scope} içindeki` : 'dünya genelindeki'} zaman yönünü gösterir, ülkeler arası mutlak hacim
-                    karşılaştırması için kullanılamaz.
+                    100, bu dönemdeki en yoğun arama haftasıdır; diğer haftalar ona göre ölçeklenir. Bu yüzden iki
+                    ülkenin grafiği birbiriyle hacim olarak karşılaştırılamaz.
                   </p>
+                  {series.insightStatus === 'loading' && (
+                    <p className="dashboard__empty">Yapay zekâ grafiği yorumluyor…</p>
+                  )}
                   {series.insight && (
                     <div className="theme-insight__ai-box" style={{ marginTop: '0.8rem' }}>
                       <span className="theme-insight__ai-label">
                         <IconSparkle size={12} inline />
-                        Yapay Zeka
+                        Yapay zekâ yorumu
                       </span>
                       <p>{series.insight}</p>
                     </div>
@@ -305,29 +323,79 @@ export function PromoSection({ social }) {
 
 const TONE = { positive: 'olumlu', negative: 'olumsuz', neutral: 'nötr' }
 
-function scanProgressText(p) {
+/** Kalan süre tahmini: şimdiye kadarki ülke başı süreden. */
+export function remainingText(p, startedAt, now = Date.now()) {
+  if (!p?.total || !p.done || !startedAt) return null
+  const perItem = (now - startedAt) / p.done
+  const dk = Math.ceil((perItem * (p.total - p.done)) / 60000)
+  return dk <= 1 ? 'yaklaşık 1 dk kaldı' : `yaklaşık ${dk} dk kaldı`
+}
+
+export function scanProgressText(p, startedAt, now) {
   if (!p) return 'Tarama sıraya alındı…'
   if (p.phase === 'social') return 'Basın tarandı, sosyal/YouTube verisi çekiliyor…'
-  const oran = p.total ? ` (${p.done}/${p.total}${p.current ? ` · ${p.current}` : ''})` : ''
-  return `Basın taranıyor${oran} — her ülke için ~20 sn bekleme var, sayfadan ayrılabilirsiniz.`
+  const oran = p.total ? ` (${p.done}/${p.total}${p.current ? ` · ${ulkeAdi(p.current)}` : ''})` : ''
+  const kalan = remainingText(p, startedAt, now)
+  return `Basın taranıyor${oran}${kalan ? ` — ${kalan}` : ''}. Tarama sunucuda sürer: sayfadan ayrılabilirsiniz, döndüğünüzde ilerleme burada görünür ve bulunan sonuçlar tarama bitmeden listeye eklenir.`
 }
 
 /** Basın & medya algısı; yöneticiye "tüm ülkeleri tara" (basın + sosyal) düğmesi. */
 export function PressSection({ seriesId, isAdmin, onScanned }) {
   const [refresh, setRefresh] = useState(0)
   const { status, data } = useAsync(() => fetchMediaSentimentSummary(seriesId), [seriesId, refresh])
-  const [scan, setScan] = useState({ status: 'idle', result: null, error: null, progress: null })
+  const [scan, setScan] = useState({ status: 'idle', result: null, error: null, progress: null, startedAt: null })
+  const lastDone = useRef(0)
+
+  // İşi izler: ilerlemeyi yazar, her 3 ülkede bir özeti tazeler (bulunan haberler tarama bitmeden görünür).
+  const follow = useCallback(
+    async (jobId, signal) => {
+      lastDone.current = 0
+      try {
+        const result = await waitForJob(jobId, {
+          signal,
+          onProgress: (j) => {
+            if (signal?.aborted) return
+            setScan((s) => ({ ...s, status: 'running', progress: j.progress, startedAt: j.startedAt }))
+            const done = j.progress?.done ?? 0
+            if (done - lastDone.current >= 3) {
+              lastDone.current = done
+              setRefresh((n) => n + 1)
+            }
+          },
+        })
+        if (signal?.aborted) return
+        setScan({ status: 'done', result, error: null, progress: null, startedAt: null })
+        setRefresh((n) => n + 1)
+        onScanned?.()
+      } catch (err) {
+        if (!signal?.aborted)
+          setScan({ status: 'error', result: null, error: err.message, progress: null, startedAt: null })
+      }
+    },
+    [onScanned]
+  )
+
+  // Sayfaya dönüldüğünde süren tarama varsa ona yeniden bağlan (önceden sayfadan çıkınca ilerleme kayboluyordu).
+  useEffect(() => {
+    const ctrl = new AbortController()
+    fetchSeriesEnrichJob(seriesId)
+      .then((r) => {
+        const job = r?.job
+        if (ctrl.signal.aborted || !job || (job.status !== 'running' && job.status !== 'queued')) return
+        setScan({ status: 'running', result: null, error: null, progress: job.progress, startedAt: job.startedAt })
+        follow(job.id, ctrl.signal)
+      })
+      .catch(() => {})
+    return () => ctrl.abort()
+  }, [seriesId, follow])
 
   async function handleScan() {
-    setScan({ status: 'running', result: null, error: null, progress: null })
+    setScan({ status: 'running', result: null, error: null, progress: null, startedAt: null })
     try {
       const { job } = await enrichSeriesNow(seriesId)
-      const result = await waitForJob(job.id, { onProgress: (j) => setScan((s) => ({ ...s, progress: j.progress })) })
-      setScan({ status: 'done', result, error: null, progress: null })
-      setRefresh((n) => n + 1)
-      onScanned?.()
+      await follow(job.id)
     } catch (err) {
-      setScan({ status: 'error', result: null, error: err.message, progress: null })
+      setScan({ status: 'error', result: null, error: err.message, progress: null, startedAt: null })
     }
   }
 
@@ -382,7 +450,7 @@ export function PressSection({ seriesId, isAdmin, onScanned }) {
       )}
       {scan.status === 'running' && (
         <div className="dashboard__hint" style={{ marginTop: '0.6rem' }} role="status">
-          {scanProgressText(scan.progress)}
+          {scanProgressText(scan.progress, scan.startedAt)}
         </div>
       )}
       {scan.status === 'done' && scan.result && (

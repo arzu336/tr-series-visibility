@@ -220,7 +220,7 @@ export default function ContinentSidebar({
                     {chart.topSeries.name}
                   </button>
                   <div className="sidebar__big-card-meta">
-                    Netflix Top 10: {chart.topSeries.countryWeeks} ülke-hafta (son 52 hafta) · en iyi #
+                    Sıralamada {chart.topSeries.countryWeeks} ülke-hafta (son 52 hafta) · en iyi #
                     {chart.topSeries.bestRank}
                     {chart.thisWeekSeriesCount ? ` · bu hafta listede ${chart.thisWeekSeriesCount} Türk dizisi` : ''}
                   </div>
@@ -230,7 +230,7 @@ export default function ContinentSidebar({
                   className="sidebar__big-card-value sidebar__big-card-value--muted"
                   title={EMPTY.continentNoNetflix}
                 >
-                  Netflix Top 10 verisi yok
+                  Sıralama verisi yok
                 </div>
               ) : null}
             </div>
@@ -278,7 +278,7 @@ export default function ContinentSidebar({
                             <span className="sidebar__top-country-name">{nameOf(country.iso2)}</span>
                             <span className="sidebar__top-country-meta">
                               {country.level}
-                              {country.weeks ? ` · Netflix Top 10'da ${country.weeks} hafta` : ''}
+                              {country.weeks ? ` · sıralamada ${country.weeks} dizi-hafta` : ''}
                             </span>
                           </button>
                         </li>
@@ -296,7 +296,7 @@ export default function ContinentSidebar({
 
                 {chart?.topSeriesList?.length > 1 && (
                   <div className="sidebar__stat">
-                    <div className="sidebar__stat-label">Kıtada En Çok İzlenen 3 Dizi (Netflix, 52 hafta)</div>
+                    <div className="sidebar__stat-label">Kıtada En Çok İzlenen 3 Dizi (son 52 hafta)</div>
                     <ol className="sidebar__top-list">
                       {chart.topSeriesList.map((s) => (
                         <li key={s.seriesId ?? s.name}>
@@ -308,7 +308,7 @@ export default function ContinentSidebar({
                       ))}
                     </ol>
                     <ChartSource
-                      source={{ label: 'Netflix Top 10', platform: 'Netflix' }}
+                      source={{ label: 'birleşik sıralama' }}
                       periodLabel={`son hafta ${fmtDateTr(chart.latestWeek)}`}
                     />
                   </div>

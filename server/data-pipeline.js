@@ -21,7 +21,33 @@ export function sameSupplement(cachedIds = [], currentIds = []) {
   return a.length === b.length && a.every((v, i) => v === b[i])
 }
 
+/**
+ * Afişi olmayan dizilere yedek görsel (2026-10-07): TMDB'de aynı dizinin afişsiz ikinci bir kaydı olabiliyor
+ * (ör. Gupi 277655 / 304413) — önce aynı adlı kaydın afişi, yoksa dizinin yatay kapak görseli (backdrop).
+ * Hiçbir görseli olmayan (TMDB'ye henüz görsel eklenmemiş yeni yapımlar) dizi yer tutucuyla kalır.
+ */
+export function fillMissingPosters(series = []) {
+  const key = (n) =>
+    String(n || '')
+      .toLocaleLowerCase('tr')
+      .trim()
+  const byName = new Map()
+  for (const s of series) if (s.posterPath && !byName.has(key(s.name))) byName.set(key(s.name), s.posterPath)
+  for (const s of series) {
+    if (s.posterPath) continue
+    const fallback = byName.get(key(s.name)) || s.backdropPath || null
+    if (fallback) s.posterPath = fallback
+  }
+  return series
+}
+
 export async function getRawSeriesDataCached() {
+  const raw = await readRawSeriesData()
+  if (raw?.series) fillMissingPosters(raw.series)
+  return raw
+}
+
+async function readRawSeriesData() {
   const supplementIds = getCatalogSupplementIds()
   const cached = getCached(RAW_CACHE_KEY)
   // Ek dizi listesi, kadro kaynağı ya da katalog süzgeci değiştiyse katalog yeniden kurulur (24 saat beklenmez).

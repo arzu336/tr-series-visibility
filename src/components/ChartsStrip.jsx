@@ -37,14 +37,14 @@ export default function ChartsStrip({ onSelectSeries }) {
           {g?.status === 'hesaplandi' && g.items[0] ? (
             <span className="charts-strip__teaser">
               {' '}
-              · bu hafta {g.items[0].name}, {g.items[0].countries} ülkede Top 10
+              · bu hafta {g.items[0].name}, {g.items[0].countries} ülkede sıralamada
             </span>
           ) : null}
         </button>
         {open && g?.weeks?.length > 0 && (
           <label className="charts-strip__control">
             Hafta
-            <select value={week ?? g.week} onChange={(e) => setWeek(e.target.value)} aria-label="Netflix haftası">
+            <select value={week ?? g.week} onChange={(e) => setWeek(e.target.value)} aria-label="Hafta">
               {[...g.weeks].reverse().map((w) => (
                 <option key={w} value={w}>
                   {fmtDateTr(w)}
@@ -69,7 +69,7 @@ export default function ChartsStrip({ onSelectSeries }) {
         <div className="charts-strip__panels">
           <div className="charts-strip__panel">
             <h4 className="charts-strip__title">
-              Netflix Top 10 —{' '}
+              Dünya geneli —{' '}
               {showYearAgo ? yearAgoLabel(g?.yearAgo, 'hafta') || '1 yıl önce' : `bu hafta (${fmtDateTr(g?.week)})`}
             </h4>
             {global.status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}

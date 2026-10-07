@@ -192,7 +192,7 @@ export default function Globe3D({
         const iso2 = featureIso2(f)
         if (highlightByIso2) {
           const entry = highlightByIso2.get(iso2)
-          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${entry ? (entry.weeks ? `Netflix Top 10'da ${entry.weeks} hafta` : 'Bu ülkede yayında') : EMPTY.mapNotAvailableHere}</div>`
+          return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${entry ? (entry.weeks ? `${entry.weeks} hafta sıralamada` : 'Bu ülkede yayında') : EMPTY.mapNotAvailableHere}</div>`
         }
         if (seriesByIso2) {
           const value = seriesByIso2.get(iso2)
@@ -203,10 +203,10 @@ export default function Globe3D({
           return `<div style="font: 13px system-ui; padding: 4px 2px;"><strong>${name}</strong><br/>${EMPTY.mapNoSignal}</div>`
         }
         const w = c.watchSignal
-        const nf = w?.components?.netflix
+        const nf = w?.components?.lists
         const satir = [
           watchLevelText(w),
-          nf?.present && nf.weeks > 0 ? `Netflix Top 10'da ${nf.series} dizi / ${nf.weeks} hafta` : null,
+          nf?.present && nf.weeks > 0 ? `son 52 haftada ${nf.series} dizi sıralamada` : null,
           c.limited ? 'sınırlı veri' : c.dataSource === 'proxy' ? 'yayın verisi yok' : null,
         ]
           .filter(Boolean)

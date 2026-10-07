@@ -34,7 +34,7 @@ import {
   resolveKnownSeriesNames,
 } from '../services/requestGuards.js'
 import { countryNameFromIso2 } from '../services/countryLookup.js'
-import { startJob, getJob } from '../services/jobs.js'
+import { startJob, getJob, getJobByKey } from '../services/jobs.js'
 import { requireAdmin } from './auth.js'
 import { upstream } from './shared.js'
 
@@ -181,6 +181,13 @@ trendsRouter.post(
     res.status(202).json({ job, existing, statusUrl: `/api/jobs/${job.id}` })
   })
 )
+
+// Dizi sayfasına dönen kullanıcı süren taramaya yeniden bağlanabilsin diye: anahtarla son iş.
+trendsRouter.get('/api/series/:id/enrich-job', (req, res) => {
+  const seriesId = Number(req.params.id)
+  if (!Number.isInteger(seriesId) || seriesId <= 0) return res.status(400).json({ error: 'Geçersiz dizi kimliği' })
+  res.json({ job: getJobByKey(`series-enrich:${seriesId}`) })
+})
 
 trendsRouter.get('/api/jobs/:id', (req, res) => {
   const job = getJob(req.params.id)
