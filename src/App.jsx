@@ -2,6 +2,7 @@ import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react'
 import CountryPanel from './components/CountryPanel.jsx'
 import Legend from './components/Legend.jsx'
 import Login from './components/Login.jsx'
+import MapFilterCard from './components/MapFilterCard.jsx'
 import ChangePasswordModal from './components/ChangePasswordModal.jsx'
 import ContinentSidebar from './components/ContinentSidebar.jsx'
 import MapViewToggle from './components/MapViewToggle.jsx'
@@ -17,13 +18,11 @@ const AnalystDashboard = lazy(() => import('./components/AnalystDashboard.jsx'))
 const TrendsExplorer = lazy(() => import('./components/TrendsExplorer.jsx'))
 const ReportsHub = lazy(() => import('./components/report/ReportsHub.jsx'))
 const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
-const SeriesPage = lazy(() => import('./components/SeriesPage.jsx'))
 const PENDING_APPROVALS_POLL_MS = 60000
 const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
 import { fetchVisibility, logout, fetchAdminUsers, fetchImdbData } from './lib/api.js'
 import { continentCentroid } from './lib/continents.js'
 import countryNames from './data/country-centroids.json'
-import { IconClose } from './components/Icons.jsx'
 import { readYoutubeNotice } from './components/YoutubeConnections.jsx'
 const SIDEBAR_COLLAPSED_KEY = 'gp_sidebar_collapsed'
 const PANEL_COLLAPSED_KEY = 'gp_panel_collapsed'
@@ -57,9 +56,9 @@ export default function App() {
   )
   const [panelCollapsed, setPanelCollapsed] = usePersistedState(PANEL_COLLAPSED_KEY, darEkranVarsayilani, boolStorage)
   const [activeSeriesId, setActiveSeriesId] = useState(null)
-  const [seriesPageId, setSeriesPageId] = useState(seriesIdFromUrl)
+  // Dizi sayfası 2026-10-07'de Dizi raporuyla birleşti: ?dizi=<id> Raporlar > Dizi raporu'nu açar.
   const [view, setView] = useState(() =>
-    seriesIdFromUrl() != null ? 'series' : new URLSearchParams(window.location.search).has('yonetim') ? 'admin' : 'map'
+    seriesIdFromUrl() != null ? 'reports' : new URLSearchParams(window.location.search).has('yonetim') ? 'admin' : 'map'
   )
   // YouTube onay ekranından dönüş (?yonetim=youtube&youtube=…): bildirim yönetim ekranında gösterilir, adres temizlenir.
   const [youtubeNotice] = useState(() => readYoutubeNotice())
@@ -69,7 +68,10 @@ export default function App() {
     }
   }, [])
   // Raporlar menüsü: sekme (kuresel | ulke | dizi) + seçili ülke / dizi
-  const [reports, setReports] = useState({ tab: 'ulke', iso2: null, seriesId: null })
+  const [reports, setReports] = useState(() => {
+    const id = seriesIdFromUrl()
+    return id != null ? { tab: 'dizi', iso2: null, seriesId: id } : { tab: 'ulke', iso2: null, seriesId: null }
+  })
   const openReports = useCallback((next) => {
     setReports((r) => ({ ...r, ...next }))
     setView('reports')
@@ -131,7 +133,8 @@ export default function App() {
 
   // Dizi sayfasının açıldığı ekran: geri düğmesi ve tarayıcının geri tuşu oraya döner (Arama İlgisi'nde dizi
   // arayan kullanıcı aramaya dönebilsin; varsayılan harita).
-  const [seriesReturn, setSeriesReturn] = useState('map')
+  // null: Raporlar menüden açıldı (geri düğmesi yok).
+  const [seriesReturn, setSeriesReturn] = useState(() => (seriesIdFromUrl() != null ? 'map' : null))
   const seriesReturnRef = useRef('map')
 
   // Tarayıcının geri/ileri tuşu: adreste ?dizi= varsa dizi sayfası, yoksa (dizi sayfasındaysak) açıldığı ekran.
@@ -139,10 +142,10 @@ export default function App() {
     const onPopState = () => {
       const id = seriesIdFromUrl()
       if (id != null) {
-        setSeriesPageId(id)
-        setView('series')
+        setReports((r) => ({ ...r, tab: 'dizi', seriesId: id }))
+        setView('reports')
       } else {
-        setView((v) => (v === 'series' ? seriesReturnRef.current : v))
+        setView((v) => (v === 'reports' && seriesReturnRef.current ? seriesReturnRef.current : v))
       }
     }
     window.addEventListener('popstate', onPopState)
@@ -194,14 +197,15 @@ export default function App() {
     [countries, setPanelCollapsed]
   )
 
-  // Herhangi bir yerde diziye tıklamak dizi sayfasını açar (sağ panel yalnızca kısa özet).
+  // Herhangi bir yerde diziye tıklamak Dizi raporunu açar (sağ panel yalnızca kısa özet; 2026-10-07'den beri ayrı
+  // dizi sayfası yok — içeriği rapora taşındı).
   const handleOpenSeriesPage = useCallback((seriesId, from = 'map') => {
     if (seriesId == null) return
     seriesReturnRef.current = from
     setSeriesReturn(from)
     if (seriesIdFromUrl() !== seriesId) window.history.pushState(null, '', `?dizi=${seriesId}`)
-    setSeriesPageId(seriesId)
-    setView('series')
+    setReports((r) => ({ ...r, tab: 'dizi', seriesId }))
+    setView('reports')
     window.scrollTo?.(0, 0)
   }, [])
 
@@ -235,7 +239,6 @@ export default function App() {
   const handleSelectCountryGlobal = handleSelectCountryFromReport
 
   const handleOpenReport = useCallback((iso2) => openReports({ tab: 'ulke', iso2 }), [openReports])
-  const handleOpenSeriesReport = useCallback((seriesId) => openReports({ tab: 'dizi', seriesId }), [openReports])
 
   const handleFocusContinent = useCallback((continentStats) => {
     const target = continentCentroid(continentStats.countries)
@@ -279,22 +282,22 @@ export default function App() {
   // Dizi sayfasındaki "İlgiyi haritada göster": haritayı dizinin ülkelere göre arama ilgisiyle boyar.
   const handleShowInterestFromPage = useCallback(
     (result) => {
-      setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry, fromSeriesId: seriesPageId })
+      setSeriesFilter({ seriesName: result.seriesName, byCountry: result.byCountry, fromSeriesId: reports.seriesId })
       setHighlightFilter(null)
       setActorHighlight(null)
       handleBackToMap()
     },
-    [handleBackToMap, seriesPageId]
+    [handleBackToMap, reports.seriesId]
   )
 
   // Dizi sayfasındaki "Haritada göster": listeye girdiği ülkeleri işaretleyip haritaya döner.
   const handleShowSeriesFromPage = useCallback(
     (seriesName, countryEntries) => {
       handleShowSeriesAvailability(seriesName, countryEntries)
-      setHighlightFilter((f) => (f ? { ...f, fromSeriesId: seriesPageId } : f))
+      setHighlightFilter((f) => (f ? { ...f, fromSeriesId: reports.seriesId } : f))
       handleBackToMap()
     },
-    [handleShowSeriesAvailability, handleBackToMap, seriesPageId]
+    [handleShowSeriesAvailability, handleBackToMap, reports.seriesId]
   )
 
   // Haritadaki filtre şeridinden, filtreyi açan dizi sayfasına geri dönüş (2026-10-07).
@@ -384,7 +387,10 @@ export default function App() {
             </button>
             <button
               className={view === 'reports' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
-              onClick={() => setView('reports')}
+              onClick={() => {
+                setSeriesReturn(null)
+                setView('reports')
+              }}
               title="Küresel görünüm, ülke brifingi ve dizi raporu"
             >
               Raporlar
@@ -452,29 +458,17 @@ export default function App() {
                 iso2={reports.iso2}
                 seriesId={reports.seriesId}
                 onChange={(next) => setReports((r) => ({ ...r, ...next }))}
+                onBack={reports.tab === 'dizi' && seriesReturn ? handleBackFromSeries : null}
+                backLabel={seriesReturn === 'trends' ? 'Arama İlgisi’ne dön' : 'Haritaya dön'}
+                seriesActions={{
+                  onShowOnMap: handleShowSeriesFromPage,
+                  onSelectActor: handleSelectActorFromSeriesPage,
+                  onShowInterestOnMap: handleShowInterestFromPage,
+                }}
               />
             )}
             {view === 'admin' && user?.isAdmin && (
               <AdminUsersPanel currentUserId={user.id} youtubeNotice={youtubeNotice} />
-            )}
-            {view === 'series' && (
-              <>
-                {status === 'loading' && <div className="status">Veri yükleniyor…</div>}
-                {status === 'error' && <div className="status status--error">Veri alınamadı: {error}</div>}
-                {status === 'ready' && seriesPageId != null && (
-                  <SeriesPage
-                    seriesId={seriesPageId}
-                    allCountries={countries}
-                    onBack={handleBackFromSeries}
-                    backLabel={seriesReturn === 'trends' ? 'Arama İlgisi’ne dön' : 'Haritaya dön'}
-                    onShowOnMap={handleShowSeriesFromPage}
-                    onSelectActor={handleSelectActorFromSeriesPage}
-                    onShowInterestOnMap={handleShowInterestFromPage}
-                    onOpenReport={handleOpenSeriesReport}
-                    isAdmin={Boolean(user?.isAdmin)}
-                  />
-                )}
-              </>
             )}
             {view === 'map' && (
               <>
@@ -495,44 +489,34 @@ export default function App() {
                         <MapViewToggle value={mapView} onChange={setMapView} />
                       </div>
                       {seriesFilter && (
-                        <div className="series-filter-badge">
-                          <span>
-                            Gösterilen veri: <strong>{seriesFilter.seriesName}</strong> — ülkelere göre arama ilgisi
-                          </span>
-                          {seriesFilter.fromSeriesId != null && (
-                            <button type="button" onClick={() => handleReturnToSeries(seriesFilter.fromSeriesId)}>
-                              ← Diziye dön
-                            </button>
-                          )}
-                          <button type="button" onClick={clearSeriesFilter}>
-                            <IconClose size={13} inline />
-                            Filtreyi temizle
-                          </button>
-                        </div>
+                        <MapFilterCard
+                          kicker="Haritada gösterilen"
+                          title={seriesFilter.seriesName}
+                          description="Ülkelere göre arama ilgisi — koyu renk daha çok aranıyor (0–100)"
+                          onReturn={
+                            seriesFilter.fromSeriesId != null
+                              ? () => handleReturnToSeries(seriesFilter.fromSeriesId)
+                              : null
+                          }
+                          onClear={clearSeriesFilter}
+                        />
                       )}
                       {highlightFilter && (
-                        <div className="series-filter-badge">
-                          <span>
-                            {highlightFilter.kind === 'actor' ? (
-                              <>
-                                Filtre: <strong>{highlightFilter.label}</strong> Projeleri
-                              </>
-                            ) : (
-                              <>
-                                Filtre: <strong>{highlightFilter.label}</strong> — Yayınlandığı Ülkeler
-                              </>
-                            )}
-                          </span>
-                          {highlightFilter.fromSeriesId != null && (
-                            <button type="button" onClick={() => handleReturnToSeries(highlightFilter.fromSeriesId)}>
-                              ← Diziye dön
-                            </button>
-                          )}
-                          <button type="button" onClick={clearHighlightFilter}>
-                            <IconClose size={13} inline />
-                            Filtreyi temizle
-                          </button>
-                        </div>
+                        <MapFilterCard
+                          kicker={highlightFilter.kind === 'actor' ? 'Oyuncunun dizileri' : 'Haritada gösterilen'}
+                          title={highlightFilter.label}
+                          description={
+                            highlightFilter.kind === 'actor'
+                              ? 'Takip edilen dizilerinden en az birinin yayınlandığı ülkeler'
+                              : 'Listeye girdiği ülkeler (koyu renk daha çok hafta); kayıt yoksa yayında olduğu ülkeler'
+                          }
+                          onReturn={
+                            highlightFilter.fromSeriesId != null
+                              ? () => handleReturnToSeries(highlightFilter.fromSeriesId)
+                              : null
+                          }
+                          onClear={clearHighlightFilter}
+                        />
                       )}
                       {mapView === '3d' ? (
                         <Globe3D

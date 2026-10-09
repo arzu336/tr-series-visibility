@@ -1,6 +1,5 @@
 import { useMemo } from 'react'
-import { IconBack, IconMap, IconChart, IconStar, IconReport } from './Icons.jsx'
-import EpisodeHeatmap from './EpisodeHeatmap.jsx'
+import { IconBack, IconMap, IconChart, IconStar, IconPrint } from './Icons.jsx'
 import {
   fetchImdbData,
   fetchSeriesEnrichment,
@@ -8,21 +7,21 @@ import {
   fetchSeriesMeta,
   fetchMagazineNews,
   fetchSeriesCast,
+  fetchSeriesReport,
 } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
 import CastBar from './CastBar.jsx'
 import { MagazineCarousel, visibleMagazineItems } from './MagazineNews.jsx'
-import Flag from './Flag.jsx'
-import { fmtDateTr } from './ChartList.jsx'
-import { AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import countryNames from '../data/country-centroids.json'
 import { useSearchInterest, SearchInterestSection, PromoSection, PressSection } from './SeriesSearchInterest.jsx'
 import SeriesYoutube from './SeriesYoutube.jsx'
 import { SeriesTv } from './TvSections.jsx'
+import CountryReportDocument from './report/CountryReportDocument.jsx'
 
-// Dizi sayfası: haritadaki sağ panel kısa özet için; dizi hakkında her şey burada (listeler, nerede yayında,
-// arama ilgisi, uluslararası isimler, magazin, kadro, basın algısı). Adresi ?dizi=<tmdbId> — geri tuşu haritaya
-// döner. Arama İlgisi sekmesinde dizi aramak da bu sayfayı açar (2026-10-06'da iki ekran birleşti).
+// Dizi raporu (2026-10-07: dizi sayfası ile Raporlar > Dizi raporu birleşti). Üstte dizinin tanıtım kartı; altında
+// sunucunun rapor belgesi (özet → başlıklar) ve raporda olmayan canlı bölümler ilgili başlığın altında: arama ilgisi,
+// televizyon yayınları, basın ve magazin, tanıtım ve YouTube, kadro. Adresi ?dizi=<tmdbId>; haritada diziye
+// tıklamak açar.
 
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w342'
 
@@ -78,15 +77,6 @@ export function groupLocalizedTitles(localized, turkishName) {
     .sort((a, b) => b.regions.length - a.regions.length || a.title.localeCompare(b.title, 'tr'))
 }
 
-function Country({ iso2 }) {
-  return (
-    <span className="series-page__country">
-      <Flag iso2={iso2} />
-      {nameOf(iso2)}
-    </span>
-  )
-}
-
 /** Dizinin haritadaki verisinden: temel bilgiler + yayında olduğu ülkeler (o ülkedeki platformlarıyla). */
 export function seriesFromCountries(allCountries, seriesId) {
   let base = null
@@ -118,35 +108,6 @@ export function mergeListingsByCountry(listings) {
   )
 }
 
-function ListingsTable({ listings }) {
-  return (
-    <div className="series-page__table-wrap">
-      <table className="series-page__table">
-        <thead>
-          <tr>
-            <th>Ülke</th>
-            <th>En iyi sıra</th>
-            <th>Hafta</th>
-            <th>Son</th>
-          </tr>
-        </thead>
-        <tbody>
-          {mergeListingsByCountry(listings).map((l) => (
-            <tr key={l.iso2}>
-              <td>
-                <Country iso2={l.iso2} />
-              </td>
-              <td>#{l.bestRank}</td>
-              <td>{l.weeks}</td>
-              <td>{fmtDateTr(l.lastDate)}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
-  )
-}
-
 /**
  * Ana kadro: tüm sezonlar, oynadığı bölüm sayısına göre sıralı (sunucu /api/series/:id/cast). Tek satırda
  * yatay kaydırılır. Yüklenirken katalogdaki kısa kadro (5 kişi) gösterilir.
@@ -174,15 +135,22 @@ export default function SeriesPage({
   onShowOnMap,
   onSelectActor,
   onShowInterestOnMap,
-  onOpenReport,
+  onPrint,
+  printing = false,
   isAdmin = false,
 }) {
   const fromCountries = useMemo(() => seriesFromCountries(allCountries, seriesId), [allCountries, seriesId])
-  const metaReq = useAsync(() => fetchSeriesMeta(seriesId), [seriesId], { enabled: seriesId != null })
+  // Katalog yüklenirken (ör. günlük yeniden kurulumda) dizi kaydı 404 dönebiliyor; katalog gelince yeniden sorulur.
+  const catalogReady = (allCountries?.length ?? 0) > 0
+  const metaReq = useAsync(() => fetchSeriesMeta(seriesId), [seriesId, catalogReady], { enabled: seriesId != null })
   // Hiçbir yayın platformunda olmayan diziler (ör. katalog tamamlamayla eklenen eski TV dizileri) ülke yayın
-  // listelerinde yoktur; o durumda dizinin katalog kaydı kullanılır, "Nerede yayında" boş kalır.
+  // listelerinde yoktur; o durumda dizinin katalog kaydı kullanılır.
   const series =
     fromCountries ?? (metaReq.status === 'ready' && metaReq.data ? { ...metaReq.data, availability: [] } : null)
+  const reportReq = useAsync(() => fetchSeriesReport(seriesId), [seriesId], {
+    enabled: seriesId != null,
+    keepPrevious: true,
+  })
   const imdbReq = useAsync(() => fetchImdbData(seriesId), [seriesId], { enabled: seriesId != null })
   const enrichment = useAsync(() => fetchSeriesEnrichment(seriesId), [seriesId], { enabled: seriesId != null }).data
   const chartsReq = useAsync(() => fetchSeriesCharts(seriesId), [seriesId], { enabled: seriesId != null })
@@ -194,15 +162,20 @@ export default function SeriesPage({
   const magazineItems = visibleMagazineItems(magazineReq.data?.items, 10)
   const si = useSearchInterest(series?.name)
   const kg = si.social?.knowledgeGraph
+  const report = reportReq.data?.seriesId === seriesId ? reportReq.data : null
+
+  const back = onBack && (
+    <button type="button" className="series-page__back" onClick={onBack}>
+      <IconBack />
+      {backLabel}
+    </button>
+  )
 
   if (!series) {
-    const loading = metaReq.status === 'loading' || metaReq.status === 'idle'
+    const loading = metaReq.status === 'loading' || metaReq.status === 'idle' || !catalogReady
     return (
       <div className="series-page">
-        <button type="button" className="series-page__back" onClick={onBack}>
-          <IconBack />
-          {backLabel}
-        </button>
+        {back}
         <p className="dashboard__empty">{loading ? 'Yükleniyor…' : 'Bu dizi için veri bulunamadı.'}</p>
       </div>
     )
@@ -220,16 +193,45 @@ export default function SeriesPage({
 
   const year = series.firstAirDate ? series.firstAirDate.slice(0, 4) : null
   const listedCountries = new Set(listings.map((l) => l.iso2)).size
-  const localized = groupLocalizedTitles(enrichment?.imdb?.localizedTitles, series?.name)
-  const crew = enrichment?.imdb?.crew
-  const seasons = enrichment?.imdb?.seasons || []
+  const hasChapter = (key) => Boolean(report?.chapters?.some((c) => c.key === key))
+
+  // Raporda olmayan canlı bölümler; `after`: hangi rapor başlığının arkasına. Başlıksız olanlar kendi kartıyla gelir
+  // (veri yoksa kart hiç basılmaz, boş başlık kalmaz).
+  const extraChapters = [
+    { key: 'arama', after: 'izleniyor', node: <SearchInterestSection si={si} onShowOnMap={onShowInterestOnMap} /> },
+    { key: 'tv', after: 'erisim', node: <SeriesTv seriesId={seriesId} /> },
+    {
+      key: 'gundem',
+      title: 'Nasıl konuşuluyor',
+      after: 'ilgi',
+      node: (
+        <>
+          <PressSection seriesId={seriesId} isAdmin={isAdmin} onScanned={si.reloadSocial} />
+          <section className="series-page__section series-page__section--magazine">
+            <h2>Magazin</h2>
+            {magazineReq.status === 'loading' || magazineReq.status === 'idle' ? (
+              <p className="dashboard__empty">Haberler yükleniyor…</p>
+            ) : magazineReq.status === 'error' ? (
+              <p className="dashboard__empty">Haberler şu an alınamadı.</p>
+            ) : (
+              <MagazineCarousel items={magazineItems} />
+            )}
+          </section>
+          <PromoSection social={si.social} />
+          <SeriesYoutube seriesId={seriesId} />
+        </>
+      ),
+    },
+    {
+      key: 'kadro',
+      after: 'icerik',
+      node: <SeriesCast seriesId={seriesId} fallback={series.cast} onSelectActor={onSelectActor} />,
+    },
+  ]
 
   return (
     <div className="series-page">
-      <button type="button" className="series-page__back" onClick={onBack}>
-        <IconBack />
-        {backLabel}
-      </button>
+      {back}
 
       <header className="series-page__header">
         {series.posterPath ? (
@@ -238,6 +240,7 @@ export default function SeriesPage({
           <span className="series-page__poster series-page__poster--empty" aria-hidden="true" />
         )}
         <div className="series-page__intro">
+          <p className="report__kicker">Dizi raporu</p>
           <h1 className="series-page__title">{series.name}</h1>
           <p className="series-page__meta">
             {[year, series.theme, meta?.totalEpisodes ? `${meta.totalEpisodes} bölüm` : null]
@@ -245,20 +248,13 @@ export default function SeriesPage({
               .join(' · ')}
           </p>
           <div className="series-page__pills">
-            {imdb?.rating != null &&
-              (seasons.length > 0 ? (
-                <JumpPill target="bolum-puanlari" title="Bölüm puanlarına git">
-                  <IconStar />
-                  {imdb.rating.toFixed(1)}
-                  {imdb.votes != null ? ` (${formatVotes(imdb.votes)} oy)` : ''}
-                </JumpPill>
-              ) : (
-                <span className="map-popup-card__pill">
-                  <IconStar />
-                  {imdb.rating.toFixed(1)}
-                  {imdb.votes != null ? ` (${formatVotes(imdb.votes)} oy)` : ''}
-                </span>
-              ))}
+            {imdb?.rating != null && (
+              <JumpPill target="brifing-ilgi" title="İzleyici puanı ve bölümlere git">
+                <IconStar />
+                {imdb.rating.toFixed(1)}
+                {imdb.votes != null ? ` (${formatVotes(imdb.votes)} oy)` : ''}
+              </JumpPill>
+            )}
             {imdb?.votesGrowth?.d7?.votes > 0 && (
               <span
                 className="map-popup-card__pill series-page__pill--up"
@@ -268,11 +264,20 @@ export default function SeriesPage({
               </span>
             )}
             {enrichment?.dizilah?.channel && <span className="map-popup-card__pill">{enrichment.dizilah.channel}</span>}
-            <JumpPill target="nerede-yayinda" title="Yayında olduğu ülkelere git">
-              {series.availability.length} ülkede yayında
-            </JumpPill>
+            {report?.chapters?.flatMap((c) => c.sections).find((s) => s.key === 'seriesAvailability')?.data?.tabii && (
+              <span className="map-popup-card__pill" title="TRT'nin uluslararası yayın platformu">
+                TRT 1 · tabii
+              </span>
+            )}
+            {hasChapter('erisim') ? (
+              <JumpPill target="brifing-erisim" title="Yayında olduğu ülkelere git">
+                {series.availability.length} ülkede yayında
+              </JumpPill>
+            ) : (
+              <span className="map-popup-card__pill">{series.availability.length} ülkede yayında</span>
+            )}
             {listedCountries > 0 && (
-              <JumpPill target="listeler" title="Listelere git">
+              <JumpPill target="brifing-izleniyor" title="Ülkelere göre sıralamaya git">
                 {listedCountries} ülkede listede
               </JumpPill>
             )}
@@ -285,20 +290,6 @@ export default function SeriesPage({
               </span>
             ))}
           </div>
-          {(crew?.directors?.length > 0 || crew?.writers?.length > 0) && (
-            <p className="series-page__crew">
-              {crew.directors.length > 0 && (
-                <span>
-                  <strong>Yönetmen:</strong> {crew.directors.map((d) => d.name).join(', ')}
-                </span>
-              )}
-              {crew.writers.length > 0 && (
-                <span>
-                  <strong>Senaryo:</strong> {crew.writers.map((w) => w.name).join(', ')}
-                </span>
-              )}
-            </p>
-          )}
           {(meta?.overview || series.overview) && (
             <p className="series-page__overview">{meta?.overview || series.overview}</p>
           )}
@@ -311,94 +302,41 @@ export default function SeriesPage({
               <IconChart />
               Arama ilgisi
             </button>
-            {onOpenReport && (
-              <button type="button" className="series-page__btn" onClick={() => onOpenReport(seriesId)}>
-                <IconReport />
-                Dizi raporu
+            {onPrint && (
+              <button
+                type="button"
+                className="series-page__btn"
+                onClick={onPrint}
+                disabled={printing || !report}
+                aria-label="Raporu PDF olarak indir (yazdırma önizlemesi açılır)"
+              >
+                <IconPrint size={15} inline />
+                {printing ? 'Önizleme hazırlanıyor…' : 'PDF olarak indir'}
               </button>
             )}
           </div>
         </div>
       </header>
 
-      <SearchInterestSection si={si} onShowOnMap={onShowInterestOnMap} />
-
-      <div className="series-page__grid">
-        <div className="series-page__col">
-          <section className="series-page__section" id="listeler">
-            <h2>Listeler</h2>
-            {chartsReq.status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
-            {charts && listings.length > 0 && <ListingsTable listings={listings} />}
-            {charts && listings.length === 0 && (
-              <p className="dashboard__empty">Bu dizi takip ettiğimiz hiçbir listeye girmedi.</p>
-            )}
-          </section>
-
-          <section className="series-page__section" id="nerede-yayinda">
-            <h2 title={AVAILABILITY_NOTE}>Nerede yayında — {series.availability.length} ülke ⓘ</h2>
-            {series.availability.length ? (
-              <ul className="series-page__rows">
-                {series.availability.map((c) => (
-                  <li key={c.iso2} className="series-page__row">
-                    <Country iso2={c.iso2} />
-                    <span className="series-page__row-meta">{c.platforms.join(' · ')}</span>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="dashboard__empty">Bu dizi şu an hiçbir yayın platformunda bulunmuyor.</p>
-            )}
-          </section>
-
-          <SeriesTv seriesId={seriesId} />
-
-          {seasons.length > 0 && (
-            <section className="series-page__section" id="bolum-puanlari">
-              <h2>Bölüm puanları</h2>
-              <EpisodeHeatmap seasons={seasons} />
-            </section>
-          )}
-        </div>
-
-        <div className="series-page__col">
-          <section className="series-page__section series-page__section--magazine">
-            <h2>Magazin</h2>
-            {magazineReq.status === 'loading' || magazineReq.status === 'idle' ? (
-              <p className="dashboard__empty">Haberler yükleniyor…</p>
-            ) : magazineReq.status === 'error' ? (
-              <p className="dashboard__empty">Haberler şu an alınamadı.</p>
-            ) : (
-              <MagazineCarousel items={magazineItems} />
-            )}
-          </section>
-
-          <PromoSection social={si.social} />
-
-          <SeriesYoutube seriesId={seriesId} />
-
-          <SeriesCast seriesId={seriesId} fallback={series.cast} onSelectActor={onSelectActor} />
-
-          {localized.length > 0 && (
-            <section className="series-page__section">
-              <h2>Uluslararası adları</h2>
-              <ul className="series-page__rows">
-                {localized.map((lt) => (
-                  <li key={lt.title} className="series-page__row series-page__row--title">
-                    <span className="series-page__aka">{lt.title}</span>
-                    <span className="series-page__aka-flags">
-                      {lt.regions.map((r) => (
-                        <Flag key={r} iso2={r} title={nameOf(r)} />
-                      ))}
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </section>
-          )}
-
-          <PressSection seriesId={seriesId} isAdmin={isAdmin} onScanned={si.reloadSocial} />
-        </div>
-      </div>
+      {reportReq.status === 'loading' && !report && (
+        <p className="report__loading dashboard__empty" role="status" aria-live="polite">
+          Dizi raporu hazırlanıyor…
+        </p>
+      )}
+      {reportReq.status === 'error' && (
+        <p className="report__error" role="alert">
+          Rapor alınamadı: {reportReq.error}
+        </p>
+      )}
+      {report && (
+        <CountryReportDocument
+          report={report}
+          countryName={series.name}
+          hideHead
+          omitChapters={['gundem']}
+          extraChapters={extraChapters}
+        />
+      )}
     </div>
   )
 }

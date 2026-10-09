@@ -61,6 +61,40 @@ export function SeriesMarketsSection({ data }) {
   )
 }
 
+/** Platform başına Top 10 performansı: bu yıl ve bu ay puanı, Top 10'da kalınan gün, dünya sırası. */
+export function SeriesPlatformPointsSection({ data }) {
+  return (
+    <>
+      <table className="dashboard__table dashboard__table--compact report__table">
+        <thead>
+          <tr>
+            <th scope="col">Platform</th>
+            <th scope="col">Bu yıl puan</th>
+            <th scope="col">Bu yıl Top 10'da</th>
+            <th scope="col">Bu yıl dünya sırası</th>
+            <th scope="col">Bu ay puan</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.platforms.map((p) => (
+            <tr key={p.platform}>
+              <td>{p.name}</td>
+              <td>{p.year?.points != null ? fmtNum(p.year.points, 0) : '—'}</td>
+              <td>{p.year?.days != null ? `${p.year.days} gün` : '—'}</td>
+              <td>{p.year?.worldRank != null ? `${p.year.worldRank}.` : '—'}</td>
+              <td>{p.month?.points != null ? fmtNum(p.month.points, 0) : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <p className="report__fine">
+        Puan, dizinin platformun ülke Top 10 listelerindeki günlük sıralarından hesaplanır (1. sıra en yüksek puan);
+        dünya sırası, platformun bütün dizileri arasındaki yeridir.
+      </p>
+    </>
+  )
+}
+
 export function SeriesOpportunitySection({ data }) {
   const shared = data.shared || []
   return (
@@ -118,10 +152,18 @@ export function SeriesOpportunitySection({ data }) {
 export function SeriesAvailabilitySection({ data }) {
   return (
     <>
-      <p className="report__lead">
-        {data.countryCount} ülkede izlenebiliyor
-        {data.platforms.length ? `; ${data.platforms.length} platform kaydı var` : ''}.
-      </p>
+      {data.tabii && (
+        <p className="report__lead">
+          <strong>TRT 1 yapımı.</strong> TRT'nin uluslararası yayın platformu tabii'de yayımlanıyor; tabii'nin
+          erişilebildiği ülkelerin listesi kamuya açık olmadığından aşağıdaki ülke sayısına katılmadı.
+        </p>
+      )}
+      {(data.countryCount > 0 || !data.tabii) && (
+        <p className="report__lead">
+          {data.countryCount} ülkede izlenebiliyor
+          {data.platforms.length ? `; ${data.platforms.length} platform kaydı var` : ''}.
+        </p>
+      )}
       <ul className="report__platforms">
         {data.platforms.map((p) => (
           <li key={p.name}>
@@ -250,6 +292,7 @@ export function SeriesContentSection({ data }) {
 
 export const SERIES_SECTION_COMPONENTS = {
   seriesMarkets: SeriesMarketsSection,
+  seriesPlatformPoints: SeriesPlatformPointsSection,
   seriesOpportunity: SeriesOpportunitySection,
   seriesAvailability: SeriesAvailabilitySection,
   seriesImdb: SeriesImdbSection,

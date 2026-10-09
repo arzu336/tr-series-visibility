@@ -3,10 +3,11 @@ import {
   fetchTrends,
   fetchSocialListening,
   fetchTrendsTimeSeries,
-  fetchTrendsInsight,
+  fetchTrendMovements,
   fetchMediaSentimentSummary,
   enrichSeriesNow,
   fetchSeriesEnrichJob,
+  queueSeriesPress,
   waitForJob,
 } from '../lib/api.js'
 import { safeExternalUrl } from '../lib/safeUrl.js'
@@ -48,23 +49,22 @@ export function useSearchInterest(seriesName) {
   const loadSeries = useCallback(async (name, iso2, cachedOnly) => {
     const t = ++tsTokenRef.current
     const key = `${name}|${iso2 ?? ''}`
-    const set = (v) => t === tsTokenRef.current && setSeries({ key, timeline: null, insight: null, error: null, ...v })
+    const set = (v) => t === tsTokenRef.current && setSeries({ key, timeline: null, moves: null, error: null, ...v })
     try {
       const d = await fetchTrendsTimeSeries(name, iso2, { cachedOnly })
       if (d.notCached) return set({ status: 'notCached' })
       const ok = d.timeline?.length > 1
-      set({ status: ok ? 'ready' : 'unavailable', timeline: d.timeline, insightStatus: ok ? 'loading' : null })
+      set({ status: ok ? 'ready' : 'unavailable', timeline: d.timeline, movesStatus: ok ? 'loading' : null })
       if (!ok) return
-      // Yapay zekâ yorumu: önce kayıtlı yorum; yoksa grafik zaten elde olduğu için yorum hemen üretilir
-      // (2026-10-07, kullanıcı isteği — önceden yalnızca kayıtlı yorum gösteriliyordu, çoğu grafikte boş kalıyordu).
-      let ins = await fetchTrendsInsight(name, iso2, { cachedOnly: true }).catch(() => null)
-      if (!ins?.insightText) ins = await fetchTrendsInsight(name, iso2).catch(() => null)
-      if (t === tsTokenRef.current)
-        setSeries((s) => ({
-          ...s,
-          insight: ins?.insightText ?? null,
-          insightStatus: ins?.insightText ? 'ready' : 'unavailable',
-        }))
+      // Hareket hareket yorum (2026-10-07): önce kayıtlı yorum; yoksa kurallı notlar hemen gösterilir, yapay zekâ
+      // yorumu gelince yerine geçer.
+      let mv = await fetchTrendMovements(name, iso2, { cachedOnly: true }).catch(() => null)
+      if (t !== tsTokenRef.current) return
+      if (mv?.pending) {
+        setSeries((s) => ({ ...s, moves: mv, movesStatus: 'loading' }))
+        mv = (await fetchTrendMovements(name, iso2).catch(() => null)) ?? mv
+      }
+      if (t === tsTokenRef.current) setSeries((s) => ({ ...s, moves: mv, movesStatus: 'ready' }))
     } catch (err) {
       set({ status: 'unavailable', error: err.message })
     }
@@ -102,7 +102,7 @@ export function useSearchInterest(seriesName) {
     series:
       series.key === tsKey
         ? series
-        : { status: 'loading', timeline: null, insight: null, insightStatus: null, error: null },
+        : { status: 'loading', timeline: null, moves: null, movesStatus: null, error: null },
     query: () => {
       setData((d) => ({ ...d, name: seriesName, status: 'querying' }))
       setGeoState({ name: seriesName, iso2: null })
@@ -180,6 +180,53 @@ function Footprint({ byCountry }) {
   )
 }
 
+const fmtWeek = (s) =>
+  new Date(s * 1000).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short', year: 'numeric' })
+
+/** Grafiğin hareket hareket yorumu: numaralar grafikteki işaretlerle aynı. */
+export function TrendMoves({ moves, status }) {
+  const list = moves?.movements || []
+  if (status === 'loading' && !list.length)
+    return <p className="dashboard__empty">Grafikteki hareketler yorumlanıyor…</p>
+  if (!moves) return null
+  if (!list.length) return <p className="dashboard__hint">Bu dönemde grafikte belirgin bir yükseliş ya da düşüş yok.</p>
+  return (
+    <div className="theme-insight__ai-box trend-moves">
+      <span className="theme-insight__ai-label">
+        <IconSparkle size={12} inline />
+        {moves.source === 'yapay-zeka' ? 'Yapay zekâ yorumu — hareket hareket' : 'Kayıtlara göre — hareket hareket'}
+        {status === 'loading' && ' · yapay zekâ yorumu hazırlanıyor…'}
+      </span>
+      {moves.summary && <p className="trend-moves__summary">{moves.summary}</p>}
+      <ol className="trend-moves__list">
+        {list.map((m, i) => (
+          <li key={m.from} className="trend-moves__item">
+            <span className={`trend-moves__badge trend-moves__badge--${m.kind === 'yükseliş' ? 'up' : 'down'}`}>
+              {i + 1}
+            </span>
+            <div>
+              <strong className="trend-moves__head">
+                {fmtWeek(m.from)} – {fmtWeek(m.to)} · {m.kind === 'yükseliş' ? '▲' : '▼'} {m.fromValue} → {m.toValue}
+              </strong>
+              <p className="trend-moves__note">{m.note}</p>
+              {m.events?.length > 0 && (
+                <details className="trend-moves__events">
+                  <summary>Bu dönemde kayıtlı gelişmeler ({m.events.length})</summary>
+                  <ul>
+                    {m.events.map((e) => (
+                      <li key={`${e.ts}-${e.text}`}>{e.text}</li>
+                    ))}
+                  </ul>
+                </details>
+              )}
+            </div>
+          </li>
+        ))}
+      </ol>
+    </div>
+  )
+}
+
 function QueryCta({ text, label, onClick, busy }) {
   return (
     <div className="series-interest__cta">
@@ -250,23 +297,20 @@ export function SearchInterestSection({ si, onShowOnMap }) {
               )}
               {series.status === 'ready' && (
                 <>
-                  <SeriesTrendChart timeline={series.timeline} scopeLabel={geo ? scope : null} />
+                  <SeriesTrendChart
+                    timeline={series.timeline}
+                    scopeLabel={geo ? scope : null}
+                    markers={(series.moves?.movements || []).map((m, i) => ({
+                      timestamp: m.to,
+                      label: i + 1,
+                      kind: m.kind === 'yükseliş' ? 'up' : 'down',
+                    }))}
+                  />
                   <p className="ts-scope__note">
                     100, bu dönemdeki en yoğun arama haftasıdır; diğer haftalar ona göre ölçeklenir. Bu yüzden iki
                     ülkenin grafiği birbiriyle hacim olarak karşılaştırılamaz.
                   </p>
-                  {series.insightStatus === 'loading' && (
-                    <p className="dashboard__empty">Yapay zekâ grafiği yorumluyor…</p>
-                  )}
-                  {series.insight && (
-                    <div className="theme-insight__ai-box" style={{ marginTop: '0.8rem' }}>
-                      <span className="theme-insight__ai-label">
-                        <IconSparkle size={12} inline />
-                        Yapay zekâ yorumu
-                      </span>
-                      <p>{series.insight}</p>
-                    </div>
-                  )}
+                  <TrendMoves moves={series.moves} status={series.movesStatus} />
                 </>
               )}
             </div>
@@ -339,6 +383,23 @@ export function scanProgressText(p, startedAt, now) {
   return `Basın taranıyor${oran}${kalan ? ` — ${kalan}` : ''}. Tarama sunucuda sürer: sayfadan ayrılabilirsiniz, döndüğünüzde ilerleme burada görünür ve bulunan sonuçlar tarama bitmeden listeye eklenir.`
 }
 
+/**
+ * Biten taramanın özeti. Yalnızca yöneticinin "tüm ülkeleri tara" işi sosyal sonucu da taşır; sayfa açılınca başlayan
+ * basın taraması yalnızca basın sonucunu döndürür (2026-10-09: social yokken bu satır çöküyordu) — o durumda özet yok.
+ */
+export function PressSectionResult({ scan }) {
+  if (scan.status !== 'done' || !scan.result?.social) return null
+  const r = scan.result
+  return (
+    <div className="dashboard__bulk-bar" style={{ marginTop: '0.6rem' }}>
+      {r.countriesTargeted} ülke hedeflendi — basın: {r.news?.scanned ?? 0} tarandı ({r.news?.liveCalls ?? 0} canlı),
+      sosyal: {r.social.scanned} tarandı ({r.social.liveCalls} canlı).
+      {r.social.budgetExhausted &&
+        ' Sosyal tarama sırasında aylık arama kotası doldu (basın taraması ücretsiz kaynaktan sürer).'}
+    </div>
+  )
+}
+
 /** Basın & medya algısı; yöneticiye "tüm ülkeleri tara" (basın + sosyal) düğmesi. */
 export function PressSection({ seriesId, isAdmin, onScanned }) {
   const [refresh, setRefresh] = useState(0)
@@ -375,7 +436,9 @@ export function PressSection({ seriesId, isAdmin, onScanned }) {
     [onScanned]
   )
 
-  // Sayfaya dönüldüğünde süren tarama varsa ona yeniden bağlan (önceden sayfadan çıkınca ilerleme kayboluyordu).
+  // Sayfa açılınca süren (yöneticinin başlattığı) tarama varsa ona bağlan. Tıklamada ücretli sorgu yapılmaz
+  // (2026-10-09): taraması olmayan dizi bu geceki ön doldurma sırasına alınır, sonuç ertesi gün hazır gelir.
+  const [queued, setQueued] = useState(false)
   useEffect(() => {
     const ctrl = new AbortController()
     fetchSeriesEnrichJob(seriesId)
@@ -388,6 +451,13 @@ export function PressSection({ seriesId, isAdmin, onScanned }) {
       .catch(() => {})
     return () => ctrl.abort()
   }, [seriesId, follow])
+  const azTarandi = status === 'ready' && (data?.status === 'pending' || (data?.scannedCount ?? 0) < 3)
+  useEffect(() => {
+    if (!azTarandi) return
+    queueSeriesPress(seriesId)
+      .then((r) => setQueued(Boolean(r?.queued)))
+      .catch(() => {})
+  }, [azTarandi, seriesId])
 
   async function handleScan() {
     setScan({ status: 'running', result: null, error: null, progress: null, startedAt: null })
@@ -403,11 +473,19 @@ export function PressSection({ seriesId, isAdmin, onScanned }) {
     <section className="series-page__section">
       <h2>Basın &amp; medya algısı</h2>
       {(status === 'loading' || status === 'idle') && <p className="dashboard__empty">Yükleniyor…</p>}
-      {(status === 'error' || data?.status === 'pending') && (
+      {(status === 'error' || data?.status === 'pending') && scan.status !== 'running' && (
         <p className="dashboard__empty">{EMPTY.pressSeriesNotScanned}</p>
       )}
-      {status === 'ready' && data?.status === 'no-data' && (
+      {queued && data?.status !== 'pending' && (
+        <p className="dashboard__hint">Bu dizi daha fazla ülkede bu gece taranacak; sonuçlar yarın burada olacak.</p>
+      )}
+      {status === 'ready' && data?.status === 'no-data' && scan.status !== 'running' && (
         <p className="dashboard__empty">{EMPTY.pressSeriesScannedNoNews(data.scannedCount)}</p>
+      )}
+      {status === 'ready' && data?.status === 'analyzing' && (
+        <p className="series-page__sentiment-line">
+          {data.withNewsCount} ülkede {data.newsCount} haber bulundu; ton analizi sürüyor.
+        </p>
       )}
       {status === 'ready' && data?.status === 'ready' && (
         <>
@@ -453,15 +531,7 @@ export function PressSection({ seriesId, isAdmin, onScanned }) {
           {scanProgressText(scan.progress, scan.startedAt)}
         </div>
       )}
-      {scan.status === 'done' && scan.result && (
-        <div className="dashboard__bulk-bar" style={{ marginTop: '0.6rem' }}>
-          {scan.result.countriesTargeted} ülke hedeflendi — basın: {scan.result.news.scanned} tarandı (
-          {scan.result.news.liveCalls} canlı), sosyal: {scan.result.social.scanned} tarandı (
-          {scan.result.social.liveCalls} canlı).
-          {scan.result.social.budgetExhausted &&
-            ' Sosyal tarama sırasında aylık arama kotası doldu (basın taraması ücretsiz kaynaktan sürer).'}
-        </div>
-      )}
+      <PressSectionResult scan={scan} />
       {scan.status === 'error' && (
         <div className="status status--error" style={{ marginTop: '0.6rem' }}>
           Tarama başarısız: {scan.error}

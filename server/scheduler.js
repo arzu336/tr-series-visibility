@@ -12,6 +12,8 @@ import { runActorTrendsCollectionIfNeeded } from './services/actorTrendsCollecto
 import { runNetflixSyncIfNeeded } from './services/netflixPipelineRunner.js'
 import { runReytingtvSyncIfNeeded } from './services/reytingtvRunner.js'
 import { runFlixpatrolSyncIfNeeded } from './services/flixpatrolRunner.js'
+import { runNightlyPrefillIfNeeded } from './services/nightlyPrefill.js'
+import { runFlixpatrolTitlesIfNeeded } from './services/flixpatrolTitlesRunner.js'
 import { runImdbSyncIfNeeded } from './services/imdbRunner.js'
 import { runWikiMonthlyRefreshIfNeeded } from './services/wikiMonthlyRefresh.js'
 import { syncForeignStudentsIfNeeded } from './services/foreignStudents.js'
@@ -161,6 +163,14 @@ async function runZenginlestirmeZinciri() {
     console.error('[scheduler] aylık arama verisi doldurma başarısız:', err.message)
   }
 
+  // Gece ön doldurma (Türkiye saatiyle 01–10, günde bir kez): dizi raporu basın tonu ve ülke paneli bölgesel ilgisi tıklamada
+  // ücretli sorgu yapmasın diye önceden hazırlanır.
+  try {
+    await runNightlyPrefillIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] gece ön doldurma başarısız:', err.message)
+  }
+
   // YouTube herkese açık veri (YOUTUBE_API_KEY yoksa hiçbir şey yapmaz).
   try {
     await runYoutubePublicIfNeeded()
@@ -194,6 +204,8 @@ async function runZenginlestirmeZinciri() {
   // runFlixpatrolSyncIfNeeded içinde. Cloudflare/tarayıcı gerektirdiğinden yalnızca yerelde.
   try {
     await runFlixpatrolSyncIfNeeded()
+    // Dizi sayfaları: liste taramasının görmediği platformlar ve son 7 günün sıraları (günde bir, en fazla 45 dk).
+    await runFlixpatrolTitlesIfNeeded()
   } catch (err) {
     console.error('[scheduler] FlixPatrol senkronizasyonu başarısız:', err.message)
   }

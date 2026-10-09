@@ -20,7 +20,7 @@ export function actorTrendsCacheKey(actorName) {
   return `serp:actor-trends:${normalizeSeriesKey(actorName)}`
 }
 export function regionalCacheKey(seriesName, iso2) {
-  return `serp:regional:${normalizeSeriesKey(seriesName)}::${iso2.toUpperCase()}`
+  return `serp:regional:v2:${normalizeSeriesKey(seriesName)}::${iso2.toUpperCase()}`
 }
 export function socialCacheKey(seriesName) {
   return `serp:social:${normalizeSeriesKey(seriesName)}`
@@ -275,14 +275,26 @@ export async function fetchTrendsTimeSeriesRaw(query, iso2, timeframe = 'today 1
   return { query, iso2: iso2 ? iso2.toUpperCase() : null, timeframe, queriedAt: new Date().toISOString(), timeline }
 }
 
-export async function fetchRegionalInterestRaw(seriesName, iso2) {
-  const data = await serpapiGet({
-    engine: 'google_trends',
-    q: seriesName,
-    data_type: 'GEO_MAP_0',
-    geo: iso2.toUpperCase(),
-    hl: 'tr',
-  })
+/**
+ * Ülke içi bölge kırılımı. `query`: dizinin o ülkedeki yerel adı (yoksa Türkçe adı) — 2026-10-07: yalnızca Türkçe
+ * adla ve düşük hacimli bölgeler hariç sorgulandığı için çoğu ülkede boş dönüyordu. SerpApi sonuçsuz aramayı hata
+ * olarak döndürür; o durum boş kırılım sayılır.
+ */
+export async function fetchRegionalInterestRaw(seriesName, iso2, query = seriesName) {
+  let data
+  try {
+    data = await serpapiGet({
+      engine: 'google_trends',
+      q: query,
+      data_type: 'GEO_MAP_0',
+      geo: iso2.toUpperCase(),
+      hl: 'tr',
+      include_low_search_volume: 'true',
+    })
+  } catch (err) {
+    if (/hasn't returned any results/i.test(err.message)) return { queriedAt: new Date().toISOString(), byRegion: [] }
+    throw err
+  }
   const byRegion = (data.interest_by_region || [])
     .map((r) => ({ region: r.location || r.geo, value: r.extracted_value ?? r.value }))
     .filter((r) => r.region != null && typeof r.value === 'number')

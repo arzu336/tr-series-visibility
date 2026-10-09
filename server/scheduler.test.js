@@ -40,6 +40,10 @@ vi.mock('./services/youtubeAnalytics.js', () => ({ runYoutubeSyncIfNeeded: kayde
 vi.mock('./services/youtubePublic.js', () => ({ runYoutubePublicIfNeeded: kaydet('zincir:youtubePublic') }))
 vi.mock('./services/tvGuide.js', () => ({ runTvGuideIfNeeded: kaydet('zincir:tv') }))
 vi.mock('./services/searchFill.js', () => ({ runSearchFillIfNeeded: kaydet('zincir:searchFill') }))
+vi.mock('./services/flixpatrolTitlesRunner.js', () => ({
+  runFlixpatrolTitlesIfNeeded: kaydet('zincir:flixpatrolTitles'),
+}))
+vi.mock('./services/nightlyPrefill.js', () => ({ runNightlyPrefillIfNeeded: kaydet('zincir:nightly') }))
 
 const { runScheduledRefreshInner, startScheduler, META_KEY } = await import('./scheduler.js')
 
@@ -125,6 +129,7 @@ describe('zamanlanmış tetikleme', () => {
       'zincir:reytingtv',
       'zincir:imdb',
       'zincir:flixpatrol',
+      'zincir:flixpatrolTitles',
     ])
   })
 

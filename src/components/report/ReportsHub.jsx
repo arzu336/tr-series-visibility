@@ -20,7 +20,17 @@ const COUNTRY_OPTIONS = Object.entries(countryNames)
   .map(([iso2, c]) => ({ id: iso2, iso2, label: c.name }))
   .sort((a, b) => a.label.localeCompare(b.label, 'tr'))
 
-export default function ReportsHub({ isAdmin, tab, iso2, seriesId, onChange, countries = [] }) {
+export default function ReportsHub({
+  isAdmin,
+  tab,
+  iso2,
+  seriesId,
+  onChange,
+  countries = [],
+  onBack = null,
+  backLabel,
+  seriesActions = {},
+}) {
   const tabs = [
     ...(isAdmin ? [{ key: 'kuresel', label: 'Küresel görünüm', Icon: IconGlobe }] : []),
     { key: 'ulke', label: 'Ülke brifingi', Icon: IconReport },
@@ -92,7 +102,14 @@ export default function ReportsHub({ isAdmin, tab, iso2, seriesId, onChange, cou
             onSelect={(v) => onChange({ tab: 'dizi', seriesId: v })}
           />
           {seriesId ? (
-            <SeriesReportView seriesId={seriesId} />
+            <SeriesReportView
+              seriesId={seriesId}
+              allCountries={countries}
+              onBack={onBack}
+              backLabel={backLabel}
+              actions={seriesActions}
+              isAdmin={isAdmin}
+            />
           ) : (
             <>
               <p className="dashboard__empty">

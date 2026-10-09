@@ -1,6 +1,7 @@
 import { getEnrichedVisibility } from '../data-pipeline.js'
 import { getPipelineDb } from './pipelineDb.js'
 import { isGdeltSupportedCountry } from './gdeltNews.js'
+import { getAllOwnRankings } from './charts.js'
 
 // Haftalık basın taraması hedefleri: her ülke için O ÜLKEDE ilgili Türk dizileri — son 52 haftada o ülkenin
 // sıralamasına giren diziler (en iyi sıraya göre), kalan yer o ülkede yayında olan en popüler dizilerle dolar.
@@ -85,6 +86,49 @@ export function selectNewsScanPairs({
     }
   }
   return [...groups.values()].sort((a, b) => b.countries.length - a.countries.length)
+}
+
+/**
+ * Bir dizinin basın taraması için ülkeleri (saf): önce dizinin sıralamaya girdiği ülkeler (en iyi sıraya göre),
+ * kalan yer dizinin izlenebildiği ülkelerle, ülke görünürlüğüne göre. Türkiye ve GDELT/Google'ın tanımadığı yerler
+ * (`supported`) çıkarılır.
+ */
+export function selectSeriesPressCountries({
+  seriesId,
+  rankings,
+  providersForSeries = {},
+  countryScores = new Map(),
+  limit = 6,
+  supported = () => true,
+}) {
+  const listed = []
+  for (const [iso2, own] of rankings) {
+    const e = (own.all || []).find((x) => x.seriesId === seriesId)
+    if (e) listed.push({ iso2, best: e.bestPosition, weeks: e.weeks })
+  }
+  listed.sort((a, b) => a.best - b.best || b.weeks - a.weeks)
+  const streamable = Object.entries(providersForSeries)
+    .filter(([, e]) => STREAM_KEYS.some((k) => e?.[k]?.length))
+    .map(([iso2]) => iso2)
+    .sort((a, b) => (countryScores.get(b) ?? 0) - (countryScores.get(a) ?? 0))
+  const out = []
+  for (const iso2 of [...listed.map((l) => l.iso2), ...streamable]) {
+    if (out.length >= limit) break
+    if (iso2 !== 'TR' && supported(iso2) && !out.includes(iso2)) out.push(iso2)
+  }
+  return out
+}
+
+export async function getSeriesPressCountries(seriesId, { limit = 6 } = {}) {
+  const [{ data, raw }, rankings] = await Promise.all([getEnrichedVisibility(), getAllOwnRankings()])
+  return selectSeriesPressCountries({
+    seriesId,
+    rankings,
+    providersForSeries: raw.providersById?.[seriesId] || {},
+    countryScores: new Map(data.countries.map((c) => [c.iso2, c.score ?? 0])),
+    limit,
+    supported: isGdeltSupportedCountry,
+  })
 }
 
 /**

@@ -1,12 +1,14 @@
 import express from 'express'
 import { getThemeStore, effectiveTheme } from '../themes.js'
-import { getRawSeriesDataCached } from '../data-pipeline.js'
+import { getRawSeriesDataCached, getEnrichedVisibility } from '../data-pipeline.js'
+import { getAllOwnRankings } from '../services/charts.js'
 import { getSeriesEnrichment } from '../services/pipelineData.js'
 import { queryTrends } from '../serpapi.js'
 import { querySocialListening } from '../social-listening.js'
 import { getImdbDataForTmdbSeries } from '../imdb.js'
 import { buildPersonImpact } from '../cast.js'
-import { getRegionalInterest } from '../regional-interest.js'
+import { getRegionalInterest, regionalCandidates, readCountryRegionalInterest } from '../regional-interest.js'
+import { queuePress, queueRegional } from '../services/nightlyPrefill.js'
 import { fetchAndAnalyzeSentiment, getMediaSentimentForSeries } from '../services/newsSentiment.js'
 import { getLocalTitle } from '../services/localTitles.js'
 import { calculateCountryCompositeScore } from '../services/countryScoringEngine.js'
@@ -22,6 +24,7 @@ import {
 } from '../services/serpApiCache.js'
 import { getEnrichmentTargets } from '../services/enrichmentTargets.js'
 import { getSeriesTrendInsight } from '../services/seriesTrendInsight.js'
+import { getTrendMovements } from '../services/trendMovements.js'
 import { enrichSeriesNewsNow } from '../services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from '../services/socialEnricher.js'
 import { getMagazineNews, getArticlePreview, isTrustedSource } from '../services/magazineNews.js'
@@ -121,6 +124,24 @@ trendsRouter.get(
   })
 )
 
+// Grafiğin hareket hareket yorumu (her yükseliş/düşüş için o dönemde kayıtlı gelişmeler + yapay zekâ açıklaması).
+trendsRouter.get(
+  '/api/trends/movements/:seriesName',
+  upstream('trends/movements', async (req, res) => {
+    const target = await resolveSeriesAndGeo(req, res)
+    if (!target) return
+    const cachedOnly = isCachedOnly(req)
+    const timeseries = await timeSeriesFor(target.seriesName, target.iso2, { cachedOnly })
+    if (!timeseries?.timeline?.length) return res.json({ movements: [], summary: null })
+    const raw = await getRawSeriesDataCached()
+    const series = raw.series.find((s) => s.name === target.seriesName)
+    if (!series) return res.json({ movements: [], summary: null })
+    res.json(
+      await getTrendMovements(series.id, series.name, timeseries.timeline, target.iso2, { cacheOnly: cachedOnly })
+    )
+  })
+)
+
 trendsRouter.get(
   '/api/trends/insight/:seriesName',
   upstream('trends/insight', async (req, res) => {
@@ -182,11 +203,27 @@ trendsRouter.post(
   })
 )
 
-// Dizi sayfasına dönen kullanıcı süren taramaya yeniden bağlanabilsin diye: anahtarla son iş.
+// Dizi raporuna dönen kullanıcı süren taramaya yeniden bağlanabilsin diye: anahtarla son iş (yönetici taraması ya
+// da sayfa açılınca başlayan basın taraması).
 trendsRouter.get('/api/series/:id/enrich-job', (req, res) => {
   const seriesId = Number(req.params.id)
   if (!Number.isInteger(seriesId) || seriesId <= 0) return res.status(400).json({ error: 'Geçersiz dizi kimliği' })
-  res.json({ job: getJobByKey(`series-enrich:${seriesId}`) })
+  const aktif = (j) => j && (j.status === 'queued' || j.status === 'running')
+  const enrich = getJobByKey(`series-enrich:${seriesId}`)
+  const press = getJobByKey(`series-press:${seriesId}`)
+  res.json({ job: aktif(enrich) ? enrich : aktif(press) ? press : (enrich ?? press) })
+})
+
+// Dizi raporu açıldı ama basın taraması yok/az: tıklamada ücretli sorgu yapılmaz (2026-10-09), dizi bu geceki ön
+// doldurma sırasının başına alınır (nightlyPrefill.js).
+const PRESS_MIN_SCANNED = 3
+trendsRouter.post('/api/series/:id/press-queue', (req, res) => {
+  const seriesId = Number(req.params.id)
+  const series = liveSeriesOr404(res, seriesId)
+  if (!series) return
+  if (getMediaSentimentForSeries(seriesId).scannedCount >= PRESS_MIN_SCANNED) return res.json({ queued: false })
+  queuePress(seriesId)
+  res.json({ queued: true })
 })
 
 trendsRouter.get('/api/jobs/:id', (req, res) => {
@@ -221,6 +258,22 @@ trendsRouter.get(
   '/api/person/:personId',
   upstream('person', async (req, res) => {
     res.json(await buildPersonImpact(req.params.personId))
+  })
+)
+
+// Ülke paneli: ülkenin öne çıkan dizileri (bu haftaki sıralama, yoksa en popüler yayındaki) sırayla denenir, yerel adla.
+trendsRouter.get(
+  '/api/country/:iso2/regional-interest',
+  upstream('country-regional-interest', async (req, res) => {
+    if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
+    const iso2 = normalizeIso2(req.params.iso2)
+    const [{ data, raw }, rankings] = await Promise.all([getEnrichedVisibility(), getAllOwnRankings()])
+    const candidates = regionalCandidates(iso2, { data, raw, rankings })
+    // Tıklamada ücretli sorgu yok (2026-10-09): yalnızca gece hazırlanmış kayıt okunur; yoksa ülke bu geceki sıraya alınır.
+    const stored = readCountryRegionalInterest(iso2, candidates)
+    if (stored) return res.json(stored)
+    if (candidates.length) queueRegional(iso2)
+    res.json({ byRegion: [], seriesName: null, pending: candidates.length > 0 })
   })
 )
 

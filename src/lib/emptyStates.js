@@ -24,8 +24,7 @@ export const EMPTY = {
     `${iso2} için basın taraması henüz yapılmadı (haftalık tarama görünürlükte ilk ${topCountries} ülke × ${topSeries} diziyle sınırlı; ülke panelinden elle tetiklenebilir)`,
   pressScannedNoNews: (iso2, n) => `${iso2} için ${n} dizi tarandı, yeterli haber bulunamadı`,
   pressCardNoNews: 'Bu ülke için tarama yapıldı; yeterli haber bulunamadı.',
-  pressSeriesNotScanned:
-    'Bu dizi için henüz hiçbir ülkede basın taraması yapılmadı (haftalık tarama en görünür dizilerle sınırlı).',
+  pressSeriesNotScanned: 'Bu dizi için basın taraması henüz yok; bu gece yapılacak, sonuçlar yarın burada olacak.',
   pressSeriesScannedNoNews: (n) => `${n} ülke tarandı ama hiçbirinde haber bulunamadı.`,
 
   // --- Yayın listeleri ----------------------------------------------------------------
@@ -44,8 +43,8 @@ export const EMPTY = {
   gapNoSimilar: (note) => `benzer ülke bulunamadı (${note})`,
 
   // --- Arayüz: ülke paneli / harita / kenar çubuğu --------------------------------------
-  regionalInterestMissing:
-    'Bu dizi için bu ülkede bölge kırılımı yok (arama hacmi bölge eşiğinin altında ya da sorgu henüz yapılmadı).',
+  regionalInterestMissing: 'Bu ülkede öne çıkan dizilerin bölge düzeyinde yeterli araması yok.',
+  regionalInterestPending: 'Bölgesel ilgi bu gece hazırlanacak; yarın burada olacak.',
   periodsAccumulating:
     'Veri birikiyor — günlük anlık görüntüler dönem sonunda ortalanır; henüz bir periyot tamamlanmadı.',
   leaderboardEmpty: 'Bileşik skor için veri yok: bu ülkede sağlayıcı kaydı olan dizi bulunmadı.',

@@ -4,7 +4,8 @@ import { getEnrichedVisibility } from '../data-pipeline.js'
 import { getImdbDataForTmdbSeries } from '../imdb.js'
 import { direktifIceriyorMu } from '../llm.js'
 import { countriesOfLanguage } from '../../src/lib/langCountries.js'
-import { getAllOwnRankings } from './charts.js'
+import { getAllOwnRankings, PLATFORM_LABELS } from './charts.js'
+import { getPipelineDb } from './pipelineDb.js'
 import { buildWikiInterest } from './countryReport.js'
 import { getSeriesEnrichment } from './pipelineData.js'
 import countryNames from '../../src/data/country-centroids.json' with { type: 'json' }
@@ -21,7 +22,7 @@ const OPPORTUNITY_MAX = 12
 const LANGUAGES_SHOWN = 6
 
 export const SERIES_CHAPTERS = [
-  { key: 'izleniyor', title: 'Nerede izleniyor', sections: ['seriesMarkets'] },
+  { key: 'izleniyor', title: 'Nerede izleniyor', sections: ['seriesMarkets', 'seriesPlatformPoints'] },
   { key: 'firsat', title: 'Fırsat pazarları', sections: ['seriesOpportunity'] },
   { key: 'erisim', title: 'Nerede yayında', sections: ['seriesAvailability'] },
   { key: 'ilgi', title: 'Ne kadar ilgi var', sections: ['wikiInterest', 'seriesImdb'] },
@@ -31,6 +32,7 @@ export const SERIES_CHAPTERS = [
 
 export const SERIES_SECTION_TITLES = {
   seriesMarkets: 'Ülkelere göre sıralama',
+  seriesPlatformPoints: 'Platformlarda Top 10 performansı',
   seriesOpportunity: 'İlgi olup yayında olmadığı ülkeler',
   seriesAvailability: 'Yayında olduğu ülkeler ve platformlar',
   wikiInterest: 'Dillere göre okunma ilgisi',
@@ -69,11 +71,51 @@ export function buildSeriesMarkets(seriesId, rankings) {
 }
 
 /**
+ * Platform başına Top 10 performansı (2026-10-09): dizinin girdiği bütün platformlar — liste taramasının görmediği
+ * platformlar dahil (ör. STARZPLAY, Vidio). `rows`: en güncel gün için platform × dönem satırları
+ * [{ platform, platform_name, period, points, world_rank, days_in_top10, avg_points, as_of }].
+ */
+export function buildSeriesPlatformPoints(rows = [], labelOf = (slug, name) => name || slug) {
+  const by = new Map()
+  for (const r of rows) {
+    if (!by.has(r.platform)) by.set(r.platform, { platform: r.platform, name: labelOf(r.platform, r.platform_name) })
+    by.get(r.platform)[r.period] = {
+      points: r.points ?? null,
+      worldRank: r.world_rank ?? null,
+      days: r.days_in_top10 ?? null,
+      avgPoints: r.avg_points ?? null,
+    }
+  }
+  const platforms = [...by.values()]
+    .filter((p) => (p.year?.points ?? 0) > 0 || (p.month?.points ?? 0) > 0)
+    .sort((a, b) => (b.year?.points ?? 0) - (a.year?.points ?? 0))
+  if (!platforms.length) return NONE
+  return OK({ platforms, asOf: rows[0]?.as_of ?? null })
+}
+
+function readPlatformPointRows(seriesId) {
+  const conn = getPipelineDb()
+  if (!conn) return []
+  try {
+    return conn
+      .prepare(
+        `SELECT platform, platform_name, period, points, world_rank, days_in_top10, avg_points, as_of
+         FROM flixpatrol_title_stats
+         WHERE tmdb_id = ? AND as_of = (SELECT MAX(as_of) FROM flixpatrol_title_stats WHERE tmdb_id = ?)`
+      )
+      .all(seriesId, seriesId)
+  } catch {
+    return []
+  }
+}
+
+/**
  * Yayında olduğu ülkeler, platformlara göre gruplanmış. Platform kaydı bazı platformları tanımıyor (ör. Shahid);
  * dizinin sıralamaya girdiği ülkelerde izlenebildiği kesin olduğundan, kaydı olmayan bu ülkeler ayrı bir
  * grupta ("sıralamaya girdiği diğer ülkeler") eklenir.
  */
-export function buildSeriesAvailability(providersForSeries = {}, listedIso2s = []) {
+export function buildSeriesAvailability(providersForSeries = {}, listedIso2s = [], { broadcaster = null } = {}) {
+  const tabii = broadcaster === 'TRT 1'
   const byPlatform = new Map()
   const countries = []
   for (const [iso2, entry] of Object.entries(providersForSeries)) {
@@ -88,7 +130,8 @@ export function buildSeriesAvailability(providersForSeries = {}, listedIso2s = [
   }
   const byName = (a, b) => nameOf(a).localeCompare(nameOf(b), 'tr')
   const listedOnly = listedIso2s.filter((iso2) => !countries.includes(iso2)).sort(byName)
-  if (!countries.length && !listedOnly.length) return NONE
+  // TRT yapımı: ülke kaydı olmasa da TRT'nin uluslararası platformu tabii'de yayımlandığı bilgisi verilir.
+  if (!countries.length && !listedOnly.length && !tabii) return NONE
   const platforms = [...byPlatform.entries()]
     .map(([name, set]) => ({ name, countries: [...set].sort(byName) }))
     .sort((a, b) => b.countries.length - a.countries.length || a.name.localeCompare(b.name, 'tr'))
@@ -97,6 +140,8 @@ export function buildSeriesAvailability(providersForSeries = {}, listedIso2s = [
     platforms,
     listedOnly,
     available: [...countries, ...listedOnly],
+    broadcaster,
+    tabii,
   })
 }
 
@@ -195,8 +240,15 @@ export function buildSeriesSummary(sections) {
     {
       key: 'available',
       label: 'Yayında',
-      value: ok(a) ? `${a.data.countryCount} ülke` : '—',
-      detail: ok(a) ? `${a.data.platforms.length} platformda` : null,
+      // TRT yapımı ülke kaydı olmasa da tabii'de yayımlanıyor; "0 ülke" yazmak yanıltıcı olurdu.
+      value: ok(a) ? (a.data.tabii && !a.data.countryCount ? 'tabii' : `${a.data.countryCount} ülke`) : '—',
+      detail: ok(a)
+        ? a.data.tabii
+          ? a.data.countryCount
+            ? `${a.data.platforms.length} platformda · ayrıca tabii`
+            : 'TRT 1 yapımı'
+          : `${a.data.platforms.length} platformda`
+        : null,
       trend: null,
     },
     {
@@ -295,7 +347,7 @@ function readClassification(seriesId) {
 
 export async function buildSeriesReport(seriesId, { useCache = true, deps = {} } = {}) {
   const id = Number(seriesId)
-  const cacheKey = `report:series:v2:${id}`
+  const cacheKey = `report:series:v4:${id}`
   if (useCache) {
     const cached = getCached(cacheKey)
     if (cached) return cached
@@ -306,9 +358,14 @@ export async function buildSeriesReport(seriesId, { useCache = true, deps = {} }
 
   const rankings = await (deps.getAllOwnRankings || getAllOwnRankings)()
   const seriesMarkets = buildSeriesMarkets(id, rankings)
+  const seriesPlatformPoints = buildSeriesPlatformPoints(
+    (deps.readPlatformPointRows || readPlatformPointRows)(id),
+    (slug, name) => PLATFORM_LABELS[slug] ?? name ?? slug
+  )
   const seriesAvailability = buildSeriesAvailability(
     raw.providersById[id] || {},
-    ok(seriesMarkets) ? seriesMarkets.data.rows.map((r) => r.iso2) : []
+    ok(seriesMarkets) ? seriesMarkets.data.rows.map((r) => r.iso2) : [],
+    { broadcaster: series.broadcaster ?? null }
   )
 
   // Okunma: dizinin okunduğu yabancı diller (ortak diller işaretli), en çok okunan ilk 6. Türkçe yurt içi
@@ -359,6 +416,7 @@ export async function buildSeriesReport(seriesId, { useCache = true, deps = {} }
   const sections = {
     seriesMarkets,
     seriesOpportunity,
+    seriesPlatformPoints,
     seriesAvailability,
     wikiInterest,
     seriesImdb,

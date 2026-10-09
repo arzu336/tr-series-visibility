@@ -207,6 +207,22 @@ export const PLATFORM_LABELS = {
   'apple-tv': 'Apple TV+',
   shahid: 'Shahid',
   tv: 'TV',
+  // Dizi sayfalarından gelen platformlar (2026-10-09; liste taramasının görmediği platformlar).
+  starz: 'STARZPLAY',
+  vidio: 'Vidio',
+  viu: 'Viu',
+  osn: 'OSN+',
+  'rakuten-viki': 'Viki',
+  'paramount-plus': 'Paramount+',
+  globoplay: 'Globoplay',
+  'claro-video': 'Claro video',
+  vix: 'ViX',
+  hulu: 'Hulu',
+  tubi: 'Tubi',
+  'pluto-tv': 'Pluto TV',
+  iqiyi: 'iQIYI',
+  wetv: 'WeTV',
+  zee5: 'ZEE5',
 }
 /** Bu kadar günden eski bir platform listesi "şu an" sayılmaz. */
 export const LIST_STALE_DAYS = 14

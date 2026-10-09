@@ -166,3 +166,48 @@ describe('buildSeriesReport — bütünlük', () => {
     for (const k of SERIES_CHAPTERS.flatMap((c) => c.sections)) expect(SERIES_SECTION_TITLES[k], k).toBeTruthy()
   })
 })
+
+describe('buildSeriesPlatformPoints — platform başına Top 10 performansı', () => {
+  it('platformlar bu yılki puana göre sıralanır; puansız platform düşer', async () => {
+    const { buildSeriesPlatformPoints } = await import('./seriesReport.js')
+    const r = buildSeriesPlatformPoints(
+      [
+        {
+          platform: 'shahid',
+          platform_name: 'Shahid',
+          period: 'year',
+          points: 900,
+          world_rank: 6,
+          days_in_top10: 180,
+          as_of: '2026-10-09',
+        },
+        {
+          platform: 'starz',
+          platform_name: 'Starz',
+          period: 'year',
+          points: 12500,
+          world_rank: 2,
+          days_in_top10: 280,
+          as_of: '2026-10-09',
+        },
+        {
+          platform: 'starz',
+          platform_name: 'Starz',
+          period: 'month',
+          points: 241,
+          world_rank: 10,
+          days_in_top10: 8,
+          as_of: '2026-10-09',
+        },
+        { platform: 'vidio', platform_name: 'Vidio', period: 'year', points: 0, as_of: '2026-10-09' },
+      ],
+      (slug, name) => (slug === 'starz' ? 'STARZPLAY' : name)
+    )
+    expect(r.status).toBe('hesaplandi')
+    expect(r.data.platforms.map((p) => p.name)).toEqual(['STARZPLAY', 'Shahid'])
+    expect(r.data.platforms[0]).toMatchObject({
+      year: { points: 12500, days: 280, worldRank: 2 },
+      month: { points: 241 },
+    })
+  })
+})

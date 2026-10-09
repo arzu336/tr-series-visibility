@@ -100,6 +100,16 @@ export function getMediaSentimentForSeries(seriesId) {
 
   const withData = rows.filter((r) => r.dominant_sentiment !== 'yetersiz-veri' && r.positive_score != null)
   if (withData.length === 0) {
+    // Haber bulunmuş ama ton analizi henüz yapılamamışsa "haber yok" denmez (2026-10-07).
+    const withNews = rows.filter((r) => r.total_news_count > 0)
+    if (withNews.length)
+      return {
+        status: 'analyzing',
+        scannedCount: rows.length,
+        withNewsCount: withNews.length,
+        newsCount: withNews.reduce((n, r) => n + r.total_news_count, 0),
+        countries,
+      }
     return { status: 'no-data', scannedCount: rows.length, countries }
   }
 

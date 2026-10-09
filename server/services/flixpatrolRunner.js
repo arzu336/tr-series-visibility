@@ -42,7 +42,12 @@ export function isFlixpatrolSyncDue({ now = Date.now(), lastSuccessAt = 0, lastA
   return now - lastSuccessAt >= INTERVAL_MS
 }
 
-export function runFlixpatrolFetch({ exec = execFile, pythonBin = PYTHON_BIN, timeoutMs = RUN_TIMEOUT_MS } = {}) {
+export function runFlixpatrolFetch({
+  exec = execFile,
+  pythonBin = PYTHON_BIN,
+  timeoutMs = RUN_TIMEOUT_MS,
+  script = SCRIPT,
+} = {}) {
   return new Promise((resolve) => {
     const opts = {
       cwd: PIPELINE_DIR,
@@ -59,7 +64,7 @@ export function runFlixpatrolFetch({ exec = execFile, pythonBin = PYTHON_BIN, ti
       resolve(sonuc)
     }
     try {
-      exec(pythonBin, [SCRIPT], opts, (err, stdout, stderr) => {
+      exec(pythonBin, [script], opts, (err, stdout, stderr) => {
         const summary = sonOzetSatiri(stdout)
         const stderrText = String(stderr || '')
           .trim()

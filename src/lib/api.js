@@ -80,6 +80,15 @@ export async function fetchTrendsTimeSeries(seriesName, iso2 = null, { cachedOnl
   )
 }
 
+/** Grafiğin hareketleri + her biri için kayıtlı gelişmeler ve yorum. */
+export async function fetchTrendMovements(seriesName, iso2 = null, { cachedOnly = false } = {}) {
+  const q = new URLSearchParams()
+  if (iso2) q.set('geo', iso2)
+  if (cachedOnly) q.set('cached', '1')
+  const qs = q.toString()
+  return handle(await fetch(`/api/trends/movements/${encodeURIComponent(seriesName)}${qs ? `?${qs}` : ''}`))
+}
+
 export async function fetchTrendsInsight(seriesName, iso2 = null, { cachedOnly = false } = {}) {
   const q = iso2 ? `?geo=${encodeURIComponent(iso2)}` : ''
   return handle(
@@ -90,6 +99,11 @@ export async function fetchTrendsInsight(seriesName, iso2 = null, { cachedOnly =
 // 202 döner: { job, existing, statusUrl }. Sonuç için fetchJob ile ilerleme izlenir.
 export async function enrichSeriesNow(seriesId) {
   return handle(await fetch(`/api/series/enrich-now/${seriesId}`, { method: 'POST' }))
+}
+
+/** Basın taraması olmayan diziyi bu geceki ön doldurma sırasına alır (ücretli sorgu yapmaz): { queued }. */
+export async function queueSeriesPress(seriesId) {
+  return handle(await fetch(`/api/series/${encodeURIComponent(seriesId)}/press-queue`, { method: 'POST' }))
 }
 
 /** Dizinin süren (ya da son 30 dk'da biten) basın+sosyal tarama işi; yoksa { job: null }. */
@@ -184,6 +198,11 @@ export async function fetchTurkishLearningIndex() {
 
 export async function fetchRegionalInterest(seriesName, iso2) {
   return handle(await fetch(`/api/regional-interest/${encodeURIComponent(seriesName)}/${iso2}`))
+}
+
+/** Ülkenin öne çıkan dizilerinden ilk anlamlı bölge kırılımı: { seriesName, byRegion }. */
+export async function fetchCountryRegionalInterest(iso2) {
+  return handle(await fetch(`/api/country/${encodeURIComponent(iso2)}/regional-interest`))
 }
 
 export async function fetchDuolingoStats() {

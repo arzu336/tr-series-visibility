@@ -10,7 +10,7 @@ import { SearchInterestSection } from './SeriesSearchInterest.jsx'
 import CountryPanel, { WatchLists } from './CountryPanel.jsx'
 import ChartList from './ChartList.jsx'
 import { MagazineCarousel, visibleMagazineItems } from './MagazineNews.jsx'
-import CountryReportDocument from './report/CountryReportDocument.jsx'
+import CountryReportDocument, { orderChapters } from './report/CountryReportDocument.jsx'
 import CountryReportView from './report/CountryReportView.jsx'
 import ReportsHub from './report/ReportsHub.jsx'
 import { SeriesMarketsSection, SeriesOpportunitySection } from './report/SeriesSections.jsx'
@@ -47,31 +47,57 @@ describe('useAsync tabanlı bileşenler ilk render', () => {
     expect(renderToString(<HybridScoreTag seriesName="Terzi" iso2="DE" />)).toContain('Yerel skor hesaplanıyor')
   })
 
-  it('SeriesPage dizi yayın listelerinde yoksa katalog kaydını bekler (yükleniyor) ve haritaya dönüş basar', () => {
-    const html = renderToString(<SeriesPage seriesId={99} allCountries={[]} />)
+  it('Dizi raporu: katalog kaydı gelene kadar yükleniyor; geri düğmesi yalnızca nereden açıldıysa', () => {
+    const html = renderToString(<SeriesPage seriesId={99} allCountries={[]} onBack={() => {}} />)
     expect(html).toContain('Yükleniyor')
     expect(html).toContain('Haritaya dön')
+    const arama = renderToString(
+      <SeriesPage seriesId={99} allCountries={[]} onBack={() => {}} backLabel="Arama İlgisi’ne dön" />
+    )
+    expect(arama).toContain('Arama İlgisi’ne dön')
+    expect(arama).not.toContain('Haritaya dön')
+    expect(renderToString(<SeriesPage seriesId={99} allCountries={[]} />)).not.toContain('Haritaya dön')
   })
 
-  it('SeriesPage Arama İlgisi’nden açıldıysa geri düğmesi aramaya döner', () => {
-    const html = renderToString(<SeriesPage seriesId={99} allCountries={[]} backLabel="Arama İlgisi’ne dön" />)
-    expect(html).toContain('Arama İlgisi’ne dön')
-    expect(html).not.toContain('Haritaya dön')
-  })
-
-  it('SeriesPage dizi adını, bölümleri ve yayında olduğu ülkeleri bayrak ve platformla basar', () => {
+  it('Dizi raporu tanıtım kartı: ad, yayında olduğu ülke sayısı, rapor hazırlanırken gösterge', () => {
     const allCountries = [
       { iso2: 'DE', score: 10, seriesList: [{ id: 1, name: 'Terzi', cast: [], platforms: ['Netflix'] }] },
       { iso2: 'SA', score: 5, seriesList: [{ id: 1, name: 'Terzi', cast: [], platforms: ['Shahid VIP', 'Netflix'] }] },
     ]
-    const html = renderToString(<SeriesPage seriesId={1} allCountries={allCountries} />)
+    const html = renderToString(<SeriesPage seriesId={1} allCountries={allCountries} onPrint={() => {}} />)
     expect(html).toContain('Terzi')
-    for (const baslik of ['Listeler', 'Nerede yayında', 'Magazin', 'Basın &amp; medya algısı'])
-      expect(html).toContain(baslik)
-    expect(html).toContain('fi fi-de')
-    expect(html).toContain('fi fi-sa')
-    expect(html).toContain('Shahid VIP · Netflix')
+    expect(html).toContain('Dizi raporu')
     expect(html).toMatch(/2(<!-- -->)? ülkede yayında/)
+    expect(html).toContain('Dizi raporu hazırlanıyor')
+    expect(html).toContain('PDF olarak indir')
+  })
+
+  it('rapor belgesi: canlı bölümler ilgili başlığın arkasına, çıkarılan başlık basılmaz', () => {
+    const order = orderChapters(
+      [
+        { key: 'izleniyor', title: 'A', sections: [] },
+        { key: 'ilgi', title: 'B', sections: [] },
+        { key: 'gundem', title: 'C', sections: [] },
+      ],
+      [
+        { key: 'arama', after: 'izleniyor', node: null },
+        { key: 'canli', title: 'Canlı', after: 'ilgi', node: null },
+        { key: 'kadro', after: 'yok', node: null },
+      ],
+      ['gundem']
+    ).map((c) => c.key)
+    expect(order).toEqual(['izleniyor', 'arama', 'ilgi', 'canli', 'kadro'])
+    const html = renderToString(
+      <CountryReportDocument
+        report={{ ...executive, chapters: [] }}
+        countryName="Terzi"
+        hideHead
+        extraChapters={[{ key: 'x', title: 'Canlı bölüm', after: 'yok', node: <p>içerik</p> }]}
+      />
+    )
+    expect(html).toContain('Canlı bölüm')
+    expect(html).toContain('içerik')
+    expect(html).not.toContain('report__head')
   })
 
   it('seriesFromCountries ülkeleri Türkçe ada göre sıralar ve platformları taşır', () => {
@@ -926,5 +952,24 @@ describe('Raporlar menüsü ve dizi raporu bölümleri', () => {
     )
     expect(o).toContain('Arapça')
     expect(o).toContain('Ortak dillerde')
+  })
+})
+
+describe('PressSection — sayfa açılınca başlayan basın taraması', () => {
+  it('sosyal sonucu olmayan iş özeti çökertmez', async () => {
+    const { PressSectionResult } = await import('./SeriesSearchInterest.jsx')
+    const html = renderToString(
+      <PressSectionResult scan={{ status: 'done', result: { countriesTargeted: 6, news: { scanned: 6 } } }} />
+    )
+    expect(html).toBe('')
+    const admin = renderToString(
+      <PressSectionResult
+        scan={{
+          status: 'done',
+          result: { countriesTargeted: 2, news: { scanned: 2, liveCalls: 1 }, social: { scanned: 2, liveCalls: 0 } },
+        }}
+      />
+    )
+    expect(admin.replaceAll('<!-- -->', '')).toContain('2 ülke hedeflendi')
   })
 })

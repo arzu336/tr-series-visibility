@@ -8,6 +8,7 @@ import { getTrend, maybeRecordSnapshot, loadHistoryStore } from './history.js'
 import { getFallbackInterestScores } from './services/proxyScore.js'
 import { maybeRecordSeriesSnapshot } from './series-period-history.js'
 import { getCatalogSupplementIds } from './services/pipelineData.js'
+import tabiiCountries from '../src/data/tabii-countries.json' with { type: 'json' }
 
 const RAW_CACHE_KEY = 'raw-series-providers'
 const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000
@@ -41,9 +42,31 @@ export function fillMissingPosters(series = []) {
   return series
 }
 
+/**
+ * TRT 1 yapımları tabii'de: teyitli ülke listesi (src/data/tabii-countries.json) doluysa o ülkelerde yayın kaydına
+ * "tabii" eklenir (o ülkede kayıt zaten varsa ona eklenir). Liste boşken hiçbir ülke uydurulmaz.
+ */
+export function applyTabiiAvailability(raw, countries = tabiiCountries.countries || []) {
+  if (!countries.length) return raw
+  const tabii = { provider_id: 'tabii', provider_name: 'tabii' }
+  for (const s of raw.series || []) {
+    if (s.broadcaster !== 'TRT 1') continue
+    const byCountry = (raw.providersById[s.id] ||= {})
+    for (const iso2 of countries) {
+      const e = (byCountry[iso2] ||= {})
+      const list = (e.flatrate ||= [])
+      if (!list.some((p) => p.provider_name === 'tabii')) list.push(tabii)
+    }
+  }
+  return raw
+}
+
 export async function getRawSeriesDataCached() {
   const raw = await readRawSeriesData()
-  if (raw?.series) fillMissingPosters(raw.series)
+  if (raw?.series) {
+    fillMissingPosters(raw.series)
+    applyTabiiAvailability(raw)
+  }
   return raw
 }
 

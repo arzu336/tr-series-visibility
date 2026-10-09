@@ -138,6 +138,29 @@ CREATE INDEX IF NOT EXISTS idx_chart_entries_period ON chart_entries (provider, 
 -- (server/data-pipeline.js); popülerlikleri düşse de katalogdan çıkmazlar. Yalnızca TMDB'de origin TR ve
 -- adı birebir tutan TEK aday yazılır; belirsizler unresolved_queue'ya gider. already_in_catalog=1: dizi
 -- zaten katalogda, liste başlığı yalnızca farklı yazılmış (eşleştirmede takma ad olarak kullanılır).
+-- FlixPatrol dizi sayfaları (providers/flixpatrol_titles.py). Eşleme: dizi → FlixPatrol sayfa slug'ı (status
+-- 'ok' | 'yok'; 'yok' 30 gün sonra yeniden aranır). Puanlar: platform × dönem (today|month|year) puanı, dünya
+-- sırası, Top 10'da kalınan gün ve günlük ortalama; as_of = sayfanın güncellenme günü.
+CREATE TABLE IF NOT EXISTS flixpatrol_title_map (
+    tmdb_id INTEGER PRIMARY KEY,
+    slug TEXT,
+    status TEXT NOT NULL,
+    checked_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS flixpatrol_title_stats (
+    tmdb_id INTEGER NOT NULL,
+    platform TEXT NOT NULL,
+    platform_name TEXT,
+    period TEXT NOT NULL,
+    points INTEGER,
+    world_rank INTEGER,
+    days_in_top10 INTEGER,
+    avg_points INTEGER,
+    as_of TEXT NOT NULL,
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (tmdb_id, platform, period, as_of)
+);
+
 CREATE TABLE IF NOT EXISTS catalog_supplement (
     tmdb_id INTEGER PRIMARY KEY,
     name TEXT NOT NULL,
@@ -483,6 +506,30 @@ def save_chart_entries(conn: sqlite3.Connection, entries) -> int:
             program_kind = excluded.program_kind, metric_value = excluded.metric_value,
             metric_unit = excluded.metric_unit, source_url = excluded.source_url, fetched_at = excluded.fetched_at
         """,
+        rows,
+    )
+    conn.commit()
+    return len(rows)
+
+
+def save_flixpatrol_title_map(conn: sqlite3.Connection, tmdb_id: int, slug: str | None, status: str, checked_at: str) -> None:
+    conn.execute(
+        "INSERT INTO flixpatrol_title_map (tmdb_id, slug, status, checked_at) VALUES (?, ?, ?, ?) "
+        "ON CONFLICT(tmdb_id) DO UPDATE SET slug = excluded.slug, status = excluded.status, checked_at = excluded.checked_at",
+        (tmdb_id, slug, status, checked_at),
+    )
+    conn.commit()
+
+
+def save_flixpatrol_title_stats(conn: sqlite3.Connection, tmdb_id: int, stats: list[dict], as_of: str, fetched_at: str) -> int:
+    rows = [
+        (tmdb_id, s["platform_slug"], s["platform_name"], s["period"], s["points"], s["world_rank"],
+         s["days_in_top10"], s["avg_points"], as_of, fetched_at)
+        for s in stats
+    ]
+    conn.executemany(
+        "INSERT OR REPLACE INTO flixpatrol_title_stats (tmdb_id, platform, platform_name, period, points, world_rank, "
+        "days_in_top10, avg_points, as_of, fetched_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         rows,
     )
     conn.commit()

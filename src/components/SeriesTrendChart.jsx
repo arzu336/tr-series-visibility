@@ -12,7 +12,11 @@ const AREA_COLOR = 'rgba(238, 49, 53, 0.12)'
 const PEAK_COLOR = '#D2A94D'
 const MAX_AXIS_LABELS = 10
 
-export default function SeriesTrendChart({ timeline, scopeLabel = null }) {
+/**
+ * `markers`: [{ timestamp, label, kind: 'up' | 'down' }] — hareket yorumlarındaki numaralar grafikte aynı noktada
+ * (hareketin bittiği hafta) gösterilir.
+ */
+export default function SeriesTrendChart({ timeline, scopeLabel = null, markers = [] }) {
   const [hoverIdx, setHoverIdx] = useState(null)
   const kapsam = scopeLabel || 'küresel'
 
@@ -87,6 +91,28 @@ export default function SeriesTrendChart({ timeline, scopeLabel = null }) {
           </text>
         </g>
         <circle cx={peak.x} cy={peak.y} r="3.5" fill={PEAK_COLOR} stroke="rgba(16,25,28,0.6)" strokeWidth="1" />
+
+        {markers.map((m) => {
+          const pt = points.find((p) => p.timestamp === m.timestamp)
+          if (!pt) return null
+          const y = Math.max(pt.y - 14, 10)
+          return (
+            <g key={`m-${m.timestamp}`} pointerEvents="none">
+              <line x1={pt.x} x2={pt.x} y1={y + 8} y2={pt.y} stroke="rgba(255,255,255,0.45)" strokeWidth="1" />
+              <circle
+                cx={pt.x}
+                cy={y}
+                r="8"
+                fill={m.kind === 'down' ? '#f59e0b' : '#22c55e'}
+                stroke="rgba(10,14,24,0.9)"
+                strokeWidth="1.5"
+              />
+              <text x={pt.x} y={y + 3.5} textAnchor="middle" className="period-chart__marker-label">
+                {m.label}
+              </text>
+            </g>
+          )
+        })}
 
         {hovered && (
           <>

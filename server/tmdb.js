@@ -70,6 +70,16 @@ async function getTopSeriesByOrigin(originCountry, originalLanguage, n = TOP_N_S
   }))
 }
 
+/** Sezonların yayın başlangıç tarihleri: [{ seasonNumber, airDate, episodeCount }]. */
+export async function getSeasonDates(seriesId) {
+  const show = await tmdbGet(`/tv/${seriesId}`, { language: 'tr-TR' })
+  return (show.seasons || []).map((s) => ({
+    seasonNumber: s.season_number,
+    airDate: s.air_date || null,
+    episodeCount: s.episode_count ?? null,
+  }))
+}
+
 export async function getWatchProviders(seriesId) {
   const data = await tmdbGet(`/tv/${seriesId}/watch/providers`)
   return data.results || {}
@@ -135,6 +145,37 @@ const FETCH_CONCURRENCY = 8
 
 const NETFLIX_NETWORK_ID = 213
 const NETFLIX_DISCOVERY_PAGES = 3
+// TRT 1 yapımları (2026-10-09): TRT dizileri Netflix/FlixPatrol listelerinde az görünüyor ve popülerlik sıralı ilk N
+// listesinin dışında kalıyordu (Barbaros, Yunus Emre…). TMDB'de TRT 1 ağındaki bütün Türk yapımları kataloğa katılır
+// (kurgusal olmayanlar CATALOG_FILTER ile yine elenir) ve `broadcaster: 'TRT 1'` ile işaretlenir.
+export const TRT1_NETWORK_ID = 869
+const TRT_DISCOVERY_PAGES = 15
+
+async function getTrtSeriesByOrigin(originCountry, pages = TRT_DISCOVERY_PAGES) {
+  const results = await Promise.all(
+    Array.from({ length: pages }, (_, i) =>
+      tmdbGet('/discover/tv', {
+        with_networks: String(TRT1_NETWORK_ID),
+        with_origin_country: originCountry,
+        sort_by: 'popularity.desc',
+        language: 'tr-TR',
+        page: i + 1,
+      }).catch(() => ({ results: [] }))
+    )
+  )
+  return results
+    .flatMap((p) => p.results || [])
+    .map((show) => ({
+      id: show.id,
+      name: show.original_name || show.name,
+      popularity: show.popularity,
+      posterPath: show.poster_path,
+      backdropPath: show.backdrop_path || null,
+      firstAirDate: show.first_air_date || null,
+      overview: show.overview || '',
+      broadcaster: 'TRT 1',
+    }))
+}
 
 /**
  * Netflix ağında yayımlanan Türk yapımları (with_networks=213 + origin TR). Popülerlik sıralı
@@ -198,7 +239,7 @@ export async function getSeriesDetails(seriesId) {
 // Aşkın Gücü, Güldür Güldür Show…) TMDB'nin Türk yapımı sorgusundan gelse de çıkarılır (kullanıcı kararı,
 // 2026-10-05). TMDB tipi bazen yanlış ("Yalnız Kurt" Reality görünür ama türü Drama); türünde Drama olan
 // yapım her zaman kalır. Sürüm değişince önbellekteki katalog yeniden kurulur (data-pipeline.js).
-export const CATALOG_FILTER = 'scripted-v1'
+export const CATALOG_FILTER = 'scripted-v2-trt'
 const GENRE = { DRAMA: 18, NEWS: 10763, REALITY: 10764, TALK: 10767 }
 const NON_SCRIPTED_TYPES = new Set(['Reality', 'Talk Show', 'News'])
 const SERIES_KIND_TTL_MS = 90 * 24 * 60 * 60 * 1000
@@ -231,11 +272,15 @@ export async function getRawSeriesDataForOrigin(
   n = TOP_N_SERIES,
   { supplementIds = [] } = {}
 ) {
-  const [top, netflix] = await Promise.all([
+  const [top, netflix, trt] = await Promise.all([
     getTopSeriesByOrigin(originCountry, originalLanguage, n),
     originCountry === 'TR' ? getNetflixSeriesByOrigin(originCountry) : Promise.resolve([]),
+    originCountry === 'TR' ? getTrtSeriesByOrigin(originCountry) : Promise.resolve([]),
   ])
-  const discovered = mergeSeriesLists(top, netflix)
+  // İlk N listesinde zaten olan TRT yapımları da işaretlenir.
+  const trtIds = new Set(trt.map((s) => s.id))
+  for (const s of [...top, ...netflix]) if (trtIds.has(s.id)) s.broadcaster = 'TRT 1'
+  const discovered = mergeSeriesLists(mergeSeriesLists(top, netflix), trt)
   const have = new Set(discovered.map((s) => s.id))
   const missing = supplementIds.filter((id) => !have.has(id))
   const extra = (

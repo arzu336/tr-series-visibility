@@ -5,9 +5,8 @@ import { CountryTv } from './TvSections.jsx'
 import Avatar from './Avatar.jsx'
 import Flag from './Flag.jsx'
 import { IconReport } from './Icons.jsx'
-import { fetchRegionalInterest, fetchCountryCharts, fetchCountryContext } from '../lib/api.js'
+import { fetchCountryRegionalInterest, fetchCountryCharts, fetchCountryContext } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
-import PeriodChart from './PeriodChart.jsx'
 import ChartList, { fmtDateTr } from './ChartList.jsx'
 import { AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import { useAsync } from '../lib/useAsync.js'
@@ -23,16 +22,20 @@ function yearOf(dateStr) {
   return dateStr ? dateStr.slice(0, 4) : null
 }
 
-function RegionalInterest({ seriesName, iso2 }) {
-  const { status, data } = useAsync(() => fetchRegionalInterest(seriesName, iso2), [seriesName, iso2], {
-    enabled: Boolean(seriesName && iso2),
+function RegionalInterest({ iso2 }) {
+  const { status, data, error } = useAsync(() => fetchCountryRegionalInterest(iso2), [iso2], {
+    enabled: Boolean(iso2),
   })
   const byRegion = data?.byRegion || []
 
   if (status === 'loading' || status === 'idle') return <p className="dashboard__empty">Yükleniyor…</p>
-  if (status === 'error' || byRegion.length === 0) {
-    return <p className="dashboard__empty">{EMPTY.regionalInterestMissing}</p>
-  }
+  if (status === 'error') return <p className="dashboard__empty">Bölgesel ilgi şu an alınamadı: {error}</p>
+  if (byRegion.length === 0)
+    return (
+      <p className="dashboard__empty">
+        {data?.pending ? EMPTY.regionalInterestPending : EMPTY.regionalInterestMissing}
+      </p>
+    )
 
   const top = byRegion.filter((r) => r.value > 0).slice(0, 8)
   const maxValue = Math.max(...top.map((r) => r.value), 1)
@@ -43,6 +46,9 @@ function RegionalInterest({ seriesName, iso2 }) {
 
   return (
     <div className="benchmark-card">
+      <p className="dashboard__hint">
+        <strong>{data.seriesName}</strong> için ülke içindeki aramalar; 100 en çok aranan bölge.
+      </p>
       <div className="benchmark-card__bars">
         {top.map((r) => (
           <div key={r.region} className="benchmark-card__row">
@@ -348,13 +354,10 @@ export default function CountryPanel({
   onShowActorNetwork,
   onOpenReport,
 }) {
-  const [periodRange, setPeriodRange] = useState('monthly')
-
-  const chartsReq = useAsync(
-    () => fetchCountryCharts(country.iso2, { range: periodRange }),
-    [country?.iso2, periodRange],
-    { enabled: Boolean(country?.iso2), keepPrevious: true }
-  )
+  const chartsReq = useAsync(() => fetchCountryCharts(country.iso2), [country?.iso2], {
+    enabled: Boolean(country?.iso2),
+    keepPrevious: true,
+  })
   const charts = chartsReq.data
 
   useEffect(() => {
@@ -464,30 +467,10 @@ export default function CountryPanel({
                 />
               )}
 
-              {country.dataSource !== 'proxy' && <h3>Listeye giren diziler — zaman içinde</h3>}
-              {charts?.timeline?.length ? (
+              {(country.topSeries || country.seriesCount > 0) && (
                 <>
-                  <PeriodChart
-                    periods={charts.timeline.map((t) => ({
-                      period: t.period,
-                      avgScore: t.seriesCount,
-                      isCurrent: false,
-                    }))}
-                    valueKey="avgScore"
-                    range={periodRange}
-                    onRangeChange={setPeriodRange}
-                    unitLabel="dizi"
-                  />
-                  <p className="dashboard__hint">Dönem başına listelere giren farklı Türk dizisi sayısı.</p>
-                </>
-              ) : country.dataSource === 'proxy' ? null : (
-                <p className="dashboard__empty">Bu ülkede liste kaydı yok; zaman çizelgesi oluşmadı.</p>
-              )}
-
-              {country.topSeries && (
-                <>
-                  <h3>Bölgesel İlgi Dağılımı</h3>
-                  <RegionalInterest seriesName={country.topSeries.name} iso2={country.iso2} />
+                  <h3>Bölgesel ilgi dağılımı</h3>
+                  <RegionalInterest iso2={country.iso2} />
                 </>
               )}
 
