@@ -5,6 +5,7 @@ import {
   createXmltvCollector,
   toCountryResponses,
   strictMatcher,
+  scriptCountry,
 } from './epgPwGuide.js'
 
 describe('epg.pw Rusya ve Orta Asya rehberi', () => {
@@ -25,6 +26,10 @@ describe('epg.pw Rusya ve Orta Asya rehberi', () => {
     expect(epgChannelCountry('TV Puls')).toBe('PL')
     expect(epgChannelCountry('Fashion One 4K')).toBeNull()
     expect(epgChannelCountry('Zee-TV')).toBeNull()
+    // Etiketsiz Ukrayna kanalı program adlarının dilinden
+    expect(epgChannelCountry('Сонце+', ['Пані Фазілет і її доньки', 'Новини'])).toBe('UA')
+    expect(epgChannelCountry('Сапфир', ['Это море переполнится', 'Новости'])).toBe('RU')
+    expect(scriptCountry(['Жаңалықтар', 'Әртүрлі теңдер'])).toBe('KZ')
   })
 
   it('XMLTV parça parça okunur; yalnızca bugünün programları, Türkiye ve bilinmeyen kanallar atlanır', () => {

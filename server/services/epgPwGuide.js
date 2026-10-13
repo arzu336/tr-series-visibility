@@ -2,7 +2,7 @@ import zlib from 'node:zlib'
 import { Readable } from 'node:stream'
 import db from '../db.js'
 import { getCached } from '../cache.js'
-import { buildMatcherFor, ingestGuideResponses } from './tvGuide.js'
+import { buildMatcherFor, ingestGuideResponses, manualTitleSet } from './tvGuide.js'
 
 // Rusya ve Orta Asya yayın akışı (2026-10-13; kullanıcı onayıyla, izin kapsamında). epg.pw'nin "RU" XMLTV dosyası
 // ~4.000 kanal: Rusya'nın yanında Kazakistan, Kırgızistan, Özbekistan… kanalları da içinde (7 канал KZ, КТК, ЭлТР [KG],
@@ -102,11 +102,28 @@ const WORD_COUNTRY = [
   [/литв/i, 'LT'],
 ]
 
+// Program adlarının yazısından dil: Kazakça ve Ukraynaca harfler (dosyada etiketsiz Ukrayna kanalları da var:
+// "Бiгудi", "М1", "Сонце+"; adları "Пані Фазілет і її доньки").
+const SCRIPT_COUNTRY = [
+  [/[әғқңөұүһ]/i, 'KZ'],
+  [/[їєґ]|(?:^|[\s,.])і(?:[\s,.]|$)|[а-я]і[а-я]/i, 'UA'],
+  [/ў/i, 'BY'],
+]
+
+/** Kanalın program adlarının en az beşte biri bir dilin harflerini taşıyorsa o ülke. */
+export function scriptCountry(titles = []) {
+  if (!titles.length) return null
+  for (const [re, iso2] of SCRIPT_COUNTRY)
+    if (titles.filter((t) => re.test(t)).length / titles.length >= 0.2) return iso2
+  return null
+}
+
 /**
  * Kanalın ülkesi: köşeli parantez etiketi ("Любимый [KG]"), adında geçen ülke ("7 канал KZ", "ETV+ Эстония"),
- * etiketsiz Kazakistan kanalları listesi; kalanı Rusya (dosya Rusya rehberi).
+ * etiketsiz Kazakistan kanalları listesi, program adlarının dili (Kazakça/Ukraynaca); kalan Kiril adlı kanallar
+ * Rusya (dosya Rusya rehberi). `titles`: kanalın o günkü program adları.
  */
-export function epgChannelCountry(name) {
+export function epgChannelCountry(name, titles = []) {
   const n = String(name || '').trim()
   const low = n.toLocaleLowerCase('ru')
   if (SKIP_CHANNELS.has(low)) return null
@@ -116,6 +133,8 @@ export function epgChannelCountry(name) {
   if (KZ_CHANNELS.has(low)) return 'KZ'
   for (const [re, iso2] of WORD_COUNTRY) if (re.test(n)) return iso2
   if (LATIN_CHANNELS.has(low)) return LATIN_CHANNELS.get(low)
+  const byScript = scriptCountry(titles)
+  if (byScript) return byScript
   return /[а-яё]/i.test(n) ? 'RU' : null
 }
 
@@ -123,10 +142,10 @@ export function epgChannelCountry(name) {
  * Tek kelimelik ad ("Месть", "Клуб", "Республика") filmlerle ve başka yapımlarla çok sık çakışıyor: yalnızca kesin
  * (çok kelimeli) bir Türk dizisi eşleşmesi görülen kanalda kabul edilir (tvGuide'daki güvenilir kanal kuralı).
  */
-export function strictMatcher(match) {
+export function strictMatcher(match, manual = new Set()) {
   return (title, opts = {}) => {
     const single = cleanEpgTitle(title).split(/\s+/).filter(Boolean).length < 2
-    if (single && !opts.allowAmbiguous) return null
+    if (single && !opts.allowAmbiguous && !manual.has(title)) return null
     return match(title, opts)
   }
 }
@@ -178,7 +197,7 @@ export function toCountryResponses({ channels, titles }) {
   const byCountry = new Map()
   for (const [id, counts] of titles) {
     const name = channels.get(id) || id
-    const iso2 = epgChannelCountry(name)
+    const iso2 = epgChannelCountry(name, [...counts.keys()])
     if (!iso2 || iso2 === 'TR') continue // ülkesi bilinmeyen ve Türkiye kanalları
     if (!byCountry.has(iso2)) byCountry.set(iso2, [])
     const Programmes = []
@@ -219,7 +238,7 @@ export async function runEpgPwGuideIfNeeded({
       PROVIDER,
       toCountryResponses(parsed),
       date,
-      strictMatcher(buildMatcherFor(PROVIDER, series)),
+      strictMatcher(buildMatcherFor(PROVIDER, series), manualTitleSet(PROVIDER)),
       result
     )
     metaSet.run('epgpwLastDate', date)

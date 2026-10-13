@@ -14,11 +14,12 @@ import countryNames from '../data/country-centroids.json'
 import Flag from './Flag.jsx'
 import ChartList from './ChartList.jsx'
 
-// Televizyon yayınları (izinli DStv rehberi, Afrika) ve dağıtımcı satış kayıtları: ülke paneli, dizi sayfası,
-// yönetim ekranı. Veri yoksa bölümler görünmez.
+// Televizyon yayınları, çevrimiçi izlenme (İran) ve dağıtımcı satış kayıtları: ülke paneli, dizi sayfası, yönetim
+// ekranı. Veri yoksa bölümler görünmez.
 
 const day = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) : '')
 const period = (s, e) => [s, e].filter(Boolean).join(' – ')
+const views = (n) => Number(n || 0).toLocaleString('tr-TR')
 
 /**
  * Ülke paneli: son 30 günde televizyonda yayınlanan Türk dizileri ve satış kayıtları — paneldeki diğer listelerle
@@ -26,7 +27,8 @@ const period = (s, e) => [s, e].filter(Boolean).join(' – ')
  */
 export function CountryTv({ iso2, seriesInfo, onSelectSeries }) {
   const { status, data } = useAsync(() => fetchCountryTv(iso2), [iso2])
-  if (status !== 'ready' || (!data.airings.length && !data.sales.length)) return null
+  const online = data?.online || []
+  if (status !== 'ready' || (!data.airings.length && !data.sales.length && !online.length)) return null
   const info = (id, fallback) => ({
     name: seriesInfo.get(id)?.name || fallback || `#${id}`,
     posterPath: seriesInfo.get(id)?.posterPath,
@@ -60,6 +62,23 @@ export function CountryTv({ iso2, seriesInfo, onSelectSeries }) {
           />
         </>
       )}
+      {online.length > 0 && (
+        <>
+          <h3>Çevrimiçi izlenme</h3>
+          <ChartList
+            compact
+            showPosters
+            items={online.map((o, i) => ({
+              rank: i + 1,
+              seriesId: o.seriesId,
+              kind: 'series',
+              ...info(o.seriesId),
+              meta: `${views(o.views)} izlenme · ${o.videos} video`,
+            }))}
+            onSelect={onSelectSeries}
+          />
+        </>
+      )}
       {data.sales.length > 0 && (
         <>
           <h3>Satış kayıtları</h3>
@@ -84,11 +103,12 @@ export function CountryTv({ iso2, seriesInfo, onSelectSeries }) {
 /** Dizi sayfası: televizyonda yayınlandığı ülkeler ve satış kayıtları. */
 export function SeriesTv({ seriesId }) {
   const { status, data } = useAsync(() => fetchSeriesTv(seriesId), [seriesId])
-  if (status !== 'ready' || (!data.airings.length && !data.sales.length)) return null
+  const online = data?.online || []
+  if (status !== 'ready' || (!data.airings.length && !data.sales.length && !online.length)) return null
   const name = (iso2) => countryNames[iso2]?.name || iso2
   return (
     <section className="series-page__section">
-      <h2>Televizyonda</h2>
+      <h2>{data.airings.length || data.sales.length ? 'Televizyonda' : 'Çevrimiçi izlenme'}</h2>
       {data.airings.length > 0 && (
         <>
           <p className="dashboard__hint">Son 30 günde yayınlandığı ülkeler.</p>
@@ -101,6 +121,26 @@ export function SeriesTv({ seriesId }) {
                 </span>
                 <span className="series-page__row-meta">
                   {a.channels.join(', ')} · {a.slots} yayın{a.localTitle ? ` · "${a.localTitle}"` : ''}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
+      {online.length > 0 && (
+        <>
+          <h3 className="series-interest__title">Çevrimiçi izlenme</h3>
+          <p className="dashboard__hint">Dublajlı ve altyazılı bölümlerin video sitelerindeki toplam izlenmesi.</p>
+          <ul className="series-page__rows">
+            {online.map((o) => (
+              <li key={o.iso2} className="series-page__row">
+                <span className="series-page__country">
+                  <Flag iso2={o.iso2} />
+                  {name(o.iso2)}
+                </span>
+                <span className="series-page__row-meta">
+                  {views(o.views)} izlenme · {o.videos} video
+                  {o.weeklyGain ? ` · son hafta +${views(o.weeklyGain)}` : ''}
                 </span>
               </li>
             ))}

@@ -18,6 +18,10 @@ import { runTabiiCatalogIfNeeded } from './services/tabiiCatalog.js'
 import { runElcinemaGuideIfNeeded } from './services/elcinemaGuide.js'
 import { runMiTvGuideIfNeeded } from './services/miTvGuide.js'
 import { runEpgPwGuideIfNeeded } from './services/epgPwGuide.js'
+import { runItvUzGuideIfNeeded } from './services/itvUzGuide.js'
+import { runMagticomGuideIfNeeded } from './services/magticomGuide.js'
+import { refreshWikidataLabelsIfNeeded } from './services/wikidataLabels.js'
+import { runOnlineViewsIfNeeded } from './services/onlineViews.js'
 import { runImdbSyncIfNeeded } from './services/imdbRunner.js'
 import { runWikiMonthlyRefreshIfNeeded } from './services/wikiMonthlyRefresh.js'
 import { syncForeignStudentsIfNeeded } from './services/foreignStudents.js'
@@ -193,6 +197,34 @@ async function runZenginlestirmeZinciri() {
     await runEpgPwGuideIfNeeded()
   } catch (err) {
     console.error('[scheduler] Rusya/Orta Asya yayın akışı alınamadı:', err.message)
+  }
+
+  // Özbekistan yayın akışı (günlük; ~30 kanal).
+  try {
+    await runItvUzGuideIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] Özbekistan yayın akışı alınamadı:', err.message)
+  }
+
+  // Gürcistan yayın akışı (günlük; ~60 Gürcüce kanal).
+  try {
+    await runMagticomGuideIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] Gürcistan yayın akışı alınamadı:', err.message)
+  }
+
+  // Dizilerin Wikidata'daki yerel adları (ayda bir; yayın akışı eşlemesi için).
+  try {
+    await refreshWikidataLabelsIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] dizi yerel adları alınamadı:', err.message)
+  }
+
+  // İran'da çevrimiçi izlenme (haftalık; Farsça adı bilinen ~180 dizi).
+  try {
+    await runOnlineViewsIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] çevrimiçi izlenme alınamadı:', err.message)
   }
 
   // Ön doldurma (günde bir kez, sunucu açıkken ilk fırsatta): dizi raporu basın tonu ve ülke paneli bölgesel ilgisi tıklamada

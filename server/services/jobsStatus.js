@@ -69,6 +69,9 @@ export const JOBS = [
   { key: 'mitv', name: 'Latin Amerika yayın akışı', every: 'günlük', intervalMs: D, success: 'mitvLastDate' },
   { key: 'dstv', name: 'Afrika yayın akışı', every: 'günlük', intervalMs: D, success: 'tvGuideLastDate' },
   { key: 'epgpw', name: 'Rusya ve Orta Asya yayın akışı', every: 'günlük', intervalMs: D, success: 'epgpwLastDate' },
+  { key: 'itvuz', name: 'Özbekistan yayın akışı', every: 'günlük', intervalMs: D, success: 'itvuzLastDate' },
+  { key: 'magticom', name: 'Gürcistan yayın akışı', every: 'günlük', intervalMs: D, success: 'magticomLastDate' },
+  { key: 'online', name: 'İran çevrimiçi izlenme', every: 'haftalık', intervalMs: 7 * D, success: 'onlineViewsAt' },
   { key: 'news', name: 'Basın taraması', every: 'haftalık', intervalMs: 7 * D, success: 'lastAutoNewsScanAt' },
   {
     key: 'nightly',
@@ -164,6 +167,8 @@ function dataSummary(key, now) {
     case 'elcinema':
     case 'mitv':
     case 'epgpw':
+    case 'itvuz':
+    case 'magticom':
     case 'dstv': {
       const r = count(
         db,

@@ -9,6 +9,7 @@ import {
   getSeriesSales,
   distributionStatus,
 } from '../services/distributionSales.js'
+import { getSeriesOnlineViews, getCountryOnlineViews } from '../services/onlineViews.js'
 
 // Televizyon yayınları (izinli rehber toplama) ve dağıtımcı satış kayıtları.
 export const tvRouter = express.Router()
@@ -16,13 +17,13 @@ export const tvRouter = express.Router()
 tvRouter.get('/api/country/:iso2/tv', (req, res) => {
   if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
   const iso2 = normalizeIso2(req.params.iso2)
-  res.json({ airings: getCountryTv(iso2), sales: getCountrySales(iso2) })
+  res.json({ airings: getCountryTv(iso2), sales: getCountrySales(iso2), online: getCountryOnlineViews(iso2) })
 })
 
 tvRouter.get('/api/series/:id/tv', (req, res) => {
   const id = Number(req.params.id)
   if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ error: 'Geçersiz dizi kimliği' })
-  res.json({ airings: getSeriesTv(id), sales: getSeriesSales(id) })
+  res.json({ airings: getSeriesTv(id), sales: getSeriesSales(id), online: getSeriesOnlineViews(id) })
 })
 
 tvRouter.use('/api/admin/tv', requireAdmin)

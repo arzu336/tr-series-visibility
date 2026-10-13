@@ -46,6 +46,10 @@ vi.mock('./services/flixpatrolTitlesRunner.js', () => ({
 vi.mock('./services/tabiiCatalog.js', () => ({ runTabiiCatalogIfNeeded: kaydet('zincir:tabii') }))
 vi.mock('./services/miTvGuide.js', () => ({ runMiTvGuideIfNeeded: kaydet('zincir:mitv') }))
 vi.mock('./services/epgPwGuide.js', () => ({ runEpgPwGuideIfNeeded: kaydet('zincir:epgpw') }))
+vi.mock('./services/itvUzGuide.js', () => ({ runItvUzGuideIfNeeded: kaydet('zincir:itvuz') }))
+vi.mock('./services/magticomGuide.js', () => ({ runMagticomGuideIfNeeded: kaydet('zincir:magticom') }))
+vi.mock('./services/wikidataLabels.js', () => ({ refreshWikidataLabelsIfNeeded: kaydet('zincir:wikidata') }))
+vi.mock('./services/onlineViews.js', () => ({ runOnlineViewsIfNeeded: kaydet('zincir:online') }))
 vi.mock('./services/elcinemaGuide.js', () => ({ runElcinemaGuideIfNeeded: kaydet('zincir:elcinema') }))
 vi.mock('./services/nightlyPrefill.js', () => ({ runNightlyPrefillIfNeeded: kaydet('zincir:nightly') }))
 

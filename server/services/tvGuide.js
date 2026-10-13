@@ -131,17 +131,51 @@ function ambiguousKeys() {
   }
 }
 
+/** "Hukmdor Usmon", "ორმო (სერიალი)", "گودال (مجموعه تلویزیونی)" → ad (ansiklopedi ayırt edici eki atılır). */
+export function stripWikiQualifier(title) {
+  return String(title || '')
+    .replace(/\s*[(（][^()（）]*[)）]\s*$/u, '')
+    .trim()
+}
+
+/**
+ * Yerel adlar: IMDb'deki bütün yerel adlar + dizinin Wikidata adları ve ansiklopedi maddesinin diğer dillerdeki
+ * adları (Wikidata bağlantısıyla; 2026-10-13 — Özbekçe, Gürcüce, Farsça, Kazakça rehberlerdeki adlar IMDb'de yoktu).
+ */
 function localizedTitles(conn = getPipelineDb()) {
-  if (!conn) return []
+  const out = []
   try {
-    return conn
-      .prepare(
-        `SELECT m.tmdb_id AS seriesId, l.title FROM imdb_localized_titles l JOIN imdb_title_map m ON m.tconst = l.tconst`
+    if (conn)
+      out.push(
+        ...conn
+          .prepare(
+            `SELECT m.tmdb_id AS seriesId, l.title FROM imdb_localized_titles l JOIN imdb_title_map m ON m.tconst = l.tconst`
+          )
+          .all()
       )
-      .all()
   } catch {
-    return []
+    // IMDb tabloları yoksa yalnızca ansiklopedi adları
   }
+  try {
+    for (const r of db.prepare('SELECT tmdb_id, label FROM series_wikidata_labels').all())
+      out.push({ seriesId: r.tmdb_id, title: stripWikiQualifier(r.label) })
+  } catch {
+    // Wikidata adları henüz alınmadı
+  }
+  try {
+    for (const r of db.prepare('SELECT tmdb_id, title FROM series_wiki_articles').all()) {
+      const t = stripWikiQualifier(r.title)
+      if (t) out.push({ seriesId: r.tmdb_id, title: t })
+    }
+  } catch {
+    // tablo yoksa atla
+  }
+  return out
+}
+
+/** Sağlayıcının elle (doğrulanarak) eşlenmiş başlıkları. */
+export function manualTitleSet(provider) {
+  return new Set(manualMappings(provider).keys())
 }
 
 function manualMappings(provider) {

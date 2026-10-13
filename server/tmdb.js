@@ -1,5 +1,6 @@
 import { mapWithConcurrency } from './utils/concurrency.js'
 import { getCached, setCached } from './cache.js'
+import { wikidataTrtSeries } from './services/wikidataLabels.js'
 
 const EXTERNAL_TIMEOUT_MS = 15000
 
@@ -260,13 +261,39 @@ export function isScriptedSeries({ genreIds = [], type = null } = {}) {
 
 /** Dizinin TMDB tipi ve türleri (yavaş değişir, 90 gün önbellek). Alınamazsa null → dizi sayılır. */
 async function getSeriesKind(seriesId) {
-  const key = `tmdb-series-kind:${seriesId}`
+  const key = `tmdb-series-kind:v2:${seriesId}`
   const cached = getCached(key)
   if (cached) return cached
   const show = await tmdbGet(`/tv/${seriesId}`)
-  const kind = { type: show.type || null, genreIds: (show.genres || []).map((g) => g.id) }
+  const kind = {
+    type: show.type || null,
+    genreIds: (show.genres || []).map((g) => g.id),
+    networks: (show.networks || []).map((n) => n.name),
+    companies: (show.production_companies || []).map((c) => c.name),
+  }
   setCached(key, kind, SERIES_KIND_TTL_MS)
   return kind
+}
+
+const TRT_NETWORK = /^(TRT\b|tabii$)/i
+const TRT_COMPANY = /^TRT\b|Türkiye Radyo/i
+
+/**
+ * Asıl yayıncısı TRT olan dizi (2026-10-13, kullanıcı: "TRT dizilerini doğru verilerle vermek istiyorum"). TMDB'nin
+ * TRT 1 ağı keşfi, TRT'de tekrar yayınlanan başka kanal dizilerini de getiriyordu (Adını Sen Koy — Star TV,
+ * Zengin Kız Fakir Oğlan — FOX). Kural: dizi yalnızca TRT/tabii ağlarında yayınlandıysa ya da başka kanallarda da
+ * yayınlandıysa yapımcısı TRT ise TRT dizisidir. Dönen: 'tabii' | 'TRT 1' | null.
+ */
+export function trtBroadcaster({ networks = [], companies = [] } = {}, { wikidataTrt = false } = {}) {
+  if (!networks.length) return null
+  const trtNets = networks.filter((n) => TRT_NETWORK.test(n))
+  if (!trtNets.length) return null
+  const onlyTrt = trtNets.length === networks.length
+  // Wikidata ilk yayıncıyı TRT gösteriyor ve TMDB'de ilk ağ TRT ise (Leyla ile Mecnun: TRT 1, sonra Exxen) iki
+  // kaynak örtüşüyor; çelişen ya da tek kaynağa dayanan durumlar işaretlenmez.
+  const agreed = wikidataTrt && TRT_NETWORK.test(networks[0])
+  if (!onlyTrt && !agreed && !companies.some((c) => TRT_COMPANY.test(c))) return null
+  return trtNets.every((n) => /^tabii$/i.test(n)) ? 'tabii' : 'TRT 1'
 }
 
 /**
@@ -277,7 +304,7 @@ export async function getRawSeriesDataForOrigin(
   originCountry,
   originalLanguage,
   n = TOP_N_SERIES,
-  { supplementIds = [] } = {}
+  { supplementIds = [], wikidataTrt = new Set() } = {}
 ) {
   const [top, netflix, trt, tabii] = await Promise.all([
     getTopSeriesByOrigin(originCountry, originalLanguage, n),
@@ -296,6 +323,13 @@ export async function getRawSeriesDataForOrigin(
   ).filter(Boolean)
   const candidates = mergeSeriesLists(discovered, extra)
   const kinds = await mapWithConcurrency(candidates, FETCH_CONCURRENCY, (s) => getSeriesKind(s.id).catch(() => null))
+  // TRT işareti TMDB ağ/yapımcı bilgisinden yeniden belirlenir (keşifteki işaret tekrar yayınları da kapsıyordu).
+  candidates.forEach((s, i) => {
+    if (!kinds[i]?.networks) return
+    const b = trtBroadcaster(kinds[i], { wikidataTrt: wikidataTrt.has(s.id) })
+    if (b) s.broadcaster = b
+    else delete s.broadcaster
+  })
   const series = candidates.filter((s, i) => !kinds[i] || isScriptedSeries(kinds[i]))
   const excludedNonScripted = candidates.filter((s, i) => kinds[i] && !isScriptedSeries(kinds[i])).map((s) => s.id)
 
@@ -321,5 +355,5 @@ export async function getRawSeriesDataForOrigin(
 }
 
 export async function getRawSeriesData({ supplementIds = [] } = {}) {
-  return getRawSeriesDataForOrigin('TR', 'tr', TOP_N_SERIES, { supplementIds })
+  return getRawSeriesDataForOrigin('TR', 'tr', TOP_N_SERIES, { supplementIds, wikidataTrt: wikidataTrtSeries() })
 }
