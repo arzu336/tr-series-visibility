@@ -457,9 +457,11 @@ export default function App() {
                 tab={reports.tab}
                 iso2={reports.iso2}
                 seriesId={reports.seriesId}
+                continent={reports.continent ?? null}
                 onChange={(next) => setReports((r) => ({ ...r, ...next }))}
                 onBack={reports.tab === 'dizi' && seriesReturn ? handleBackFromSeries : null}
                 backLabel={seriesReturn === 'trends' ? 'Arama İlgisi’ne dön' : 'Haritaya dön'}
+                period={reports.period ?? null}
                 seriesActions={{
                   onShowOnMap: handleShowSeriesFromPage,
                   onSelectActor: handleSelectActorFromSeriesPage,

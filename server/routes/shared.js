@@ -1,4 +1,4 @@
-const UPSTREAM_ERROR_MESSAGE = 'Dış veri kaynağına şu anda ulaşılamıyor. Lütfen daha sonra tekrar deneyin.'
+const UPSTREAM_ERROR_MESSAGE = 'Veriye şu anda ulaşılamıyor. Lütfen daha sonra tekrar deneyin.'
 
 /** Dış kaynak hatası: kota (429) olduğu gibi, gerisi 502 + genel mesaj (iç hata metni sızmaz). */
 export function sendUpstreamError(res, err) {

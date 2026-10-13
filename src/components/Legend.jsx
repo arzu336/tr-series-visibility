@@ -5,8 +5,8 @@ import { WATCH_LEVEL_NOTE, MAP_SCALE_NOTE } from '../lib/methodologyNotes.js'
 // Ayrıntılar (yöntem, Türkiye'nin ölçek dışı olması, tahminin neye dayandığı) başlığın ipucunda.
 const DETAY = [
   'Renk çubuğu soldan sağa: çok düşük, düşük, orta, yüksek, çok yüksek.',
-  'Taralı: ülkede yalnızca bir izlenme kaynağı var; renk o kaynağa dayalı tahmindir, sıralamaya girmez.',
-  "Koyu: izlenme kaynağı ölçülemedi — 'izlenmiyor' demek değildir.",
+  'Taralı: ülkede yalnızca bir izlenme göstergesi var; renk ona dayalı tahmindir, sıralamaya girmez.',
+  "Koyu: izlenme ölçülemedi — 'izlenmiyor' demek değildir.",
   'Türkiye (mor) kaynak ülkedir, ölçeğe dahil edilmez.',
 ].join('\n')
 

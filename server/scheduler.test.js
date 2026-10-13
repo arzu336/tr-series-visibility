@@ -43,6 +43,10 @@ vi.mock('./services/searchFill.js', () => ({ runSearchFillIfNeeded: kaydet('zinc
 vi.mock('./services/flixpatrolTitlesRunner.js', () => ({
   runFlixpatrolTitlesIfNeeded: kaydet('zincir:flixpatrolTitles'),
 }))
+vi.mock('./services/tabiiCatalog.js', () => ({ runTabiiCatalogIfNeeded: kaydet('zincir:tabii') }))
+vi.mock('./services/miTvGuide.js', () => ({ runMiTvGuideIfNeeded: kaydet('zincir:mitv') }))
+vi.mock('./services/epgPwGuide.js', () => ({ runEpgPwGuideIfNeeded: kaydet('zincir:epgpw') }))
+vi.mock('./services/elcinemaGuide.js', () => ({ runElcinemaGuideIfNeeded: kaydet('zincir:elcinema') }))
 vi.mock('./services/nightlyPrefill.js', () => ({ runNightlyPrefillIfNeeded: kaydet('zincir:nightly') }))
 
 const { runScheduledRefreshInner, startScheduler, META_KEY } = await import('./scheduler.js')

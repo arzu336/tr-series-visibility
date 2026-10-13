@@ -1,4 +1,4 @@
-# Televizyon rehberi (Afrika) ve dağıtımcı satış kayıtları
+# Televizyon rehberleri (Afrika, Arap kanalları), tabii ve dağıtımcı satış kayıtları
 
 ## İzin
 
@@ -25,6 +25,31 @@ Toplanan: yalnızca program adı, kanal adı ve gün başına yayın sayısı. A
 
 - Eşleşmeyen başlıklar (Türk dizisi yayınlayan kanallarda): Yönetim ekranında listelenir, **Diziye bağla** ile elle
   eşlenir; sonraki toplamada yayınları yazılır.
+
+## elcinema (Arap kanalları) ve tabii
+
+Kurum, elcinema.com ve tabii.com yöneticilerinden tarama izni alındığını 2026-10-09'da bildirdi. İzin metinleri kurum
+arşivinde saklanmalıdır. İzin geri alınırsa `server/.env` içinde `ELCINEMA_ENABLED=0` / `TABII_ENABLED=0` ile durur.
+
+- **elcinema** (`server/services/elcinemaGuide.js`): ~107 Arap kanalının (MBC 4, MBC Drama, OSN Ya Hala, Rotana
+  Drama…) bugünden itibaren 3 günlük akışı günde bir; istekler arası 1,5 sn. Yalnızca dizi yayınları alınır. Türk
+  dizisi, eser sayfasındaki **IMDb kimliğiyle** kataloğa bağlanır, yoksa özgün adın birebir eşleşmesiyle; yapım
+  ülkesi Türkiye olmayan eser eşlenmez. Ülke, kanalın elcinema'daki ülkesidir (uydu yayını bölgeye yayılır).
+  Yayınlar DStv ile aynı tabloya yazılır; ülke paneli ve dizi raporundaki televizyon bölümleri gösterir.
+- **tabii** (`server/services/tabiiCatalog.js`): haftada bir herkese açık site haritasından katalog (~1.300 içerik),
+  resmî SSS'den erişilebildiği ülkeler (52). Yalnızca TRT 1 ve tabii yapımları ad (slug) birebir tutuyorsa tabii'de
+  sayılır; bu diziler o ülkelerde "tabii" platformunda yayında görünür. Giriş gerektiren sayfalar (arama, izleme)
+  taranmaz. Çevrimdışı yedek ülke listesi: `src/data/tabii-countries.json`.
+
+## mi.tv (Latin Amerika)
+
+İzin: kurum, mi.tv yöneticisinden alınan iznin akış verisinin geldiği ve sitenin robots kurallarında taramaya kapalı
+olan `/async/` adreslerini de kapsadığını 2026-10-09'da teyit etti. İzin geri alınırsa `MITV_ENABLED=0`.
+
+- `server/services/miTvGuide.js`: 10 ülke (AR, BR, CL, CO, GT, HN, MX, PE, PY, SV). Türk dizisi görülmüş kanallar her
+  gün, kalan kanallar 7 güne bölünüp dönüşümlü (ülke başına ~250 kanal, Brezilya 825); istekler arası 1 sn.
+- Yalnızca dizi/telenovela kayıtları; eşleştirme DStv ile aynı (IMDb yerel adı birebir, belirsiz adlar yalnızca
+  güvenilir kanalda). Eşleşmeyen başlıklar Yönetim ekranında elle bağlanabilir.
 
 ## Dağıtımcı satış tablosu
 

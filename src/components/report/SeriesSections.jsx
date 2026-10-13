@@ -152,18 +152,9 @@ export function SeriesOpportunitySection({ data }) {
 export function SeriesAvailabilitySection({ data }) {
   return (
     <>
-      {data.tabii && (
-        <p className="report__lead">
-          <strong>TRT 1 yapımı.</strong> TRT'nin uluslararası yayın platformu tabii'de yayımlanıyor; tabii'nin
-          erişilebildiği ülkelerin listesi kamuya açık olmadığından aşağıdaki ülke sayısına katılmadı.
-        </p>
-      )}
-      {(data.countryCount > 0 || !data.tabii) && (
-        <p className="report__lead">
-          {data.countryCount} ülkede izlenebiliyor
-          {data.platforms.length ? `; ${data.platforms.length} platform kaydı var` : ''}.
-        </p>
-      )}
+      <p className="report__lead">
+        {data.countryCount} ülkede, {data.platforms.length} platformda yayında.
+      </p>
       <ul className="report__platforms">
         {data.platforms.map((p) => (
           <li key={p.name}>
@@ -175,17 +166,6 @@ export function SeriesAvailabilitySection({ data }) {
             </span>
           </li>
         ))}
-        {data.listedOnly?.length > 0 && (
-          <li>
-            <strong>Sıralamaya girdiği diğer ülkeler</strong>{' '}
-            <span className="report__basis">{data.listedOnly.length} ülke</span>
-            <span className="report__flags">
-              {data.listedOnly.map((iso2) => (
-                <Flag key={iso2} iso2={iso2} title={nameOf(iso2)} />
-              ))}
-            </span>
-          </li>
-        )}
       </ul>
     </>
   )

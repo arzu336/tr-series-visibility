@@ -91,7 +91,7 @@ export function SeriesTv({ seriesId }) {
       <h2>Televizyonda</h2>
       {data.airings.length > 0 && (
         <>
-          <p className="dashboard__hint">Son 30 günde yayınlandığı ülkeler (Afrika uydu ve kablo rehberi).</p>
+          <p className="dashboard__hint">Son 30 günde yayınlandığı ülkeler.</p>
           <ul className="series-page__rows">
             {data.airings.map((a) => (
               <li key={a.iso2} className="series-page__row">
@@ -200,8 +200,7 @@ export function TvAdmin() {
       {status === 'ready' && (
         <>
           <p className="dashboard__hint">
-            Afrika uydu ve kablo rehberi (DStv, 49 ülke), günde bir kez.{' '}
-            {data.guide.enabled ? '' : 'Toplama kapalı (TV_GUIDE_ENABLED=false). '}
+            Afrika yayın akışı, günde bir kez. {data.guide.enabled ? '' : 'Toplama kapalı (TV_GUIDE_ENABLED=false). '}
             Son toplama: {data.guide.lastDate ? day(data.guide.lastDate) : '—'} · {data.guide.countries} ülke,{' '}
             {data.guide.series} dizi, {data.guide.channels} kanal.{' '}
             <button type="button" className="dashboard__link-btn" onClick={run} disabled={busy}>
@@ -254,7 +253,7 @@ export function TvAdmin() {
           )}
           <h4 className="series-interest__title">Dağıtımcı satış tablosu</h4>
           <p className="dashboard__hint">
-            CSV sütunları: dizi, ulke, alici, baslangic, bitis (virgül ya da noktalı virgül). Dizi adla ya da TMDB
+            CSV sütunları: dizi, ulke, alici, baslangic, bitis (virgül ya da noktalı virgül). Dizi adla ya da dizi
             kimliğiyle, ülke adla ya da ISO koduyla. Aynı dağıtımcının yeni dosyası eskisinin yerini alır.
           </p>
           <p>

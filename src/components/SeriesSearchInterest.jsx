@@ -250,7 +250,7 @@ export function SearchInterestSection({ si, onShowOnMap }) {
       {status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
       {(status === 'notCached' || status === 'querying') && (
         <QueryCta
-          text="Bu dizi için arama ilgisi henüz sorgulanmadı. Sorgu ücretli arama servisini kullanır; sonuç bir hafta saklanır."
+          text="Bu dizi için arama ilgisi henüz sorgulanmadı."
           label="Arama ilgisini sorgula"
           onClick={si.query}
           busy={status === 'querying'}
@@ -279,7 +279,7 @@ export function SearchInterestSection({ si, onShowOnMap }) {
                 disabled={series.status === 'loading'}
               />
               <p className="ts-scope__hint">
-                Grafik dizinin Google'da aranma eğilimini gösterir. Bir ülke seçerseniz yalnızca o ülkedeki aramalar
+                Grafik dizinin internette aranma eğilimini gösterir. Bir ülke seçerseniz yalnızca o ülkedeki aramalar
                 çizilir; seçenekler dizinin en çok arandığı ülkelerdir.
               </p>
               {series.status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}

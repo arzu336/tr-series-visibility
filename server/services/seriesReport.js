@@ -114,8 +114,7 @@ function readPlatformPointRows(seriesId) {
  * dizinin sıralamaya girdiği ülkelerde izlenebildiği kesin olduğundan, kaydı olmayan bu ülkeler ayrı bir
  * grupta ("sıralamaya girdiği diğer ülkeler") eklenir.
  */
-export function buildSeriesAvailability(providersForSeries = {}, listedIso2s = [], { broadcaster = null } = {}) {
-  const tabii = broadcaster === 'TRT 1'
+export function buildSeriesAvailability(providersForSeries = {}, listedIso2s = []) {
   const byPlatform = new Map()
   const countries = []
   for (const [iso2, entry] of Object.entries(providersForSeries)) {
@@ -130,18 +129,17 @@ export function buildSeriesAvailability(providersForSeries = {}, listedIso2s = [
   }
   const byName = (a, b) => nameOf(a).localeCompare(nameOf(b), 'tr')
   const listedOnly = listedIso2s.filter((iso2) => !countries.includes(iso2)).sort(byName)
-  // TRT yapımı: ülke kaydı olmasa da TRT'nin uluslararası platformu tabii'de yayımlandığı bilgisi verilir.
-  if (!countries.length && !listedOnly.length && !tabii) return NONE
+  // Bölüm yalnızca platformları gösterir (2026-10-13, kullanıcı isteği: kaynak/kayıt bilgisi görünmesin); platformu
+  // olmayan dizide bölüm basılmaz. `available` (fırsat hesabı için) sıralamaya girilen ülkeleri de içerir.
+  if (!countries.length) return NONE
   const platforms = [...byPlatform.entries()]
     .map(([name, set]) => ({ name, countries: [...set].sort(byName) }))
     .sort((a, b) => b.countries.length - a.countries.length || a.name.localeCompare(b.name, 'tr'))
   return OK({
-    countryCount: countries.length + listedOnly.length,
+    countryCount: countries.length,
     platforms,
     listedOnly,
     available: [...countries, ...listedOnly],
-    broadcaster,
-    tabii,
   })
 }
 
@@ -241,14 +239,8 @@ export function buildSeriesSummary(sections) {
       key: 'available',
       label: 'Yayında',
       // TRT yapımı ülke kaydı olmasa da tabii'de yayımlanıyor; "0 ülke" yazmak yanıltıcı olurdu.
-      value: ok(a) ? (a.data.tabii && !a.data.countryCount ? 'tabii' : `${a.data.countryCount} ülke`) : '—',
-      detail: ok(a)
-        ? a.data.tabii
-          ? a.data.countryCount
-            ? `${a.data.platforms.length} platformda · ayrıca tabii`
-            : 'TRT 1 yapımı'
-          : `${a.data.platforms.length} platformda`
-        : null,
+      value: ok(a) ? `${a.data.countryCount} ülke` : '—',
+      detail: ok(a) ? `${a.data.platforms.length} platformda` : null,
       trend: null,
     },
     {
@@ -347,7 +339,7 @@ function readClassification(seriesId) {
 
 export async function buildSeriesReport(seriesId, { useCache = true, deps = {} } = {}) {
   const id = Number(seriesId)
-  const cacheKey = `report:series:v4:${id}`
+  const cacheKey = `report:series:v6:${id}`
   if (useCache) {
     const cached = getCached(cacheKey)
     if (cached) return cached
@@ -364,8 +356,7 @@ export async function buildSeriesReport(seriesId, { useCache = true, deps = {} }
   )
   const seriesAvailability = buildSeriesAvailability(
     raw.providersById[id] || {},
-    ok(seriesMarkets) ? seriesMarkets.data.rows.map((r) => r.iso2) : [],
-    { broadcaster: series.broadcaster ?? null }
+    ok(seriesMarkets) ? seriesMarkets.data.rows.map((r) => r.iso2) : []
   )
 
   // Okunma: dizinin okunduğu yabancı diller (ortak diller işaretli), en çok okunan ilk 6. Türkçe yurt içi
@@ -385,10 +376,10 @@ export async function buildSeriesReport(seriesId, { useCache = true, deps = {} }
     languageViews = languages.map((l) => ({ lang: l.lang, languageName: l.languageName, views: l.total }))
     wikiInterest = OK({ ...wikiFull.data, languages: languages.slice(0, LANGUAGES_SHOWN), primary: null })
   }
-  const seriesOpportunity = buildSeriesOpportunity(
-    languageViews,
-    ok(seriesAvailability) ? seriesAvailability.data.available : []
-  )
+  const listedIso2s = ok(seriesMarkets) ? seriesMarkets.data.rows.map((r) => r.iso2) : []
+  const seriesOpportunity = buildSeriesOpportunity(languageViews, [
+    ...new Set([...(ok(seriesAvailability) ? seriesAvailability.data.available : []), ...listedIso2s]),
+  ])
 
   const imdb = await (deps.getImdb || getImdbDataForTmdbSeries)(id).catch(() => null)
   const enrichment = (deps.getSeriesEnrichment || getSeriesEnrichment)(id)

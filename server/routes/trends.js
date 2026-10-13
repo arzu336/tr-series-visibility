@@ -241,7 +241,7 @@ trendsRouter.get(
     // Her farklı parametre bir dış çağrı + önbellek satırı demek; TMDB kimliği pozitif tam sayıdır.
     const tmdbId = Number(req.params.tmdbId)
     if (!Number.isInteger(tmdbId) || tmdbId <= 0 || tmdbId > 2_147_483_647) {
-      return res.status(400).json({ error: 'Geçersiz TMDB kimliği' })
+      return res.status(400).json({ error: 'Geçersiz dizi kimliği' })
     }
     res.json(await getImdbDataForTmdbSeries(tmdbId))
   })

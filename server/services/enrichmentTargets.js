@@ -16,12 +16,12 @@ function buildCountryPool(countries, targetCount) {
   return [...natural, ...curated]
 }
 
-export async function getEnrichmentTargets() {
+export async function getEnrichmentTargets({ seriesCount = TOP_SERIES_COUNT } = {}) {
   const { data, raw } = await getEnrichedVisibility()
 
   const topSeries = [...raw.series]
     .sort((a, b) => b.popularity - a.popularity)
-    .slice(0, TOP_SERIES_COUNT)
+    .slice(0, seriesCount)
     .map((s) => ({ id: s.id, name: s.name }))
 
   const topCountries = buildCountryPool(data.countries, TOP_COUNTRY_COUNT).map((c) => c.iso2)

@@ -120,10 +120,40 @@ def process_page(conn: sqlite3.Connection, tmdb_id: int, slug: str, html: str) -
     return n_stats, db.save_chart_entries(conn, entries)
 
 
+LOCK_PATH = BASE_DIR / "data" / "fetch_flixpatrol_titles.lock"
+LOCK_STALE_S = 2 * 60 * 60
+
+
+def acquire_lock(path: Path = LOCK_PATH) -> bool:
+    """Aynı anda tek koşu (2026-10-13: zamanlayıcı ve elle başlatılan koşu çakışıp "database is locked" verdi).
+    2 saatten eski kilit (çökmüş koşu) yok sayılır."""
+    import os
+
+    try:
+        if path.exists() and time.time() - path.stat().st_mtime > LOCK_STALE_S:
+            path.unlink()
+        fd = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        os.write(fd, str(os.getpid()).encode())
+        os.close(fd)
+        return True
+    except FileExistsError:
+        return False
+
+
 def run(max_minutes: float = DEFAULT_MAX_MINUTES, limit: int | None = None, db_path: Path = DB_PATH, node_db_path: Path = NODE_DB_PATH) -> dict:
     if not fp.FlixPatrolProvider().enabled:
         log.info("flixpatrol başlık taraması kapalı (FLIXPATROL_SCRAPE_ENABLED=0)")
         return {"skipped": True}
+    if not acquire_lock():
+        log.info("flixpatrol başlık: başka bir koşu sürüyor, atlandı")
+        return {"skipped": "running"}
+    try:
+        return _run(max_minutes, limit, db_path, node_db_path)
+    finally:
+        LOCK_PATH.unlink(missing_ok=True)
+
+
+def _run(max_minutes: float, limit: int | None, db_path: Path, node_db_path: Path) -> dict:
     conn = db.get_connection(db_path)
     order = work_order(conn, rtv.load_tmdb_series_index(node_db_path))
     if limit:

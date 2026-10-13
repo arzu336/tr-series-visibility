@@ -17,6 +17,7 @@ import { useSearchInterest, SearchInterestSection, PromoSection, PressSection } 
 import SeriesYoutube from './SeriesYoutube.jsx'
 import { SeriesTv } from './TvSections.jsx'
 import CountryReportDocument from './report/CountryReportDocument.jsx'
+import { samePeriod } from './report/CountryReportView.jsx'
 
 // Dizi raporu (2026-10-07: dizi sayfası ile Raporlar > Dizi raporu birleşti). Üstte dizinin tanıtım kartı; altında
 // sunucunun rapor belgesi (özet → başlıklar) ve raporda olmayan canlı bölümler ilgili başlığın altında: arama ilgisi,
@@ -138,6 +139,7 @@ export default function SeriesPage({
   onPrint,
   printing = false,
   isAdmin = false,
+  reportPeriod = null,
 }) {
   const fromCountries = useMemo(() => seriesFromCountries(allCountries, seriesId), [allCountries, seriesId])
   // Katalog yüklenirken (ör. günlük yeniden kurulumda) dizi kaydı 404 dönebiliyor; katalog gelince yeniden sorulur.
@@ -147,10 +149,14 @@ export default function SeriesPage({
   // listelerinde yoktur; o durumda dizinin katalog kaydı kullanılır.
   const series =
     fromCountries ?? (metaReq.status === 'ready' && metaReq.data ? { ...metaReq.data, availability: [] } : null)
-  const reportReq = useAsync(() => fetchSeriesReport(seriesId), [seriesId], {
-    enabled: seriesId != null,
-    keepPrevious: true,
-  })
+  const reportReq = useAsync(
+    () => fetchSeriesReport(seriesId, { period: reportPeriod }),
+    [seriesId, reportPeriod?.from, reportPeriod?.to],
+    {
+      enabled: seriesId != null,
+      keepPrevious: true,
+    }
+  )
   const imdbReq = useAsync(() => fetchImdbData(seriesId), [seriesId], { enabled: seriesId != null })
   const enrichment = useAsync(() => fetchSeriesEnrichment(seriesId), [seriesId], { enabled: seriesId != null }).data
   const chartsReq = useAsync(() => fetchSeriesCharts(seriesId), [seriesId], { enabled: seriesId != null })
@@ -162,7 +168,8 @@ export default function SeriesPage({
   const magazineItems = visibleMagazineItems(magazineReq.data?.items, 10)
   const si = useSearchInterest(series?.name)
   const kg = si.social?.knowledgeGraph
-  const report = reportReq.data?.seriesId === seriesId ? reportReq.data : null
+  const report =
+    reportReq.data?.seriesId === seriesId && samePeriod(reportReq.data?.period, reportPeriod) ? reportReq.data : null
 
   const back = onBack && (
     <button type="button" className="series-page__back" onClick={onBack}>
@@ -258,17 +265,12 @@ export default function SeriesPage({
             {imdb?.votesGrowth?.d7?.votes > 0 && (
               <span
                 className="map-popup-card__pill series-page__pill--up"
-                title={`IMDb'de son ${imdb.votesGrowth.d7.days} günde eklenen oy`}
+                title={`Son ${imdb.votesGrowth.d7.days} günde eklenen oy`}
               >
                 +{formatVotes(imdb.votesGrowth.d7.votes)} oy · {imdb.votesGrowth.d7.days} gün
               </span>
             )}
             {enrichment?.dizilah?.channel && <span className="map-popup-card__pill">{enrichment.dizilah.channel}</span>}
-            {report?.chapters?.flatMap((c) => c.sections).find((s) => s.key === 'seriesAvailability')?.data?.tabii && (
-              <span className="map-popup-card__pill" title="TRT'nin uluslararası yayın platformu">
-                TRT 1 · tabii
-              </span>
-            )}
             {hasChapter('erisim') ? (
               <JumpPill target="brifing-erisim" title="Yayında olduğu ülkelere git">
                 {series.availability.length} ülkede yayında
@@ -333,8 +335,8 @@ export default function SeriesPage({
           report={report}
           countryName={series.name}
           hideHead
-          omitChapters={['gundem']}
-          extraChapters={extraChapters}
+          omitChapters={reportPeriod ? [] : ['gundem']}
+          extraChapters={reportPeriod ? [] : extraChapters}
         />
       )}
     </div>

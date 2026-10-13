@@ -212,6 +212,40 @@ export function trustedChannelsOf(responses, match) {
   return out
 }
 
+/**
+ * Ülke yanıtlarını yazar (DStv ve aynı biçime çevrilmiş diğer rehberler, ör. mi.tv): güvenilir kanallar bütün
+ * yanıtlar üzerinden belirlenir, eşleşen yayınlar tv_airings'e, Türk dizisi yayınlayan kanallardaki bütün başlıklar
+ * tv_titles'a (elle eşleme için). `responses`: [{ iso2, body: { Channels: [{ Name, Programmes: [{ Title }] }] } }].
+ */
+export function ingestGuideResponses(provider, responses, date, match, result, seen = new Map()) {
+  const trusted = trustedChannelsOf(
+    responses.map((r) => r.body),
+    match
+  )
+  for (const { iso2, body } of responses) {
+    const { airings, titlesByChannel } = extractAirings(body, match, trusted)
+    for (const a of airings) {
+      upsertAiring.run(provider, iso2, a.channel, a.seriesId, date, a.slots, a.title)
+      result.series.add(a.seriesId)
+    }
+    for (const [channel, titles] of titlesByChannel) {
+      for (const t of titles) {
+        const k = `${channel}|${t.title}`
+        seen.set(k, (seen.get(k) || 0) + 1)
+        upsertTitle.run(provider, channel, t.title, t.seriesId, seen.get(k), date, date)
+      }
+    }
+    result.airings += airings.length
+    result.countries++
+  }
+  return result
+}
+
+/** Sağlayıcı için eşleyici: katalog, IMDb yerel adları, elle eşlenen başlıklar, belirsiz adlar. */
+export function buildMatcherFor(provider, series) {
+  return buildTvMatcher(series, localizedTitles(), manualMappings(provider), ambiguousKeys())
+}
+
 let running = false
 
 /** Günde bir kez: 49 ülkenin bugünkü rehberi. `force` yönetim ekranından elle başlatma. */
@@ -246,28 +280,7 @@ export async function runTvGuideIfNeeded({
         result.errors.push(`${DSTV_COUNTRIES[code]}: ${err.message}`)
       }
     }
-    const trusted = trustedChannelsOf(
-      responses.map((r) => r.body),
-      match
-    )
-    for (const { iso2, body } of responses) {
-      {
-        const { airings, titlesByChannel } = extractAirings(body, match, trusted)
-        for (const a of airings) {
-          upsertAiring.run(provider, iso2, a.channel, a.seriesId, date, a.slots, a.title)
-          result.series.add(a.seriesId)
-        }
-        for (const [channel, titles] of titlesByChannel) {
-          for (const t of titles) {
-            const k = `${channel}|${t.title}`
-            seen.set(k, (seen.get(k) || 0) + 1)
-            upsertTitle.run(provider, channel, t.title, t.seriesId, seen.get(k), date, date)
-          }
-        }
-        result.airings += airings.length
-        result.countries++
-      }
-    }
+    ingestGuideResponses(provider, responses, date, match, result, seen)
     db.prepare('DELETE FROM tv_airings WHERE date < ?').run(
       new Date(now.getTime() - RETENTION_DAYS * 86400000).toISOString().slice(0, 10)
     )

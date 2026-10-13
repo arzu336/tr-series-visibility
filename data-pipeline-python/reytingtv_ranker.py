@@ -50,7 +50,8 @@ from logsetup import get_logger
 log = get_logger(__name__)
 
 BASE_URL = "https://reytingtv.com"
-SITEMAP_PATHS = ["post-sitemap.xml", "post-sitemap2.xml"]
+SITEMAP_PATHS = ["post-sitemap.xml", "post-sitemap2.xml"]  # dizin okunamazsa yedek
+SITEMAP_INDEX = "sitemap_index.xml"
 REQUEST_DELAY_S = 0.4  # sitemap/robots.txt kısıtlamıyor ama art arda ~900 istek için kibarlık
 USER_AGENT = "Mozilla/5.0 (compatible; gorunurluk-platformu-research/1.0)"
 
@@ -133,11 +134,31 @@ def compute_rank_score(rank: int) -> float:
     return float(max(0, min(10, 11 - rank)) * 10)
 
 
+def post_sitemap_paths(session: requests.Session) -> list[str]:
+    """Makale site haritası parçaları dizinden okunur (post-sitemap.xml, post-sitemap2.xml, post-sitemap3.xml …).
+
+    2026-10-09: parçalar sabit yazılıydı (ilk iki parça); site 1.000 makalede yeni parçaya geçtiği için Ağustos
+    sonundan beri yeni reyting makaleleri post-sitemap3.xml'deydi ve hiç okunmuyordu (son veri 23 Ağustos).
+    """
+    try:
+        resp = session.get(f"{BASE_URL}/{SITEMAP_INDEX}", timeout=30)
+        resp.raise_for_status()
+        paths = [
+            m.group(1)
+            for m in re.finditer(r"<loc>\s*https?://[^<]*?/(post-sitemap\d*\.xml)\s*</loc>", resp.text)
+        ]
+        if paths:
+            return paths
+    except requests.RequestException as err:
+        log.warning(f"reytingtv: site haritası dizini okunamadı ({err}); sabit liste kullanılıyor")
+    return list(SITEMAP_PATHS)
+
+
 def fetch_sitemap_article_urls(session: requests.Session) -> list[tuple[str, Optional[date]]]:
     """(url, yayın_tarihi) çiftleri döner — sadece '-reyting-sonuclari' geçen makale
     URL'leri (sitedeki diğer içerik: dizi haberleri, oyuncu röportajları vb. hariç)."""
     results: list[tuple[str, Optional[date]]] = []
-    for path in SITEMAP_PATHS:
+    for path in post_sitemap_paths(session):
         resp = session.get(f"{BASE_URL}/{path}", timeout=30)
         resp.raise_for_status()
         for m in re.finditer(r"<url>\s*<loc>(.*?)</loc>\s*(?:<lastmod>(.*?)</lastmod>)?", resp.text):

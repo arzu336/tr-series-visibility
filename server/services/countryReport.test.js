@@ -286,8 +286,8 @@ describe('buildCountryReport — eksik veri gizlenmez', () => {
 
   it('takip dışı ülke (listede yok) çökmez', async () => {
     const r = await buildCountryReport('ZZ', { deps: deps() })
-    expect(r.sections.scores.reason).toMatch(/takip listesinde değil/)
-    expect(r.sections.availability.reason).toMatch(/sağlayıcı kaydı yok/)
+    expect(r.sections.scores.reason).toMatch(/yayın verisi yok/)
+    expect(r.sections.availability.reason).toMatch(/yayın verisi yok/)
     expect(r.dataGaps.length).toBeGreaterThan(5)
   })
 

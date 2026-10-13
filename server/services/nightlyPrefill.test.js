@@ -14,7 +14,7 @@ vi.mock('./serpApiCache.js', () => ({
   calculateRegionalScore: vi.fn(),
 }))
 
-const { istanbulClock, pressOrder, runNightlyPrefillIfNeeded } = await import('./nightlyPrefill.js')
+const { istanbulClock, pressOrder } = await import('./nightlyPrefill.js')
 
 describe('istanbulClock', () => {
   it('UTC 23:30 → Türkiye 02:30 ertesi gün', () => {
@@ -43,9 +43,9 @@ describe('pressOrder — gece basın sırası', () => {
   })
 })
 
-describe('runNightlyPrefillIfNeeded — zaman penceresi', () => {
-  it('pencere 01:00–10:00 (Türkiye); öğlen hiçbir şey yapmaz (ücretli sorgu yok)', async () => {
-    const r = await runNightlyPrefillIfNeeded({ now: new Date('2026-10-09T09:00:00Z') }) // 12:00 TR
-    expect(r).toEqual({ skipped: 'gündüz' })
+describe('runNightlyPrefillIfNeeded — günde bir kez', () => {
+  it('saat sınırı yok (bilgisayar akşamları kapalı); aynı gün ikinci kez çalışmaz', async () => {
+    const { NIGHT_START_HOUR, NIGHT_END_HOUR } = await import('./nightlyPrefill.js')
+    expect([NIGHT_START_HOUR, NIGHT_END_HOUR]).toEqual([0, 24])
   })
 })

@@ -270,6 +270,10 @@ export async function logout() {
   return handle(await fetch('/api/auth/logout', { method: 'POST' }))
 }
 
+export async function fetchAdminJobs() {
+  return handle(await fetch('/api/admin/jobs'))
+}
+
 export async function fetchAdminUsers() {
   return handle(await fetch('/api/admin/users'))
 }
@@ -367,14 +371,29 @@ export async function fetchGlobalReport({ fresh = false } = {}) {
   return handle(await fetch(`/api/report/global${fresh ? '?fresh=1' : ''}`))
 }
 
-export async function fetchSeriesReport(seriesId, { fresh = false } = {}) {
-  const q = fresh ? '?fresh=1' : ''
-  return handle(await fetch(`/api/report/series/${encodeURIComponent(seriesId)}${q}`))
+function reportQuery({ fresh = false, period = null } = {}) {
+  const q = new URLSearchParams()
+  if (fresh) q.set('fresh', '1')
+  if (period) {
+    q.set('from', period.from)
+    q.set('to', period.to)
+  }
+  const s = q.toString()
+  return s ? `?${s}` : ''
 }
 
-export async function fetchCountryReport(iso2, { fresh = false } = {}) {
-  const q = fresh ? '?fresh=1' : ''
-  return handle(await fetch(`/api/report/country/${encodeURIComponent(iso2)}${q}`))
+/** `period` { from: 'YYYY-MM', to: 'YYYY-MM' }: dönem raporu (yalnızca o dönemin kayıtlı verisi); yoksa güncel rapor. */
+export async function fetchSeriesReport(seriesId, opts = {}) {
+  return handle(await fetch(`/api/report/series/${encodeURIComponent(seriesId)}${reportQuery(opts)}`))
+}
+
+/** Kıta raporu; `period` yoksa son 12 ay. */
+export async function fetchContinentReport(id, opts = {}) {
+  return handle(await fetch(`/api/report/continent/${encodeURIComponent(id)}${reportQuery(opts)}`))
+}
+
+export async function fetchCountryReport(iso2, opts = {}) {
+  return handle(await fetch(`/api/report/country/${encodeURIComponent(iso2)}${reportQuery(opts)}`))
 }
 
 /** Liste uçları (chart_entries): kaynak etiketiyle döner. */

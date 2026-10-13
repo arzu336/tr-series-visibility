@@ -26,6 +26,43 @@ const NAME_ALIASES = {
   'güney afrika cumhuriyeti': 'ZA',
 }
 
+// İngilizce ülke adları (elcinema, tabii gibi yabancı siteler): Intl bölge adlarından + yaygın farklı yazımlar.
+const EN_ALIASES = {
+  'czech republic': 'CZ',
+  turkey: 'TR',
+  palestine: 'PS',
+  'state of palestine': 'PS',
+  'ivory coast': 'CI',
+  'democratic republic of the congo': 'CD',
+  'republic of the congo': 'CG',
+  'south korea': 'KR',
+  'north macedonia': 'MK',
+  usa: 'US',
+  uk: 'GB',
+  uae: 'AE',
+}
+let iso2ByEnglish = null
+function englishIndex() {
+  if (iso2ByEnglish) return iso2ByEnglish
+  iso2ByEnglish = new Map(Object.entries(EN_ALIASES))
+  const dn = new Intl.DisplayNames(['en'], { type: 'region' })
+  for (const iso2 of Object.keys(countryNames)) {
+    try {
+      const n = dn.of(iso2)
+      if (n && n !== iso2) iso2ByEnglish.set(n.toLowerCase(), iso2)
+    } catch {
+      // bilinmeyen kod
+    }
+  }
+  return iso2ByEnglish
+}
+
+/** İngilizce ülke adı → ISO-2 (bulunamazsa Türkçe çözümleyiciye düşer). */
+export function resolveIso2FromEnglish(label) {
+  if (!label) return null
+  return englishIndex().get(String(label).trim().toLowerCase()) ?? resolveIso2FromLabel(label)
+}
+
 export function resolveIso2FromLabel(label) {
   if (!label) return null
   const trimmed = String(label).trim()

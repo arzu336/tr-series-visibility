@@ -73,7 +73,7 @@ export const SECTION_NOTES = {
   scores: `${notes.WATCH_LEVEL_NOTE} ${notes.AVAILABILITY_NOTE}`,
   platformLists: notes.PLATFORM_LISTS_NOTE,
   wikiInterest:
-    'Türk dizilerine ait ansiklopedi maddelerinin ülkenin dillerindeki aylık okunma sayısıdır. Birden çok ülkede ' +
+    'Türk dizilerinin ülkenin dillerindeki aylık okunma sayısıdır. Birden çok ülkede ' +
     'konuşulan dillerde okunma tek bir ülkeye ayrılamaz.',
   ranking: notes.RANKING_NOTE,
   trend: notes.TREND_NOTE,
@@ -117,7 +117,7 @@ const isStreamable = (entry) => STREAMABLE_KEYS.some((k) => Array.isArray(entry?
  */
 function buildScores(countryRow, raw, iso2, signal) {
   if (!countryRow) {
-    return yetersiz('ülke yayın verisi takip listesinde değil (bu ülke için TMDB/JustWatch sağlayıcı kaydı yok)')
+    return yetersiz('bu ülke için yayın verisi yok')
   }
   if (countryRow.dataSource === 'proxy' && !signal?.level) {
     return yetersiz('yalnızca arama hacmi tahmini var; yayın sağlayıcı verisi ve izlenme düzeyi yok')
@@ -304,7 +304,7 @@ function buildAvailability(iso2, raw) {
     if (any)
       rows.push({ tmdbId: s.id, name: s.name, popularity: s.popularity, streamable: isStreamable(entry), platforms })
   }
-  if (rows.length === 0) return yetersiz('bu ülke için hiçbir dizide sağlayıcı kaydı yok')
+  if (rows.length === 0) return yetersiz('bu ülke için hiçbir dizinin yayın verisi yok')
   rows.sort((a, b) => b.popularity - a.popularity)
   const platformSummary = [...platformCounts.entries()]
     .map(([name, count]) => ({ name, count }))

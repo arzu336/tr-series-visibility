@@ -763,7 +763,7 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
     facts.push({
       source: 'wikipedia',
       kind: 'wiki',
-      text: `Wikipedia'da en çok okunan (12 ay, ${w.lang} Vikipedi${w.regional ? '; ortak dil, okunma ülkeye ayrılamaz' : ''}): ${w.items
+      text: `En çok okunan (12 ay${w.regional ? '; ortak dil, okunma ülkeye ayrılamaz' : ''}): ${w.items
         .slice(0, 3)
         .map((i) => `${i.name} ${Math.round(i.views / 1000)}k`)
         .join(', ')}`,
@@ -776,7 +776,7 @@ export async function getCountryCharts(iso2, { week, range = 'monthly' } = {}) {
     facts.push({
       source: 'google_trends',
       kind: 'search',
-      text: `Google Trends (önbellek): ${s.seriesQueried} diziden ${s.seriesWithInterest}'inde ölçülebilir ilgi${s.localTitleHits ? `, ${s.localTitleHits}'i yerel adla` : ''}`,
+      text: `Arama ilgisi: ${s.seriesQueried} diziden ${s.seriesWithInterest}'inde ölçülebilir ilgi${s.localTitleHits ? `, ${s.localTitleHits}'i yerel adla` : ''}`,
     })
 
   // 4) Erişim gerçekleri

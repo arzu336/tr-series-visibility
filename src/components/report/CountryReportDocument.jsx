@@ -1,8 +1,14 @@
 import { SECTION_COMPONENTS } from './ReportSections.jsx'
 import { SERIES_SECTION_COMPONENTS } from './SeriesSections.jsx'
 import { GLOBAL_SECTION_COMPONENTS } from './GlobalSections.jsx'
+import { YEAR_SECTION_COMPONENTS } from './YearSections.jsx'
 
-const COMPONENTS = { ...SECTION_COMPONENTS, ...SERIES_SECTION_COMPONENTS, ...GLOBAL_SECTION_COMPONENTS }
+const COMPONENTS = {
+  ...SECTION_COMPONENTS,
+  ...SERIES_SECTION_COMPONENTS,
+  ...GLOBAL_SECTION_COMPONENTS,
+  ...YEAR_SECTION_COMPONENTS,
+}
 import { fmtDateTime } from './format.js'
 
 // Ülke brifingi (sözleşme ulke-brifingi-v1), dizi raporu ve küresel görünüm: özet kartı → başlıklar.

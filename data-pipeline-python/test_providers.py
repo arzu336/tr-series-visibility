@@ -318,3 +318,35 @@ def test_weekly_rows_to_entries():
     e = weekly_rows_to_entries([("AR", "2026-09-13", 5, "Kurulus Osman", 1)], "t")[0]
     assert (e.provider, e.platform, e.period_type, e.segment, e.series_id, e.rank) == ("netflix_tudum", "netflix", "week", "TV", 5, 1)
     assert e.source_url == nf.DATA_URL
+
+
+def test_reytingtv_site_haritasi_parcalari_dizinden_okunur():
+    """2026-10-09: parçalar sabit yazılıydı; post-sitemap3.xml hiç okunmuyordu."""
+    import reytingtv_ranker as rtv
+
+    class Yanit:
+        def __init__(self, text, status=200):
+            self.text, self.status_code = text, status
+
+        def raise_for_status(self):
+            if self.status_code >= 400:
+                raise rtv.requests.HTTPError(str(self.status_code))
+
+    class Oturum:
+        def get(self, url, timeout=None):
+            return Yanit(
+                "<sitemapindex><sitemap><loc>https://reytingtv.com/post-sitemap.xml</loc></sitemap>"
+                "<sitemap><loc>https://reytingtv.com/post-sitemap3.xml</loc></sitemap>"
+                "<sitemap><loc>https://reytingtv.com/page-sitemap.xml</loc></sitemap></sitemapindex>"
+            )
+
+    assert rtv.post_sitemap_paths(Oturum()) == ["post-sitemap.xml", "post-sitemap3.xml"]
+
+
+def test_flixpatrol_ulke_kodlari_guncel_iso2():
+    """Eski/ISO dışı kodlar (FX Fransa, YU Sırbistan, UK, DY Benin, HV Burkina Faso) veriyi haritadan düşürüyordu."""
+    from providers.flixpatrol_countries import SLUG_TO_ISO2
+
+    eski = {"FX", "YU", "UK", "DY", "HV", "ZR", "TP", "AN", "CS", "SU"}
+    assert not [s for s, i in SLUG_TO_ISO2.items() if i in eski]
+    assert SLUG_TO_ISO2["france"] == "FR" and SLUG_TO_ISO2["united-kingdom"] == "GB" and SLUG_TO_ISO2["serbia"] == "RS"

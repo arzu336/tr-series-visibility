@@ -34,6 +34,8 @@ const BACKOFF_MS = [30000, 60000]
 const NEWS_TTL_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_ARTICLES = 40
 const TIMESPAN = '3m'
+// Arşiv (yıllık) aramada haber sayısı için GDELT'in izin verdiği en çok kayıt.
+const ARCHIVE_MAX_ARTICLES = 250
 
 /**
  * Önbellek anahtarları `gdelt:news:*` ad alanında ayrıldı: SerpAPI döneminden kalan `serp:*`
@@ -123,13 +125,19 @@ export function gdeltQueueStats() {
   }
 }
 
-async function gdeltGet(query, priority) {
+/** `range`: { start: 'YYYY-MM-DD', end: 'YYYY-MM-DD' } → arşiv araması (GDELT 2017+); yoksa son 3 ay. */
+async function gdeltGet(query, priority, range = null) {
   const url = new URL(GDELT_URL)
   url.searchParams.set('query', query)
   url.searchParams.set('mode', 'artlist')
   url.searchParams.set('format', 'json')
-  url.searchParams.set('maxrecords', String(MAX_ARTICLES))
-  url.searchParams.set('timespan', TIMESPAN)
+  url.searchParams.set('maxrecords', String(range ? ARCHIVE_MAX_ARTICLES : MAX_ARTICLES))
+  if (range) {
+    url.searchParams.set('startdatetime', `${range.start.replace(/-/g, '')}000000`)
+    url.searchParams.set('enddatetime', `${range.end.replace(/-/g, '')}235959`)
+  } else {
+    url.searchParams.set('timespan', TIMESPAN)
+  }
   url.searchParams.set('sort', 'datedesc')
 
   let sonHata
@@ -440,7 +448,7 @@ export function seendateToIso(seendate) {
 }
 
 /** Ham GDELT makale listesini uygulamanın ortak biçimine çevirir (test edilebilir olsun diye ayrı). */
-export function normalizeGdeltArticles(articles, iso2) {
+export function normalizeGdeltArticles(articles, iso2, limit = MAX_ARTICLES) {
   const kabul = kabulEdilenAdlar(iso2)
   const hepsi = articles || []
   const suzulmus = hepsi.filter((a) => ulkeEslesiyorMu(a.sourcecountry, kabul))
@@ -453,7 +461,7 @@ export function normalizeGdeltArticles(articles, iso2) {
     )
   }
 
-  return suzulmus.slice(0, MAX_ARTICLES).map((a) => ({
+  return suzulmus.slice(0, limit).map((a) => ({
     title: a.title || '',
     source: a.domain || null,
     date: seendateToIso(a.seendate),
@@ -472,7 +480,7 @@ export function normalizeGdeltArticles(articles, iso2) {
 export async function fetchNewsArticlesGdelt(
   query,
   countryIso2,
-  { priority = GDELT_PRIORITY.BACKGROUND, context = null } = {}
+  { priority = GDELT_PRIORITY.BACKGROUND, context = null, range = null } = {}
 ) {
   const iso2 = String(countryIso2).toUpperCase()
   const fips = ISO2_TO_FIPS[iso2]
@@ -488,9 +496,13 @@ export async function fetchNewsArticlesGdelt(
 
   const data = await gdeltGet(
     `${buildGdeltPhrase(phrases)}${context ? ` ${context}` : ''} sourcecountry:${fips}`,
-    priority
+    priority,
+    range
   )
-  return { unsupported: false, news: normalizeGdeltArticles(data.articles, iso2) }
+  return {
+    unsupported: false,
+    news: normalizeGdeltArticles(data.articles, iso2, range ? ARCHIVE_MAX_ARTICLES : MAX_ARTICLES),
+  }
 }
 
 /** 14 günlük önbellek katmanı — `gdelt:news:*` ad alanında (bkz. gdeltNewsCacheKey). */

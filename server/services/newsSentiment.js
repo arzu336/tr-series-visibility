@@ -3,6 +3,7 @@ import { TURKISH_CONTEXT } from './gdeltNews.js'
 import { fetchPressArticles, googleNewsAvailable, GOOGLE_NEWS_SOURCE } from './googleNews.js'
 import { asciiVariant, getEnglishTitles } from './localTitles.js'
 import { analyzeMediaSentiment } from '../llm.js'
+import { recordPress } from './historyStore.js'
 
 const NEWS_SENTIMENT_TTL_MS = 14 * 24 * 60 * 60 * 1000
 const MAX_STORED_ARTICLES = 20
@@ -229,7 +230,9 @@ async function retrySentiment(row, seriesName) {
       row.series_id,
       row.country_iso2
     )
-    return getStmt.get(row.series_id, row.country_iso2)
+    const guncel = getStmt.get(row.series_id, row.country_iso2)
+    recordPress(guncel)
+    return guncel
   } catch (err) {
     console.error(`[newsSentiment] ${seriesName}/${row.country_iso2} ton analizi yeniden denenemedi:`, err.message)
     return null
@@ -353,7 +356,9 @@ export async function fetchAndAnalyzeSentiment(
       expiresAt,
       source
     )
-    return rowToResult(getStmt.get(seriesId, iso2), { fromCache: false, stale: false })
+    const yazilan = getStmt.get(seriesId, iso2)
+    recordPress(yazilan)
+    return rowToResult(yazilan, { fromCache: false, stale: false })
   }
 
   let sentiment = null
@@ -379,5 +384,7 @@ export async function fetchAndAnalyzeSentiment(
     source
   )
 
-  return rowToResult(getStmt.get(seriesId, iso2), { fromCache: false, stale: false })
+  const yazilan = getStmt.get(seriesId, iso2)
+  recordPress(yazilan)
+  return rowToResult(yazilan, { fromCache: false, stale: false })
 }

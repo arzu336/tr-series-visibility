@@ -542,7 +542,7 @@ describe('Boş durum metinleri — neden söyleyen sabitler (emptyStates.js)', (
     })
     const html = renderToString(<CountryReportDocument report={r} countryName="Japonya" />)
     expect(html).toContain('0 kayıt: kapsanan dönemde (2021-07-04 – 2026-08-16)')
-    expect(html).toContain('Kaynak dosyanın kapsadığı dönem')
+    expect(html).toContain('Verinin kapsadığı dönem')
     expect(html).not.toContain('Veri yok.')
   })
 
@@ -971,5 +971,44 @@ describe('PressSection — sayfa açılınca başlayan basın taraması', () => 
       />
     )
     expect(admin.replaceAll('<!-- -->', '')).toContain('2 ülke hedeflendi')
+  })
+})
+
+describe('JobsTable — otomatik işler', () => {
+  it('sorunlu iş sayısı, hata metni ve veri özeti basılır', async () => {
+    const { JobsTable } = await import('./JobsStatus.jsx')
+    const now = Date.parse('2026-10-09T12:00:00Z')
+    const html = renderToString(
+      <JobsTable
+        now={now}
+        data={{
+          serpapi: { used: 1548, budget: 5000 },
+          jobs: [
+            {
+              key: 'a',
+              name: 'Netflix Top 10',
+              every: 'haftalık',
+              lastSuccess: now - 3600000,
+              state: 'tamam',
+              data: 'son hafta 2026-10-04',
+            },
+            {
+              key: 'b',
+              name: 'Dizi sayfaları',
+              every: 'günlük',
+              lastSuccess: null,
+              lastError: 'Python bulunamadı',
+              state: 'hata',
+              data: null,
+            },
+          ],
+        }}
+      />
+    ).replaceAll('<!-- -->', '')
+    expect(html).toContain('1 işte sorun var')
+    expect(html).toContain('1 saat önce')
+    expect(html).toContain('Python bulunamadı')
+    expect(html).toContain('son hafta 2026-10-04')
+    expect(html).toContain('Ücretli arama kotası bu ay 1.548')
   })
 })

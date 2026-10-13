@@ -8,7 +8,7 @@ export const CORRELATION_MIN_MONTHS = 3
 export const EMPTY = {
   // --- Turizm -------------------------------------------------------------------------
   tourismNotInBulletin: (iso2) =>
-    `${iso2} YİGM Sınır İstatistikleri Bülteni'nde ayrı raporlanmıyor (bülten büyük milliyetleri ayrı verir, kalanını "Diğer" altında toplar)`,
+    `${iso2} için ziyaretçi sayısı ayrı yayımlanmıyor (yalnızca büyük ülkeler ayrı verilir, kalanı "Diğer" altında toplanır)`,
   correlationAccumulating: (have, need) =>
     `Aylık seri birikiyor: ${have}/${need} ay (görünürlük aylık ortalaması ile turist serisinin kesiştiği ay sayısı; korelasyon için en az ${need} gerekir)`,
   correlationNoVisibility: 'bu ülke için yayın varlığı ölçümü yok',
@@ -48,7 +48,7 @@ export const EMPTY = {
   periodsAccumulating:
     'Veri birikiyor — günlük anlık görüntüler dönem sonunda ortalanır; henüz bir periyot tamamlanmadı.',
   leaderboardEmpty: 'Bileşik skor için veri yok: bu ülkede sağlayıcı kaydı olan dizi bulunmadı.',
-  continentNoTourism: 'YİGM bülteni bu kıtadaki ülkeleri ayrı raporlamıyor.',
+  continentNoTourism: 'Bu kıtadaki ülkeler için ziyaretçi sayısı ayrı yayımlanmıyor.',
   continentNoTopSeries: 'Bu kıtada yayın sağlayıcı kaydı olan dizi yok.',
   continentNoVisibility: 'Bu kıtadaki hiçbir ülkede yayın sağlayıcı verisi yok.',
   mapNoSignal: 'Veri yok: ne yayın sağlayıcı kaydı ne ölçülebilir arama ilgisi',
@@ -61,7 +61,7 @@ export const EMPTY = {
   chartEmptyDay: 'Bu gün için Türkiye TV listesinde kayıt yok.',
   chartOnlyOthers: (n) =>
     `Bu gün listede kataloğumuzdaki dizi yok; ${n} satır dizi-dışı/katalog dışı (süzgeci kapatın).`,
-  countryNoCharts: 'Bu ülke için hiçbir liste kaynağı yok; eldeki gerçekler aşağıda.',
+  countryNoCharts: 'Bu ülke için liste verisi yok; eldeki bilgiler aşağıda.',
   continentNoNetflix:
     'Bu kıtadaki hiçbir ülkede son 52 haftada liste kaydı yok ya da bu pazarlarda liste yayımlanmıyor.',
 

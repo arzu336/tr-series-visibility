@@ -447,7 +447,7 @@ function NetflixHistorySection({ data }) {
         <p className="report__lead">{data.message}</p>
         <dl className="report__kpis">
           <Kpi
-            label="Kaynak dosyanın kapsadığı dönem"
+            label="Verinin kapsadığı dönem"
             value={`${fmtWeek(src?.firstWeek)} – ${fmtWeek(src?.lastWeek)}`}
             hint={src?.complete === false ? 'kısmi dosya; bu ülkenin bloğu tam okundu' : 'tam dosya'}
           />
@@ -465,7 +465,7 @@ function NetflixHistorySection({ data }) {
           hint="katalogdaki Türk dizilerinin ilk ve son Top 10 haftası"
         />
         <Kpi
-          label="Kaynak dosyanın son haftası"
+          label="Verinin son haftası"
           value={fmtWeek(src?.lastWeek)}
           hint={
             src?.lastWeek
@@ -586,8 +586,8 @@ export function tourismSentences(data) {
     const gecikme = c.lagMonths ? `yaklaşık ${c.lagMonths} ay arayla ` : 'aynı aylarda '
     out.push(
       c.significant
-        ? `Dizilere ait ansiklopedi okunması ile ziyaretçi sayısı ${gecikme}${c.value >= 0 ? 'birlikte artıp azalıyor' : 'ters yönde hareket ediyor'} (${c.sampleSize} aylık veri, istatistiksel olarak anlamlı).`
-        : `Dizilere ait ansiklopedi okunması ile ziyaretçi sayısı arasında anlamlı bir ilişki bulunmadı (${c.sampleSize} aylık veri).`
+        ? `Dizilerin okunması ile ziyaretçi sayısı ${gecikme}${c.value >= 0 ? 'birlikte artıp azalıyor' : 'ters yönde hareket ediyor'} (${c.sampleSize} aylık veri, istatistiksel olarak anlamlı).`
+        : `Dizilerin okunması ile ziyaretçi sayısı arasında anlamlı bir ilişki bulunmadı (${c.sampleSize} aylık veri).`
     )
   }
   const d = data.didEstimate

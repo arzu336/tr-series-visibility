@@ -5222,3 +5222,83 @@ button.map-popup-card__pill--link:hover {
   margin: 0.3rem 0 0;
   padding-left: 1.1rem;
 }
+
+/* Yönetim → Otomatik işler (2026-10-09) */
+.badge--error {
+  background: rgba(238, 49, 53, 0.18);
+  color: #f87171;
+}
+
+.badge--muted {
+  background: rgba(255, 255, 255, 0.08);
+  color: #a6b0c3;
+}
+
+.jobs__error {
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: #f87171;
+  max-width: 360px;
+  word-break: break-word;
+}
+
+.jobs__data {
+  font-size: 0.78rem;
+  color: #a6b0c3;
+}
+
+/* Dönem seçici: ay düzeyinde özel aralık (2026-10-13) */
+.report__period {
+  flex-wrap: wrap;
+  margin-bottom: 1rem;
+}
+
+.report__range {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.6rem;
+  margin-top: 0.5rem;
+}
+
+.report__month {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+  border: 0;
+  margin: 0;
+  padding: 0;
+}
+
+.report__month legend {
+  font-size: 0.72rem;
+  color: #8792a8;
+  padding: 0;
+  margin-bottom: 0.2rem;
+}
+
+.report__month select {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 8px;
+  color: #f1f3f8;
+  padding: 0.35rem 0.5rem;
+  font: inherit;
+  color-scheme: dark;
+}
+
+.report__range--active .report__month select {
+  border-color: #ee3135;
+}
+
+.report__apply:not(:disabled) {
+  background: #ee3135;
+  border-color: #ee3135;
+  color: #fff;
+}
+
+.report__range-error {
+  flex-basis: 100%;
+  font-size: 0.8rem;
+  color: #ff6b6b;
+}

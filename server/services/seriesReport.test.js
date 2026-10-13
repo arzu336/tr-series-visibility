@@ -41,10 +41,13 @@ describe('buildSeriesAvailability — platformlara göre', () => {
     expect(s.data.platforms.map((p) => p.name)).toEqual(['Netflix', 'Pluto TV'])
     expect(s.data.available.sort()).toEqual(['DE', 'FR'])
     expect(buildSeriesAvailability({}).status).toBe('hesaplanamaz')
-    // sıralamaya girdiği ama platform kaydı olmayan ülke yayında sayılır
+    // Ülke sayısı yalnızca platformların bulunduğu ülkeler (2026-10-13); sıralamaya girilen ülke yalnızca fırsat
+    // hesabı için `available`a katılır, bölümde gösterilmez.
     const l = buildSeriesAvailability({ DE: { flatrate: [{ provider_name: 'Netflix' }] } }, ['SA', 'DE'])
-    expect(l.data).toMatchObject({ countryCount: 2, listedOnly: ['SA'] })
+    expect(l.data).toMatchObject({ countryCount: 1, listedOnly: ['SA'] })
     expect(l.data.available.sort()).toEqual(['DE', 'SA'])
+    // Platformu olmayan dizide bölüm yok.
+    expect(buildSeriesAvailability({}, ['SA']).status).toBe('hesaplanamaz')
   })
 })
 

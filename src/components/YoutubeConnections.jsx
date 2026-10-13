@@ -97,8 +97,8 @@ export default function YoutubeConnections({ notice = null }) {
     <section className="dashboard__section" id="youtube-baglantilari">
       <h3 className="dashboard__section-title">YouTube bağlantıları</h3>
       <p className="dashboard__hint">
-        Yayıncı kanalların izlenme raporları (ülke × ay). Kanal sahibi kendi Google hesabıyla salt okunur izin verir;
-        platforma şifre gelmez, izin istendiğinde geri alınır.
+        Yayıncı kanalların izlenme raporları (ülke × ay). Kanal sahibi kendi hesabıyla salt okunur izin verir; platforma
+        şifre gelmez, izin istendiğinde geri alınır.
       </p>
       {message && <div className={message.ok ? 'dashboard__bulk-bar' : 'status status--error'}>{message.text}</div>}
       {status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
@@ -170,7 +170,7 @@ export default function YoutubeConnections({ notice = null }) {
               </tbody>
             </table>
           )}
-          <p className="dashboard__hint">Google'a tanımlı dönüş adresi: {data.redirectUri}</p>
+          <p className="dashboard__hint">Tanımlı dönüş adresi: {data.redirectUri}</p>
         </>
       )}
 

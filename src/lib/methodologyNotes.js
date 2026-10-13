@@ -1,10 +1,10 @@
 /** Haritanın rengi: izlenme düzeyi. */
 export const WATCH_LEVEL_NOTE =
-  'Renk, ülkenin izlenme düzeyini gösterir (Çok yüksek → Çok düşük). Düzey üç kaynağın birleşiminden ' +
-  'gelir: yayın listeleri (son 52 hafta, bütün izlenen platformların birleşik sıralaması), dizi ansiklopedi ' +
-  'maddelerinin okunması (ülkenin dilinde, milyon internet kullanıcısı başına) ve arama ilgisi. Gerçek ' +
+  'Renk, ülkenin izlenme düzeyini gösterir (Çok yüksek → Çok düşük). Düzey üç göstergenin birleşiminden ' +
+  'gelir: yayın listeleri (son 52 hafta, bütün izlenen platformların birleşik sıralaması), dizilerin ' +
+  'okunması (ülkenin dilinde, milyon internet kullanıcısı başına) ve arama ilgisi. Gerçek ' +
   'izlenme sayısı ülke bazında kamuya açık değildir; bu yüzden düzey bir sinyaldir, ölçüm değil. En az iki ' +
-  'kaynak yoksa ülke gri (tek kaynak varsa taralı tahmin) kalır. Televizyon izlenmesi bu kaynaklara ' +
+  'gösterge yoksa ülke gri (tek gösterge varsa taralı tahmin) kalır. Televizyon izlenmesi bu göstergelere ' +
   'yansımaz; ilgili ülkelerde panel bunu ayrıca uyarır.'
 
 /** Haritanın renk ölçeğinin nasıl kurulduğu. */

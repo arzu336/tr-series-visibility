@@ -164,7 +164,7 @@ export function provisionalColor(level) {
 
 export const SOURCE_LABELS = {
   lists: 'yayın listeleri',
-  wiki: 'ansiklopedi okunması',
+  wiki: 'okunma',
   search: 'arama ilgisi',
   press: 'basın',
 }

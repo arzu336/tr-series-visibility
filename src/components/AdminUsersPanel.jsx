@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import YoutubeConnections from './YoutubeConnections.jsx'
 import { TvAdmin } from './TvSections.jsx'
+import JobsStatus from './JobsStatus.jsx'
 import { fetchAdminUsers, approveUser, rejectUser, setAccessLevel, resetUserPassword, deleteUser } from '../lib/api.js'
 
 function formatDate(iso) {
@@ -239,6 +240,8 @@ export default function AdminUsersPanel({ currentUserId, youtubeNotice = null })
           </table>
         )}
       </section>
+
+      <JobsStatus />
 
       <YoutubeConnections notice={youtubeNotice} />
 

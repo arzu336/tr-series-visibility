@@ -16,17 +16,20 @@ describe('fillMissingPosters — afişsiz dizilere yedek görsel', () => {
 })
 
 describe('applyTabiiAvailability — TRT 1 yapımları tabii ülkelerinde', () => {
-  it('liste boşken hiçbir ülke eklenmez; doluyken yalnızca TRT 1 yapımlarına tabii eklenir', () => {
+  it('tabii kataloğundaki dizilere tabii ülkelerinde tabii eklenir; tarama yokken TRT 1 + yedek liste', () => {
     const raw = () => ({
       series: [{ id: 1, broadcaster: 'TRT 1' }, { id: 2 }],
       providersById: { 1: { DE: { flatrate: [{ provider_name: 'Netflix' }] } }, 2: {} },
     })
-    expect(applyTabiiAvailability(raw(), []).providersById[1]).toEqual({
-      DE: { flatrate: [{ provider_name: 'Netflix' }] },
-    })
-    const r = applyTabiiAvailability(raw(), ['DE', 'PK'])
+    // Tarama yokken: TRT 1 yapımı + yedek ülke listesi.
+    const yedek = applyTabiiAvailability(raw(), null)
+    expect(yedek.providersById[1].PK.flatrate[0].provider_name).toBe('tabii')
+    expect(yedek.providersById[2]).toEqual({})
+    // Tarama varken: yalnızca tabii kataloğunda bulunan dizi, taranan ülkelerde.
+    const r = applyTabiiAvailability(raw(), { countries: ['DE', 'PK'], matched: { 1: { url: 'u' } } })
+    expect(Object.keys(r.providersById[1]).sort()).toEqual(['DE', 'PK'])
     expect(r.providersById[1].DE.flatrate.map((p) => p.provider_name)).toEqual(['Netflix', 'tabii'])
-    expect(r.providersById[1].PK.flatrate.map((p) => p.provider_name)).toEqual(['tabii'])
+    expect(r.series[0].tabiiUrl).toBe('u')
     expect(r.providersById[2]).toEqual({})
   })
 })

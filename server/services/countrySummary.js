@@ -120,7 +120,7 @@ function buildCulturalDimension(iso2, countryRow, kanonik) {
     scannedSeries: diziler,
     scanCount: taramalar.length,
     sources: [
-      { source: 'google_news', trust: trustOf('google_news'), note: 'basın taraması (yedek: GDELT)' },
+      { source: 'google_news', trust: trustOf('google_news'), note: 'basın taraması' },
       { source: 'tmdb', trust: trustOf('tmdb'), note: 'dizi kataloğu ve tema' },
     ],
   }

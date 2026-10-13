@@ -111,7 +111,7 @@ export default function MediaSentimentAuditSection({ canEdit = true }) {
               <th>Ülke</th>
               <th>Taranan Haberler</th>
               <th>Ton</th>
-              <th>Kaynak</th>
+              <th>Belirleyen</th>
               <th></th>
             </tr>
           </thead>

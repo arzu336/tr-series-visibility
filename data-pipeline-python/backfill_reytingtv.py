@@ -159,3 +159,8 @@ if __name__ == "__main__":
     sonuc = run(args.limit, days=args.days)
     log.info(f"sonuç: {sonuc}")
     print(RESULT_MARKER + json.dumps(sonuc, ensure_ascii=False, default=str), flush=True)
+    # Son günler istendi ama hiç gün bulunamadı: başarı sayılmaz (2026-10-09 — site haritası değişikliği 1,5 ay
+    # boyunca "başarılı" görünerek fark edilmedi). Zamanlayıcı hata olarak kaydeder, yönetim ekranında görünür.
+    if args.days and args.days >= 3 and not sonuc.get("days"):
+        log.error(f"son {args.days} günde hiç reyting makalesi bulunamadı — site yapısı değişmiş olabilir")
+        raise SystemExit(3)

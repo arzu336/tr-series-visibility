@@ -281,7 +281,8 @@ CREATE TABLE IF NOT EXISTS unresolved_queue (
 
 def get_connection(db_path: Path) -> sqlite3.Connection:
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(db_path)
+    # timeout: başka bir süreç yazarken "database is locked" yerine 60 sn bekle (2026-10-13).
+    conn = sqlite3.connect(db_path, timeout=60)
     # WAL modu: server/services/countryScoringEngine.js bu dosyaya SÜREKLİ AÇIK, salt-okunur
     # bir bağlantı tutuyor (bkz. o dosyadaki not) — varsayılan rollback-journal modunda bu,
     # Python buraya yazarken "database is locked" riski yaratırdı. WAL, okuyucularla yazıcının

@@ -3,10 +3,16 @@ import { deleteSessionsForUser } from '../auth.js'
 import { listUsers, setUserStatus, setUserAccessLevel, resetUserPassword, deleteUser, publicUser } from '../users.js'
 import { requireAdmin } from './auth.js'
 import { badRequest } from './shared.js'
+import { getJobsStatus } from '../services/jobsStatus.js'
 
 export const adminRouter = express.Router()
 
 adminRouter.use('/api/admin', requireAdmin)
+
+// Otomatik işlerin durumu (Yönetim → Otomatik işler).
+adminRouter.get('/api/admin/jobs', (req, res) => {
+  res.json(getJobsStatus())
+})
 
 adminRouter.get('/api/admin/users', (req, res) => {
   res.json({ items: listUsers().map(publicUser) })

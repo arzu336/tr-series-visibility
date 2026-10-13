@@ -1,5 +1,6 @@
 import db from '../db.js'
 import { getCached, setCached } from '../cache.js'
+import { recordWatchSignals } from './historyStore.js'
 import { getEnrichedVisibility } from '../data-pipeline.js'
 import { getCountryDemographics } from './countryDemographics.js'
 import { getPipelineDb } from './pipelineDb.js'
@@ -200,7 +201,7 @@ export function computeWatchSignals(inputs, opts = {}) {
             langs: w.langs,
             vsMedian: wikiMedian ? round1(w.value / wikiMedian) : null,
           }
-        : { present: false, reason: 'bu ülkeye eşlenen dilde Wikipedia okunma verisi yok' },
+        : { present: false, reason: 'bu ülkenin dilinde okunma verisi yok' },
       search: searchP.has(iso)
         ? {
             present: true,
@@ -591,7 +592,15 @@ function readDistribution(conn) {
 export async function getWatchSignals({ fresh = false, now = new Date() } = {}) {
   if (!fresh) {
     const cached = getCached(CACHE_KEY)
-    if (cached) return cached
+    if (cached) {
+      // Önbellekten dönse de günün kaydı yoksa yazılır (günde bir kez; hesap tekrar yapılmaz).
+      try {
+        recordWatchSignals(cached.byIso2, now)
+      } catch (err) {
+        console.error('[watchSignal] günlük kayıt yazılamadı:', err.message)
+      }
+      return cached
+    }
   }
   const [{ data, raw }, demographics] = await Promise.all([
     getEnrichedVisibility(),
@@ -617,6 +626,12 @@ export async function getWatchSignals({ fresh = false, now = new Date() } = {}) 
     contract: 'izlenme-sinyali-v1',
   }
   setCached(CACHE_KEY, out, CACHE_TTL_MS)
+  // Tarihe göre rapor için günlük kayıt (günde bir kez).
+  try {
+    recordWatchSignals(out.byIso2, now)
+  } catch (err) {
+    console.error('[watchSignal] günlük kayıt yazılamadı:', err.message)
+  }
   return out
 }
 
@@ -676,7 +691,7 @@ export async function getSeriesGlobal({ now = new Date(), top = 5 } = {}) {
     .sort((a, b) => b.weeks - a.weeks)
   return {
     status: 'hesaplandi',
-    source: 'Netflix Top 10 (TV), haftalık',
+    source: 'haftalık platform listesi',
     recentWindow: { weeks: NETFLIX_WINDOW_WEEKS, from: cutoff },
     items,
   }
@@ -749,7 +764,7 @@ export async function getCountrySeries(iso2, { now = new Date() } = {}) {
     .sort((a, b) => b.points - a.points || b.wikiViews - a.wikiViews)
   return {
     status: items.length ? 'hesaplandi' : 'hesaplanamaz',
-    reason: items.length ? null : 'bu ülke için Netflix Top 10 kaydı ve eşlenen dilde Wikipedia okunması yok',
+    reason: items.length ? null : 'bu ülke için liste kaydı ve okunma verisi yok',
     iso2,
     netflixWindow: { weeks: NETFLIX_WINDOW_WEEKS, from: cutoff, available: netflixAvailable },
     wikiLangs: langs,

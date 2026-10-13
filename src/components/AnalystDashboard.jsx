@@ -286,7 +286,7 @@ function DestinationSection({ canEdit, onViewSeriesOnMap }) {
               <th>Dizi</th>
               <th>Özet</th>
               <th>Destinasyonlar</th>
-              <th>Kaynak</th>
+              <th>Belirleyen</th>
               <th></th>
             </tr>
           </thead>
@@ -661,7 +661,7 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
                       <th>Dizi</th>
                       <th>Tema</th>
                       <th>Güven</th>
-                      <th>Kaynak</th>
+                      <th>Belirleyen</th>
                       <th></th>
                     </tr>
                   </thead>

@@ -1,6 +1,7 @@
 import db from '../db.js'
 import { chargeCurrentUserForLiveCall } from './liveCallQuota.js'
 import { resolveIso2FromLabel } from './countryLookup.js'
+import { recordTrendsWindow } from './historyStore.js'
 
 const EXTERNAL_TIMEOUT_MS = 15000
 
@@ -272,7 +273,20 @@ export async function fetchTrendsTimeSeriesRaw(query, iso2, timeframe = 'today 1
     }))
     .filter((point) => point.timestamp != null)
 
-  return { query, iso2: iso2 ? iso2.toUpperCase() : null, timeframe, queriedAt: new Date().toISOString(), timeline }
+  const result = {
+    query,
+    iso2: iso2 ? iso2.toUpperCase() : null,
+    timeframe,
+    queriedAt: new Date().toISOString(),
+    timeline,
+  }
+  // Tarihe göre rapor için: her seri kendi aralığıyla saklanır (önbellek yenilenince eskisi kaybolmasın).
+  try {
+    recordTrendsWindow(result)
+  } catch (err) {
+    console.error('[serpApiCache] arama ilgisi serisi saklanamadı:', err.message)
+  }
+  return result
 }
 
 /**

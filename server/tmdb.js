@@ -149,13 +149,20 @@ const NETFLIX_DISCOVERY_PAGES = 3
 // listesinin dışında kalıyordu (Barbaros, Yunus Emre…). TMDB'de TRT 1 ağındaki bütün Türk yapımları kataloğa katılır
 // (kurgusal olmayanlar CATALOG_FILTER ile yine elenir) ve `broadcaster: 'TRT 1'` ile işaretlenir.
 export const TRT1_NETWORK_ID = 869
+// tabii'nin kendi yapımları (Gassal, Çırak…) TMDB'de ayrı ağ olarak kayıtlı.
+export const TABII_NETWORK_ID = 6854
 const TRT_DISCOVERY_PAGES = 15
 
-async function getTrtSeriesByOrigin(originCountry, pages = TRT_DISCOVERY_PAGES) {
+async function getTrtSeriesByOrigin(
+  originCountry,
+  pages = TRT_DISCOVERY_PAGES,
+  networkId = TRT1_NETWORK_ID,
+  label = 'TRT 1'
+) {
   const results = await Promise.all(
     Array.from({ length: pages }, (_, i) =>
       tmdbGet('/discover/tv', {
-        with_networks: String(TRT1_NETWORK_ID),
+        with_networks: String(networkId),
         with_origin_country: originCountry,
         sort_by: 'popularity.desc',
         language: 'tr-TR',
@@ -173,7 +180,7 @@ async function getTrtSeriesByOrigin(originCountry, pages = TRT_DISCOVERY_PAGES) 
       backdropPath: show.backdrop_path || null,
       firstAirDate: show.first_air_date || null,
       overview: show.overview || '',
-      broadcaster: 'TRT 1',
+      broadcaster: label,
     }))
 }
 
@@ -239,7 +246,7 @@ export async function getSeriesDetails(seriesId) {
 // Aşkın Gücü, Güldür Güldür Show…) TMDB'nin Türk yapımı sorgusundan gelse de çıkarılır (kullanıcı kararı,
 // 2026-10-05). TMDB tipi bazen yanlış ("Yalnız Kurt" Reality görünür ama türü Drama); türünde Drama olan
 // yapım her zaman kalır. Sürüm değişince önbellekteki katalog yeniden kurulur (data-pipeline.js).
-export const CATALOG_FILTER = 'scripted-v2-trt'
+export const CATALOG_FILTER = 'scripted-v3-trt-tabii'
 const GENRE = { DRAMA: 18, NEWS: 10763, REALITY: 10764, TALK: 10767 }
 const NON_SCRIPTED_TYPES = new Set(['Reality', 'Talk Show', 'News'])
 const SERIES_KIND_TTL_MS = 90 * 24 * 60 * 60 * 1000
@@ -272,15 +279,16 @@ export async function getRawSeriesDataForOrigin(
   n = TOP_N_SERIES,
   { supplementIds = [] } = {}
 ) {
-  const [top, netflix, trt] = await Promise.all([
+  const [top, netflix, trt, tabii] = await Promise.all([
     getTopSeriesByOrigin(originCountry, originalLanguage, n),
     originCountry === 'TR' ? getNetflixSeriesByOrigin(originCountry) : Promise.resolve([]),
     originCountry === 'TR' ? getTrtSeriesByOrigin(originCountry) : Promise.resolve([]),
+    originCountry === 'TR' ? getTrtSeriesByOrigin(originCountry, 3, TABII_NETWORK_ID, 'tabii') : Promise.resolve([]),
   ])
-  // İlk N listesinde zaten olan TRT yapımları da işaretlenir.
-  const trtIds = new Set(trt.map((s) => s.id))
-  for (const s of [...top, ...netflix]) if (trtIds.has(s.id)) s.broadcaster = 'TRT 1'
-  const discovered = mergeSeriesLists(mergeSeriesLists(top, netflix), trt)
+  // İlk N listesinde zaten olan TRT/tabii yapımları da işaretlenir.
+  const yayinci = new Map([...tabii, ...trt].map((s) => [s.id, s.broadcaster]))
+  for (const s of [...top, ...netflix]) if (yayinci.has(s.id)) s.broadcaster = yayinci.get(s.id)
+  const discovered = mergeSeriesLists(mergeSeriesLists(mergeSeriesLists(top, netflix), trt), tabii)
   const have = new Set(discovered.map((s) => s.id))
   const missing = supplementIds.filter((id) => !have.has(id))
   const extra = (

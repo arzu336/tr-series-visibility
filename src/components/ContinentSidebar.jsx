@@ -38,7 +38,7 @@ function ExportTourismStats({ tourismItems, continentCountries }) {
 
   return (
     <div className="sidebar__stat">
-      <div className="sidebar__stat-label" title="YİGM Sınır İstatistikleri Bülteni'nden otomatik.">
+      <div className="sidebar__stat-label" title="Resmî turist giriş istatistiklerinden otomatik.">
         <IconLuggage size={13} inline />
         Turizm Rakamları ⓘ
       </div>

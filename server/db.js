@@ -396,6 +396,18 @@ db.exec(`
 
   -- Televizyon yayın akışları (2026-10-06; DStv ve StarTimes'ın yazılı izniyle): ülke × kanal × gün başına
   -- Türk dizisi yayın sayısı. Yalnızca rehberdeki program adı ve saati kullanılır.
+  -- elcinema eserleri (services/elcinemaGuide.js): yayın akışındaki eserin künyesi ve katalog eşlemesi.
+  CREATE TABLE IF NOT EXISTS elcinema_works (
+    work_id TEXT PRIMARY KEY,
+    title TEXT,
+    original_title TEXT,
+    country TEXT,
+    imdb_id TEXT,
+    series_id INTEGER,
+    kind TEXT,
+    checked_at TEXT NOT NULL
+  );
+
   CREATE TABLE IF NOT EXISTS tv_airings (
     provider TEXT NOT NULL,
     iso2 TEXT NOT NULL,

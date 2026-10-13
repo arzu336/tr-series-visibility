@@ -3,7 +3,7 @@ import { EMPTY } from '../lib/emptyStates.js'
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
 
 // Tek liste bileşeni: hangi sağlayıcıdan gelirse gelsin aynı görünüm — sıra, ad, kaç haftadır/gündür
-// listede, ↑↓/yeni. Altında kaynak ve son güncelleme (ChartSource). Uydurma yok: boş liste boş yazar.
+// listede, ↑↓/yeni. Altında dönem ve son güncelleme (ChartSource; kaynak adı yazılmaz). Uydurma yok: boş liste boş yazar.
 
 export function fmtDateTr(iso, { withTime = false } = {}) {
   if (!iso) return '—'
@@ -18,9 +18,9 @@ export function ChartSource({ source, periodLabel }) {
   if (!source) return null
   return (
     <p className="chart-source">
-      Kaynak: {source.label}
-      {periodLabel ? ` · ${periodLabel}` : ''}
-      {source.fetchedAt ? ` · güncelleme ${fmtDateTr(source.fetchedAt, { withTime: true })}` : ''}
+      {[periodLabel, source.fetchedAt ? `güncelleme ${fmtDateTr(source.fetchedAt, { withTime: true })}` : null]
+        .filter(Boolean)
+        .join(' · ')}
     </p>
   )
 }

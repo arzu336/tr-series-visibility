@@ -9,6 +9,8 @@ import { getFallbackInterestScores } from './services/proxyScore.js'
 import { maybeRecordSeriesSnapshot } from './series-period-history.js'
 import { getCatalogSupplementIds } from './services/pipelineData.js'
 import tabiiCountries from '../src/data/tabii-countries.json' with { type: 'json' }
+import { TABII_CACHE_KEY } from './services/tabiiCatalog.js'
+import { recordAvailability } from './services/historyStore.js'
 
 const RAW_CACHE_KEY = 'raw-series-providers'
 const RAW_CACHE_TTL_MS = 24 * 60 * 60 * 1000
@@ -43,19 +45,25 @@ export function fillMissingPosters(series = []) {
 }
 
 /**
- * TRT 1 yapımları tabii'de: teyitli ülke listesi (src/data/tabii-countries.json) doluysa o ülkelerde yayın kaydına
- * "tabii" eklenir (o ülkede kayıt zaten varsa ona eklenir). Liste boşken hiçbir ülke uydurulmaz.
+ * tabii'de yayında olan diziler, tabii'nin erişilebildiği ülkelerde yayın kaydına "tabii" olarak eklenir (o ülkede
+ * kayıt zaten varsa ona). Hangi dizinin tabii'de olduğu ve ülkeler haftalık tabii taramasından gelir
+ * (services/tabiiCatalog.js); tarama henüz yapılmadıysa TRT 1 yapımları ve src/data/tabii-countries.json yedeği.
  */
-export function applyTabiiAvailability(raw, countries = tabiiCountries.countries || []) {
+export function applyTabiiAvailability(raw, tabii = getCached(TABII_CACHE_KEY)) {
+  const countries = tabii?.countries?.length ? tabii.countries : tabiiCountries.countries || []
   if (!countries.length) return raw
-  const tabii = { provider_id: 'tabii', provider_name: 'tabii' }
+  const onTabii = tabii?.matched
+    ? (s) => Boolean(tabii.matched[s.id])
+    : (s) => s.broadcaster === 'TRT 1' || s.broadcaster === 'tabii'
+  const provider = { provider_id: 'tabii', provider_name: 'tabii' }
   for (const s of raw.series || []) {
-    if (s.broadcaster !== 'TRT 1') continue
+    if (!onTabii(s)) continue
+    if (tabii?.matched?.[s.id]) s.tabiiUrl = tabii.matched[s.id].url
     const byCountry = (raw.providersById[s.id] ||= {})
     for (const iso2 of countries) {
       const e = (byCountry[iso2] ||= {})
       const list = (e.flatrate ||= [])
-      if (!list.some((p) => p.provider_name === 'tabii')) list.push(tabii)
+      if (!list.some((p) => p.provider_name === 'tabii')) list.push(provider)
     }
   }
   return raw
@@ -151,6 +159,12 @@ export async function getEnrichedVisibility({ waitForClassification = false } = 
     data.countries.filter((c) => c.dataSource !== 'proxy')
   )
   maybeRecordSeriesSnapshot(raw.series)
+  // Tarihe göre rapor için: dizi × ülke × platform aralığı (günde bir kez).
+  try {
+    recordAvailability(raw.providersById)
+  } catch (err) {
+    console.error('[visibility] yayın durumu kaydı yazılamadı:', err.message)
+  }
 
   return { data, raw, destinationStore }
 }

@@ -14,6 +14,10 @@ import { runReytingtvSyncIfNeeded } from './services/reytingtvRunner.js'
 import { runFlixpatrolSyncIfNeeded } from './services/flixpatrolRunner.js'
 import { runNightlyPrefillIfNeeded } from './services/nightlyPrefill.js'
 import { runFlixpatrolTitlesIfNeeded } from './services/flixpatrolTitlesRunner.js'
+import { runTabiiCatalogIfNeeded } from './services/tabiiCatalog.js'
+import { runElcinemaGuideIfNeeded } from './services/elcinemaGuide.js'
+import { runMiTvGuideIfNeeded } from './services/miTvGuide.js'
+import { runEpgPwGuideIfNeeded } from './services/epgPwGuide.js'
 import { runImdbSyncIfNeeded } from './services/imdbRunner.js'
 import { runWikiMonthlyRefreshIfNeeded } from './services/wikiMonthlyRefresh.js'
 import { syncForeignStudentsIfNeeded } from './services/foreignStudents.js'
@@ -163,7 +167,35 @@ async function runZenginlestirmeZinciri() {
     console.error('[scheduler] aylık arama verisi doldurma başarısız:', err.message)
   }
 
-  // Gece ön doldurma (Türkiye saatiyle 01–10, günde bir kez): dizi raporu basın tonu ve ülke paneli bölgesel ilgisi tıklamada
+  // tabii kataloğu ve ülkeleri (haftalık) — TRT dizilerinin tabii'deki yayın kaydı.
+  try {
+    await runTabiiCatalogIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] tabii kataloğu alınamadı:', err.message)
+  }
+
+  // elcinema Arap kanalları yayın akışı (günlük, ~5–15 dk).
+  try {
+    await runElcinemaGuideIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] elcinema yayın akışı alınamadı:', err.message)
+  }
+
+  // mi.tv Latin Amerika yayın akışı (günlük; bilinen kanallar + dönüşümlü dilim).
+  try {
+    await runMiTvGuideIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] mi.tv yayın akışı alınamadı:', err.message)
+  }
+
+  // Rusya ve Orta Asya yayın akışı (günlük; tek XMLTV dosyası, ~10 MB).
+  try {
+    await runEpgPwGuideIfNeeded()
+  } catch (err) {
+    console.error('[scheduler] Rusya/Orta Asya yayın akışı alınamadı:', err.message)
+  }
+
+  // Ön doldurma (günde bir kez, sunucu açıkken ilk fırsatta): dizi raporu basın tonu ve ülke paneli bölgesel ilgisi tıklamada
   // ücretli sorgu yapmasın diye önceden hazırlanır.
   try {
     await runNightlyPrefillIfNeeded()
