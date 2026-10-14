@@ -22,12 +22,13 @@ const OPPORTUNITY_MAX = 12
 const LANGUAGES_SHOWN = 6
 
 export const SERIES_CHAPTERS = [
+  // Dizinin kendisi önce (2026-10-14, kullanıcı isteği): hakkında → kadro → magazin (istemci ekler), sonra izlenme.
+  { key: 'icerik', title: 'Dizi hakkında', sections: ['seriesContent'] },
   { key: 'izleniyor', title: 'Nerede izleniyor', sections: ['seriesMarkets', 'seriesPlatformPoints'] },
   { key: 'firsat', title: 'Fırsat pazarları', sections: ['seriesOpportunity'] },
   { key: 'erisim', title: 'Nerede yayında', sections: ['seriesAvailability'] },
   { key: 'ilgi', title: 'Ne kadar ilgi var', sections: ['wikiInterest', 'seriesImdb'] },
   { key: 'gundem', title: 'Nasıl konuşuluyor', sections: ['seriesPress'] },
-  { key: 'icerik', title: 'Dizi hakkında', sections: ['seriesContent'] },
 ]
 
 export const SERIES_SECTION_TITLES = {
@@ -339,7 +340,7 @@ function readClassification(seriesId) {
 
 export async function buildSeriesReport(seriesId, { useCache = true, deps = {} } = {}) {
   const id = Number(seriesId)
-  const cacheKey = `report:series:v6:${id}`
+  const cacheKey = `report:series:v7:${id}`
   if (useCache) {
     const cached = getCached(cacheKey)
     if (cached) return cached

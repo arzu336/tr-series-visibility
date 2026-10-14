@@ -69,11 +69,18 @@ export function applyTabiiAvailability(raw, tabii = getCached(TABII_CACHE_KEY)) 
   return raw
 }
 
+// Önbellekten gelen katalog nesnesi süreç belleğinde paylaşılır (cache.js MEMO_KEYS); süsleme her nesneye bir kez.
+// tabii ülke listesi haftalık değişir: süsleme, tabii önbellek nesnesinin kimliğiyle birlikte anahtarlanır.
+const decorated = new WeakMap() // raw → süslemede kullanılan tabii önbellek nesnesi
 export async function getRawSeriesDataCached() {
   const raw = await readRawSeriesData()
   if (raw?.series) {
-    fillMissingPosters(raw.series)
-    applyTabiiAvailability(raw)
+    const tabii = getCached(TABII_CACHE_KEY)
+    if (!decorated.has(raw) || decorated.get(raw) !== tabii) {
+      fillMissingPosters(raw.series)
+      applyTabiiAvailability(raw, tabii)
+      decorated.set(raw, tabii)
+    }
   }
   return raw
 }
@@ -121,11 +128,38 @@ function kickOffEnrichment(series) {
     })
     .finally(() => {
       enrichmentInFlight = null
+      visMemo = null // yeni etiketler bir sonraki istekte görünsün
     })
   return enrichmentInFlight
 }
 
+// Görünürlük modeli tek istekte birkaç yoldan kuruluyordu (inceleme C2): 60 sn süreç belleği + eş zamanlı
+// çağrılar aynı kurulumu paylaşır. Sınıflandırmayı bekleyen (zamanlanmış) çağrı memo'yu atlar ve yeniler.
+const VIS_MEMO_MS = 60_000
+let visMemo = null // { at, value }
+let visInFlight = null
+
 export async function getEnrichedVisibility({ waitForClassification = false } = {}) {
+  if (!waitForClassification && visMemo && Date.now() - visMemo.at < VIS_MEMO_MS) return visMemo.value
+  if (visInFlight && !waitForClassification) return visInFlight
+  const p = buildEnrichedVisibility({ waitForClassification })
+    .then((v) => {
+      visMemo = { at: Date.now(), value: v }
+      return v
+    })
+    .finally(() => {
+      if (visInFlight === p) visInFlight = null
+    })
+  visInFlight = p
+  return p
+}
+
+/** Testler: görünürlük memo'sunu düşür. */
+export function dropVisibilityMemo() {
+  visMemo = null
+}
+
+async function buildEnrichedVisibility({ waitForClassification = false } = {}) {
   const raw = await getRawSeriesDataCached()
   const enrichment = kickOffEnrichment(raw.series)
   if (waitForClassification) await enrichment

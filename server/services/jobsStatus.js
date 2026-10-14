@@ -71,7 +71,20 @@ export const JOBS = [
   { key: 'epgpw', name: 'Rusya ve Orta Asya yayın akışı', every: 'günlük', intervalMs: D, success: 'epgpwLastDate' },
   { key: 'itvuz', name: 'Özbekistan yayın akışı', every: 'günlük', intervalMs: D, success: 'itvuzLastDate' },
   { key: 'magticom', name: 'Gürcistan yayın akışı', every: 'günlük', intervalMs: D, success: 'magticomLastDate' },
-  { key: 'online', name: 'İran çevrimiçi izlenme', every: 'haftalık', intervalMs: 7 * D, success: 'onlineViewsAt' },
+  {
+    key: 'online',
+    name: 'İran çevrimiçi izlenme',
+    every: 'haftalık',
+    intervalMs: 7 * D,
+    success: 'onlineViewsAt:aparat',
+  },
+  {
+    key: 'onlineUz',
+    name: 'Özbekistan çevrimiçi izlenme',
+    every: 'haftalık',
+    intervalMs: 7 * D,
+    success: 'onlineViewsAt:mover',
+  },
   { key: 'news', name: 'Basın taraması', every: 'haftalık', intervalMs: 7 * D, success: 'lastAutoNewsScanAt' },
   {
     key: 'nightly',

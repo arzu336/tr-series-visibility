@@ -1,4 +1,5 @@
 import express from 'express'
+import { upstream } from './shared.js'
 import { requireAdmin } from './auth.js'
 import { startJob } from '../services/jobs.js'
 import {
@@ -55,21 +56,24 @@ youtubeRouter.get('/api/youtube/connect', (req, res) => {
 })
 
 // Google'ın geri dönüşü. Sonuç arayüze adres parametresiyle bildirilir (yönetim ekranı açılır).
-youtubeRouter.get('/api/youtube/oauth/callback', async (req, res) => {
-  const back = (params) => res.redirect(`/?${new URLSearchParams({ yonetim: 'youtube', ...params })}`)
-  const { code, state, error } = req.query
-  if (error) return back({ youtube: 'iptal', neden: String(error) })
-  if (!code || !state || !consumeOAuthState(String(state), req.currentUser.id)) {
-    return back({ youtube: 'hata', neden: 'Oturum doğrulanamadı; bağlantıyı yeniden başlatın.' })
-  }
-  try {
-    const { title } = await connectChannel({ code: String(code), userId: req.currentUser.id })
-    back({ youtube: 'baglandi', kanal: title })
-  } catch (err) {
-    console.error('[youtube] kanal bağlanamadı:', err.message)
-    back({ youtube: 'hata', neden: err.message })
-  }
-})
+youtubeRouter.get(
+  '/api/youtube/oauth/callback',
+  upstream('youtube/oauth', async (req, res) => {
+    const back = (params) => res.redirect(`/?${new URLSearchParams({ yonetim: 'youtube', ...params })}`)
+    const { code, state, error } = req.query
+    if (error) return back({ youtube: 'iptal', neden: String(error) })
+    if (!code || !state || !consumeOAuthState(String(state), req.currentUser.id)) {
+      return back({ youtube: 'hata', neden: 'Oturum doğrulanamadı; bağlantıyı yeniden başlatın.' })
+    }
+    try {
+      const { title } = await connectChannel({ code: String(code), userId: req.currentUser.id })
+      back({ youtube: 'baglandi', kanal: title })
+    } catch (err) {
+      console.error('[youtube] kanal bağlanamadı:', err.message)
+      back({ youtube: 'hata', neden: err.message })
+    }
+  })
+)
 
 youtubeRouter.post('/api/youtube/channels/:id/sync', (req, res) => {
   const channelId = req.params.id
@@ -83,8 +87,11 @@ youtubeRouter.post('/api/youtube/channels/:id/sync', (req, res) => {
   res.status(202).json({ job, existing, statusUrl: `/api/jobs/${job.id}` })
 })
 
-youtubeRouter.delete('/api/youtube/channels/:id', async (req, res) => {
-  const ok = await disconnectChannel(req.params.id)
-  if (!ok) return res.status(404).json({ error: 'Kanal bağlı değil' })
-  res.json({ ok: true })
-})
+youtubeRouter.delete(
+  '/api/youtube/channels/:id',
+  upstream('youtube/disconnect', async (req, res) => {
+    const ok = await disconnectChannel(req.params.id)
+    if (!ok) return res.status(404).json({ error: 'Kanal bağlı değil' })
+    res.json({ ok: true })
+  })
+)

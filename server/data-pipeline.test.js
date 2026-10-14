@@ -59,9 +59,10 @@ vi.mock('./aggregate.js', async (orig) => {
   return { ...gercek, mergeProxyFallback: (c) => c, addLimitedCountries: (c) => c, attachPerCapitaScores: (c) => c }
 })
 
-const { getEnrichedVisibility, sameSupplement } = await import('./data-pipeline.js')
+const { getEnrichedVisibility, sameSupplement, dropVisibilityMemo } = await import('./data-pipeline.js')
 
 beforeEach(() => {
+  dropVisibilityMemo() // 60 sn görünürlük memo'su testler arasında taşınmasın
   siniflandirma.mockClear()
   tespit.mockClear()
   for (const k of Object.keys(temaDeposu)) delete temaDeposu[k]

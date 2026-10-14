@@ -12,6 +12,7 @@ Kullanım:
 """
 from __future__ import annotations
 
+import json
 import argparse
 import sqlite3
 import time
@@ -202,7 +203,11 @@ def main() -> None:
     ap.add_argument("--max-minutes", type=float, default=DEFAULT_MAX_MINUTES)
     ap.add_argument("--limit", type=int, default=None)
     a = ap.parse_args()
-    run(max_minutes=a.max_minutes, limit=a.limit)
+    result = run(max_minutes=a.max_minutes, limit=a.limit)
+    print("RESULT_JSON " + json.dumps(result, ensure_ascii=True, default=str), flush=True)
+    if isinstance(result, dict) and result.get("pages", 0) >= 10 and not result.get("found") and not result.get("not_found"):
+        log.error("FlixPatrol dizi sayfalari: %d sayfa cekildi, hicbiri ayristirilamadi", result["pages"])
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":

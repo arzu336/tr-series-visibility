@@ -8,22 +8,18 @@ import { IconBack, IconPrint } from '../Icons.jsx'
 // Ülke raporu görünümü: tek ortak rapor (profil yok), "PDF olarak indir".
 // Baskı: usePrintWhenReady yükleme göstergesi (.report__loading) kalmayınca window.print() çağırır;
 // hazırlanırken .report--printing sınıfı ekranda da açık baskı temasını gösterir (önizleme).
-/** Rapor yanıtı istenen döneme mi ait (güncel raporda period yok). */
-export const samePeriod = (a, b) => (a?.from ?? null) === (b?.from ?? null) && (a?.to ?? null) === (b?.to ?? null)
-
 // Kıta raporu da aynı görünümü kullanır (`continent` verilince); dönemsiz kıta raporu sunucuda son 12 aydır.
-export default function CountryReportView({ iso2, continent = null, countryName, onBack, period = null }) {
+export default function CountryReportView({ iso2, continent = null, countryName, onBack }) {
   const [attempt, setAttempt] = useState(0)
   const reportReq = useAsync(
-    () => (continent ? fetchContinentReport(continent, { period }) : fetchCountryReport(iso2, { period })),
-    [iso2, continent, period?.from, period?.to, attempt],
+    () => (continent ? fetchContinentReport(continent) : fetchCountryReport(iso2)),
+    [iso2, continent, attempt],
     { keepPrevious: true }
   )
   const { printAreaRef, printing, requestPrint } = usePrintWhenReady({ pendingSelector: '.report__loading' })
   const hazir =
     reportReq.status === 'ready' &&
-    (continent ? reportReq.data?.continent === continent : reportReq.data?.iso2 === iso2) &&
-    (continent && !period ? true : samePeriod(reportReq.data?.period, period))
+    (continent ? reportReq.data?.continent === continent : reportReq.data?.iso2 === iso2)
 
   return (
     <div className={`report${printing ? ' dashboard--printing report--printing' : ''}`} ref={printAreaRef}>

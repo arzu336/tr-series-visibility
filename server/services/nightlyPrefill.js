@@ -5,7 +5,6 @@ import { getSeriesPressCountries } from './newsScanTargets.js'
 import { scanSeriesAcrossCountries } from './autoNewsScheduler.js'
 import { getCountryRegionalInterest, regionalCandidates, readCountryRegionalInterest } from '../regional-interest.js'
 import { getSerpApiUsageThisMonth, refreshSerpApiAccountUsage } from './serpApiCache.js'
-import { backfillTrends, backfillPressArchive } from './historyBackfill.js'
 
 // Gece ön doldurma (2026-10-09, kullanıcı kararı: "kullanıcı tıklayınca ücretli sorgu yapılmasın, gece arka planda
 // önceden yapılsın"). Türkiye saatiyle 01:00–10:00 arasında günde bir kez:
@@ -163,20 +162,9 @@ export async function runNightlyPrefillIfNeeded({ now = new Date(), deps = {} } 
   const [{ data, raw }, rankings] = await Promise.all([getEnrichedVisibility(), getAllOwnRankings()])
   const press = await prefillPress({ raw, rankings, deadline, ...deps })
   const regional = await prefillRegional({ data, raw, rankings, deadline, ...deps })
-  // Yıllık raporlar için geçmiş: çok yıllık arama serileri (ücretli, sınırlı) ve GDELT arşivinden geçmiş basın.
-  const listedCount = new Map()
-  for (const own of rankings.values())
-    for (const e of own.all || [])
-      if (e.seriesId != null) listedCount.set(e.seriesId, (listedCount.get(e.seriesId) ?? 0) + 1)
-  const trends = await backfillTrends({ series: raw.series, listedCount, deadline, now }).catch((err) => ({
-    error: err.message,
-  }))
-  const archive = await backfillPressArchive({ series: raw.series, listedCount, deadline }).catch((err) => ({
-    error: err.message,
-  }))
   setMeta.run(META_DAY, day)
   console.log(
-    `[nightlyPrefill] basın: ${press.series} dizi / ${press.queries} sorgu · bölgesel: ${regional.countries} ülke / ${regional.queries} sorgu · arama geçmişi: ${trends.queries ?? 0} dizi · basın arşivi: ${archive.done ?? 0} (dizi×ülke×yıl)`
+    `[nightlyPrefill] basın: ${press.series} dizi / ${press.queries} sorgu · bölgesel: ${regional.countries} ülke / ${regional.queries} sorgu`
   )
-  return { press, regional, trends, archive }
+  return { press, regional }
 }

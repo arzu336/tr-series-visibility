@@ -1,6 +1,6 @@
 import crypto from 'node:crypto'
 import db from '../db.js'
-import { getCached } from '../cache.js'
+import { getRawSeriesDataCached } from '../data-pipeline.js'
 import { asciiVariant, foldTitle, getEnglishTitles } from './localTitles.js'
 
 // YouTube Analytics (2026-10-06): yayıncı kanalların (ATV, Show TV, Kanal D…) sahipleri platforma salt okunur
@@ -242,8 +242,9 @@ export function buildTitleMatcher(series, { englishTitlesOf = () => [] } = {}) {
   }
 }
 
-function catalogSeries() {
-  return getCached('raw-series-providers')?.series || []
+/** Katalog; önbellek dolmuşsa yenileyen yoldan (inceleme C3: boş katalogla eşleme yapılmasın). */
+async function catalogSeries() {
+  return (await getRawSeriesDataCached())?.series || []
 }
 
 // ---------------------------------------------------------------------------------------------- eşitleme
@@ -331,8 +332,9 @@ async function countryReport(accessToken, period, videoIds, fetchFn) {
  */
 export async function syncChannel(
   channelId,
-  { cfg = youtubeConfig(), fetchFn = fetch, now = new Date(), series = catalogSeries(), onProgress } = {}
+  { cfg = youtubeConfig(), fetchFn = fetch, now = new Date(), series = null, onProgress } = {}
 ) {
+  series ??= await catalogSeries()
   const ch = getChannelStmt.get(channelId)
   if (!ch) throw new Error('Kanal bağlı değil')
   const setStatus = db.prepare('UPDATE youtube_channels SET last_sync_at = ?, last_error = ? WHERE channel_id = ?')

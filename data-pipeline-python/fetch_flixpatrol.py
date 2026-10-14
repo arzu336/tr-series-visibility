@@ -26,6 +26,7 @@ import db
 from logsetup import get_logger
 
 log = get_logger(__name__)
+RESULT_MARKER = "RESULT_JSON "  # Node runner (sonOzetSatiri) bu satırı özet olarak alır
 
 BASE_DIR = Path(__file__).parent
 CACHE_DIR = BASE_DIR / "data"
@@ -140,7 +141,12 @@ def main() -> None:
             conn.close()
     else:
         result = run(limit=args.limit, force=args.force)
-    print(json.dumps(result, ensure_ascii=True))
+    print(RESULT_MARKER + json.dumps(result, ensure_ascii=True), flush=True)
+    # Sayfalar çekildi ama hiç satır ayrışmadıysa sayfa yapısı değişmiştir: sessizce "başarılı" sayılmasın
+    # (reytingtv sitemap hatası 1,5 ay fark edilmemişti — inceleme C5).
+    if result.get("status") == "ok" and result.get("pages", 0) >= 10 and result.get("chart_entries_written", 0) == 0:
+        log.error("FlixPatrol: %d sayfa cekildi, 0 satir ayristirildi - sayfa yapisi degismis olabilir", result["pages"])
+        raise SystemExit(3)
 
 
 if __name__ == "__main__":

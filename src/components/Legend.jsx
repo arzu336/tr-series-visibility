@@ -1,30 +1,11 @@
 import { WATCH_LEVELS, WATCH_LEVEL_COLORS, NO_SIGNAL_COLOR, provisionalColor } from '../lib/scale.js'
-import { WATCH_LEVEL_NOTE, MAP_SCALE_NOTE } from '../lib/methodologyNotes.js'
-
 // Sade lejant (2026-10-06): beş düzey tek renk çubuğu (düşük → yüksek), altında yalnızca "tahmini" ve "veri yok".
-// Ayrıntılar (yöntem, Türkiye'nin ölçek dışı olması, tahminin neye dayandığı) başlığın ipucunda.
-const DETAY = [
-  'Renk çubuğu soldan sağa: çok düşük, düşük, orta, yüksek, çok yüksek.',
-  'Taralı: ülkede yalnızca bir izlenme göstergesi var; renk ona dayalı tahmindir, sıralamaya girmez.',
-  "Koyu: izlenme ölçülemedi — 'izlenmiyor' demek değildir.",
-  'Türkiye (mor) kaynak ülkedir, ölçeğe dahil edilmez.',
-].join('\n')
+// Açıklama notları kullanıcı isteğiyle kaldırıldı (2026-10-14).
 
-export default function Legend({ caption }) {
-  if (caption) {
-    return (
-      <div className="legend">
-        <p className="legend__caption" title={caption}>
-          {caption.split(' — ')[0]} ⓘ
-        </p>
-      </div>
-    )
-  }
+export default function Legend() {
   return (
     <div className="legend">
-      <p className="legend__title" title={`${DETAY}\n\n${WATCH_LEVEL_NOTE}\n\n${MAP_SCALE_NOTE}`}>
-        İzlenme düzeyi ⓘ
-      </p>
+      <p className="legend__title">İzlenme düzeyi</p>
       <div className="legend__bar" role="img" aria-label={`İzlenme düzeyi renkleri: ${WATCH_LEVELS.join(', ')}`}>
         {WATCH_LEVELS.map((level) => (
           <span key={level} style={{ background: WATCH_LEVEL_COLORS[level] }} title={level} />

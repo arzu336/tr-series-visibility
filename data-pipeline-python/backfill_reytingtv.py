@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import datetime
+import requests
 import sqlite3
 from collections import defaultdict
 from pathlib import Path
@@ -121,6 +122,15 @@ def run(limit: int | None, days: int | None = None, db_path: Path = DB_PATH, nod
         log.info(f"{written} liste satırı (tam Top 10) ve {len(results)} eşleşen dizi satırı yazılıyor...")
         db.save_reytingtv_daily_ranks(conn, results, now.isoformat())
         gunler = sorted({e.period_date for e in entries})
+        # Son günlerde makale yoksa kaynak sessiz mi, yapı mı değişti? Site haritasındaki en yeni reyting
+        # makalesinin tarihi ayırt eder (2026-10-14: kaynak Eylül'den beri yalnızca 1 makale yayımladı).
+        latest_article = None
+        if days and not gunler:
+            try:
+                tarihler = [d for _, d in rtv.fetch_sitemap_article_urls(requests.Session()) if d]
+                latest_article = max(tarihler).isoformat() if tarihler else None
+            except Exception as err:  # noqa: BLE001
+                log.warning(f"site haritası en yeni makale tarihi okunamadı: {type(err).__name__}")
         db.set_pipeline_meta(conn, "reytingtv_synced_at", now.isoformat())
         if gunler:
             db.set_pipeline_meta(conn, "reytingtv_last_air_date", gunler[-1])
@@ -144,6 +154,7 @@ def run(limit: int | None, days: int | None = None, db_path: Path = DB_PATH, nod
             "last_air_date": gunler[-1] if gunler else None,
             "program_kinds": kinds,
             "matched_series_rows": len(results),
+            "latest_article_date": latest_article,
         }
     finally:
         conn.close()
@@ -161,6 +172,13 @@ if __name__ == "__main__":
     print(RESULT_MARKER + json.dumps(sonuc, ensure_ascii=False, default=str), flush=True)
     # Son günler istendi ama hiç gün bulunamadı: başarı sayılmaz (2026-10-09 — site haritası değişikliği 1,5 ay
     # boyunca "başarılı" görünerek fark edilmedi). Zamanlayıcı hata olarak kaydeder, yönetim ekranında görünür.
+    # Kaynak son haftalarda hiç makale yayımlamamış olabilir (sessizlik); yapı değişikliği ancak site haritasındaki
+    # en yeni reyting makalesi de QUIET_MAX_DAYS'den eskiyse (ya da hiç bulunamıyorsa) varsayılır.
+    QUIET_MAX_DAYS = 45
     if args.days and args.days >= 3 and not sonuc.get("days"):
-        log.error(f"son {args.days} günde hiç reyting makalesi bulunamadı — site yapısı değişmiş olabilir")
+        latest = sonuc.get("latest_article_date")
+        if latest and (datetime.date.today() - datetime.date.fromisoformat(latest)).days <= QUIET_MAX_DAYS:
+            log.info(f"son {args.days} günde yeni reyting makalesi yok; kaynağın en yeni makalesi {latest} (kaynak sessiz)")
+            raise SystemExit(0)
+        log.error(f"son {args.days} günde hiç reyting makalesi bulunamadı — site yapısı değişmiş olabilir (en yeni: {latest})")
         raise SystemExit(3)

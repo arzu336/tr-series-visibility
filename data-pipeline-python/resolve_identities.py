@@ -8,6 +8,7 @@ TMDB /tv/{id}/external_ids ucundan sert kimlikleri çeker ve IdentityResolver'a 
 """
 from __future__ import annotations
 
+from logsetup import safe_exc
 import json
 import os
 import sqlite3
@@ -63,7 +64,7 @@ def fetch_external_ids(tmdb_id: int) -> dict:
         r.raise_for_status()
         return r.json()
     except Exception as err:  # noqa: BLE001
-        return {"_error": str(err)}
+        return {"_error": safe_exc(err)}
 
 
 def main() -> int:

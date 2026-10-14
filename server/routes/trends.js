@@ -27,6 +27,7 @@ import { getSeriesTrendInsight } from '../services/seriesTrendInsight.js'
 import { getTrendMovements } from '../services/trendMovements.js'
 import { enrichSeriesNewsNow } from '../services/autoNewsScheduler.js'
 import { enrichSeriesSocialNow } from '../services/socialEnricher.js'
+import { buildComparison } from '../services/compare.js'
 import { getMagazineNews, getArticlePreview, isTrustedSource } from '../services/magazineNews.js'
 import { getCached, setCached } from '../cache.js'
 import { getFullCast } from '../tmdb.js'
@@ -52,8 +53,10 @@ function parseTitles(query) {
     .filter(Boolean)
 }
 
-function liveSeriesOr404(res, seriesId) {
-  const rawSeries = getCached('raw-series-providers')
+// Katalog önbelleği dolduğunda (24 sa) doğrudan getCached null dönüyordu ve dizi uçları 404 veriyordu (inceleme C3);
+// yenileyen yol kullanılır.
+async function liveSeriesOr404(res, seriesId) {
+  const rawSeries = await getRawSeriesDataCached()
   const series = rawSeries?.series?.find((s) => s.id === seriesId)
   if (!series) {
     res.status(404).json({ error: `${seriesId} kimlikli dizi için canlı veri bulunamadı` })
@@ -182,7 +185,7 @@ trendsRouter.post(
   requireAdmin,
   upstream('series/enrich-now', async (req, res) => {
     const seriesId = Number(req.params.id)
-    const series = liveSeriesOr404(res, seriesId)
+    const series = await liveSeriesOr404(res, seriesId)
     if (!series) return
     const { topCountries } = await getEnrichmentTargets()
 
@@ -217,9 +220,9 @@ trendsRouter.get('/api/series/:id/enrich-job', (req, res) => {
 // Dizi raporu açıldı ama basın taraması yok/az: tıklamada ücretli sorgu yapılmaz (2026-10-09), dizi bu geceki ön
 // doldurma sırasının başına alınır (nightlyPrefill.js).
 const PRESS_MIN_SCANNED = 3
-trendsRouter.post('/api/series/:id/press-queue', (req, res) => {
+trendsRouter.post('/api/series/:id/press-queue', async (req, res) => {
   const seriesId = Number(req.params.id)
-  const series = liveSeriesOr404(res, seriesId)
+  const series = await liveSeriesOr404(res, seriesId)
   if (!series) return
   if (getMediaSentimentForSeries(seriesId).scannedCount >= PRESS_MIN_SCANNED) return res.json({ queued: false })
   queuePress(seriesId)
@@ -291,7 +294,7 @@ trendsRouter.get(
   '/api/media-sentiment/:seriesId/:iso2',
   upstream('media-sentiment', async (req, res) => {
     const seriesId = Number(req.params.seriesId)
-    const series = liveSeriesOr404(res, seriesId)
+    const series = await liveSeriesOr404(res, seriesId)
     if (!series) return
     if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
     const iso2 = normalizeIso2(req.params.iso2)
@@ -308,9 +311,9 @@ trendsRouter.get(
 
 trendsRouter.get(
   '/api/series/:tmdbId',
-  upstream('series', (req, res) => {
+  upstream('series', async (req, res) => {
     const seriesId = Number(req.params.tmdbId)
-    const series = liveSeriesOr404(res, seriesId)
+    const series = await liveSeriesOr404(res, seriesId)
     if (!series) return
     const themeEntry = getThemeStore()[String(seriesId)]
     const enrichment = getSeriesEnrichment(seriesId)
@@ -332,7 +335,7 @@ const SERIES_CAST_TTL_MS = 7 * 24 * 60 * 60 * 1000
 trendsRouter.get(
   '/api/series/:tmdbId/cast',
   upstream('series-cast', async (req, res) => {
-    const series = liveSeriesOr404(res, Number(req.params.tmdbId))
+    const series = await liveSeriesOr404(res, Number(req.params.tmdbId))
     if (!series) return
     const key = `series-cast:v1:${series.id}`
     let data = getCached(key)
@@ -348,7 +351,7 @@ trendsRouter.get(
 trendsRouter.get(
   '/api/series/:tmdbId/magazine',
   upstream('series-magazine', async (req, res) => {
-    const series = liveSeriesOr404(res, Number(req.params.tmdbId))
+    const series = await liveSeriesOr404(res, Number(req.params.tmdbId))
     if (!series) return
     res.json(await getMagazineNews(series))
   })
@@ -369,5 +372,18 @@ trendsRouter.get(
   upstream('country-leaderboard', async (req, res) => {
     if (!isValidIso2(req.params.iso2)) return res.status(400).json({ error: 'Geçersiz ülke kodu' })
     res.json(await calculateCountryCompositeScore(normalizeIso2(req.params.iso2)))
+  })
+)
+
+// Kıyaslama: seçilen dizilerin kayıtlı göstergeleri yan yana (ücretli sorgu yok). ?ids=1,2,3
+trendsRouter.get(
+  '/api/compare',
+  upstream('compare', async (req, res) => {
+    const ids = String(req.query.ids || '')
+      .split(',')
+      .map((x) => Number(x.trim()))
+      .filter((n) => Number.isInteger(n) && n > 0)
+    if (ids.length < 2) return res.status(400).json({ error: 'En az iki dizi kimliği gerekir' })
+    res.json(await buildComparison(ids))
   })
 )

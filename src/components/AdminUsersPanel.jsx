@@ -1,7 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import YoutubeConnections from './YoutubeConnections.jsx'
-import { TvAdmin } from './TvSections.jsx'
-import JobsStatus from './JobsStatus.jsx'
+import AnalystDashboard from './AnalystDashboard.jsx'
 import { fetchAdminUsers, approveUser, rejectUser, setAccessLevel, resetUserPassword, deleteUser } from '../lib/api.js'
 
 function formatDate(iso) {
@@ -14,7 +12,7 @@ const ACCESS_LEVEL_LABELS = {
   admin: 'Yönetici',
 }
 
-export default function AdminUsersPanel({ currentUserId, youtubeNotice = null }) {
+export default function AdminUsersPanel({ currentUserId, onShowSeriesOnMap }) {
   const [items, setItems] = useState([])
   const [status, setStatus] = useState('loading')
   const [error, setError] = useState(null)
@@ -241,11 +239,8 @@ export default function AdminUsersPanel({ currentUserId, youtubeNotice = null })
         )}
       </section>
 
-      <JobsStatus />
-
-      <YoutubeConnections notice={youtubeNotice} />
-
-      <TvAdmin />
+      {/* Etiket düzeltmeleri (eski "Analist Paneli", 2026-10-14'te Yönetim'e taşındı). */}
+      <AnalystDashboard canEdit onViewSeriesOnMap={onShowSeriesOnMap} />
     </div>
   )
 }

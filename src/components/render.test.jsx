@@ -5,7 +5,6 @@ import CountryLeaderboard from './CountryLeaderboard.jsx'
 import { HybridScoreTag } from './MediaSentimentCard.jsx'
 import SeriesPage, { seriesFromCountries } from './SeriesPage.jsx'
 import Flag from './Flag.jsx'
-import TrendsExplorer from './TrendsExplorer.jsx'
 import { SearchInterestSection } from './SeriesSearchInterest.jsx'
 import CountryPanel, { WatchLists } from './CountryPanel.jsx'
 import ChartList from './ChartList.jsx'
@@ -830,13 +829,11 @@ describe('MagazineCarousel (dizilah düzeni)', () => {
   })
 })
 
-describe('Arama İlgisi ve dizi sayfası birleşik (2026-10-06)', () => {
-  it('Arama İlgisi sekmesinde tekli analiz dizi sayfasını açar; eski analiz ekranı ve dönüş düğmesi yok', () => {
-    const html = renderToString(<TrendsExplorer onOpenSeries={() => {}} />)
-    expect(html).toContain('Dizi sayfasını aç')
-    expect(html).toContain('Kıyaslama Modu')
-    expect(html).not.toContain('series-page__back')
-    expect(html).not.toContain('Sorgula<')
+describe('Kıyaslama Raporlar altında (2026-10-14)', () => {
+  it('ReportsHub kıyaslama sekmesi karşılaştırma ekranını basar', () => {
+    const html = renderToString(<ReportsHub isAdmin={false} tab="kiyas" onChange={() => {}} />)
+    expect(html).toContain('Karşılaştır')
+    expect(html).not.toContain('Hızlı ekle')
   })
 
   const si = (over) => ({

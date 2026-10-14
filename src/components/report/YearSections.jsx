@@ -1,23 +1,12 @@
 import countryNames from '../../data/country-centroids.json'
 import Flag from '../Flag.jsx'
-import SeriesTrendChart from '../SeriesTrendChart.jsx'
 import { fmtNum } from './format.js'
 
-// Yıllık rapor bölümleri (sözleşme yillik-rapor-v1; server/services/yearReport.js). Yalnızca sunucunun `data`sını basar.
+// Kıta raporu ve ülke brifinginin TV bölümü (server/services/yearReport.js). Yalnızca sunucunun `data`sını basar.
 
 const nameOf = (iso2) => countryNames[iso2]?.name || iso2
 const AYLAR = ['Oca', 'Şub', 'Mar', 'Nis', 'May', 'Haz', 'Tem', 'Ağu', 'Eyl', 'Eki', 'Kas', 'Ara']
 const ayAdi = (m) => AYLAR[(typeof m === 'string' ? Number(m.slice(5, 7)) : m) - 1] ?? m
-const PLATFORM = {
-  netflix: 'Netflix',
-  disney: 'Disney+',
-  'amazon-prime': 'Prime Video',
-  'hbo-max': 'HBO Max',
-  'apple-tv': 'Apple TV+',
-  shahid: 'Shahid',
-  starz: 'STARZPLAY',
-  vidio: 'Vidio',
-}
 
 function Flags({ list }) {
   return (
@@ -50,39 +39,6 @@ function MonthBars({ rows, valueKey, unit }) {
         </div>
       ))}
     </div>
-  )
-}
-
-export function YearListsSection({ data }) {
-  return (
-    <>
-      <table className="dashboard__table dashboard__table--compact report__table">
-        <thead>
-          <tr>
-            <th scope="col">Dizi</th>
-            <th scope="col">Listede</th>
-            <th scope="col">En iyi sıra</th>
-            <th scope="col">Platformlar</th>
-          </tr>
-        </thead>
-        <tbody>
-          {data.top.map((r) => (
-            <tr key={r.seriesId}>
-              <td>{r.name}</td>
-              <td>{r.weeks} hafta</td>
-              <td>{r.bestRank}.</td>
-              <td>{r.platforms.map((p) => PLATFORM[p] ?? p).join(', ')}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {data.monthly.length > 1 && (
-        <>
-          <p className="report__caption">Ay ay listelere giren farklı dizi sayısı</p>
-          <MonthBars rows={data.monthly} valueKey="series" unit="dizi" />
-        </>
-      )}
-    </>
   )
 }
 
@@ -152,20 +108,6 @@ export function YearReadingSection({ data }) {
   )
 }
 
-export function YearWatchSection({ data }) {
-  return (
-    <dl className="report__kpis">
-      <div className="report__kpi">
-        <dt>Ortalama izlenme düzeyi</dt>
-        <dd>{data.level}</dd>
-        <small>
-          endeks {data.avgIndex} · {data.days} günlük kayıt
-        </small>
-      </div>
-    </dl>
-  )
-}
-
 export function YearPressSection({ data }) {
   return (
     <>
@@ -221,37 +163,6 @@ export function YearStudentsSection({ data }) {
   )
 }
 
-export function YearMarketsSection({ data }) {
-  return (
-    <table className="dashboard__table dashboard__table--compact report__table">
-      <thead>
-        <tr>
-          <th scope="col">Ülke</th>
-          <th scope="col">Listede</th>
-          <th scope="col">En iyi sıra</th>
-        </tr>
-      </thead>
-      <tbody>
-        {data.rows.slice(0, 25).map((r) => (
-          <tr key={r.iso2}>
-            <td>
-              <span className="report__country">
-                <Flag iso2={r.iso2} /> {nameOf(r.iso2)}
-              </span>
-            </td>
-            <td>{r.weeks} hafta</td>
-            <td>{r.bestRank}.</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-export function YearSearchSection({ data }) {
-  return <SeriesTrendChart timeline={data.timeline} />
-}
-
 export function ContinentSeriesSection({ data }) {
   return (
     <>
@@ -280,9 +191,6 @@ export function ContinentSeriesSection({ data }) {
           ))}
         </tbody>
       </table>
-      <p className="report__caption">
-        Sıralama: platform listelerinde kalınan toplam ülke-hafta (izlenme sayıları yayımlanmıyor).
-      </p>
       {data.monthly.length > 1 && (
         <>
           <p className="report__caption">Ay ay listelere giren farklı dizi sayısı</p>
@@ -330,13 +238,10 @@ export function ContinentCountriesSection({ data }) {
 export const YEAR_SECTION_COMPONENTS = {
   contSeries: ContinentSeriesSection,
   contCountries: ContinentCountriesSection,
-  yearLists: YearListsSection,
   yearTv: YearTvSection,
+  tvAirings: YearTvSection,
   yearReading: YearReadingSection,
-  yearWatch: YearWatchSection,
   yearPress: YearPressSection,
   yearTourism: YearTourismSection,
   yearStudents: YearStudentsSection,
-  yearMarkets: YearMarketsSection,
-  yearSearch: YearSearchSection,
 }

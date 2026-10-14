@@ -15,12 +15,13 @@ export const BRIEFING_CHAPTERS = [
   { key: 'izleniyor', title: 'Ne izleniyor', sections: ['platformLists', 'topSeries'] },
   { key: 'ilgi', title: 'Ne kadar ilgi var', sections: ['wikiInterest', 'searchTrend'] },
   { key: 'gundem', title: 'Nasıl konuşuluyor', sections: ['pressTone'] },
-  { key: 'erisim', title: 'Nerede erişilebilir', sections: ['trend', 'themes', 'gapAnalysis'] },
+  { key: 'erisim', title: 'Nerede erişilebilir', sections: ['trend', 'themes'] },
   { key: 'etki', title: 'Etkisi', sections: ['tourismSignal', 'foreignStudents'] },
 ]
 
 export const BRIEFING_SECTION_TITLES = {
   platformLists: 'Türk dizileri sıralaması',
+  tvAirings: 'Televizyonda yayınlanan diziler (son 30 gün)',
   topSeries: 'Öne çıkan diziler',
   wikiInterest: 'Okunma ilgisi',
   searchTrend: 'Arama ilgisi (son 12 ay)',

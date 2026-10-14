@@ -64,6 +64,8 @@ export default function Globe3D({
       .polygonsTransitionDuration(300)
       .onPolygonHover((f) => {
         hoveredRef.current = f
+        // globe.gl renk erişimcilerini imleçte yeniden değerlendirmez; aynı erişimci yeniden verilerek tetiklenir.
+        world.polygonCapColor(world.polygonCapColor()).polygonStrokeColor(world.polygonStrokeColor())
       })
       .onGlobeClick(() => popupRef.current?.onClose?.())
 

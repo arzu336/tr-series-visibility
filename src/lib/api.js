@@ -164,20 +164,38 @@ export async function importSalesCsv(body) {
   return handle(await postJson('/api/admin/tv/sales', body))
 }
 
-export async function fetchJob(jobId) {
-  return handle(await fetch(`/api/jobs/${encodeURIComponent(jobId)}`))
+export async function fetchJob(jobId, { signal } = {}) {
+  return handle(await fetch(`/api/jobs/${encodeURIComponent(jobId)}`, { signal }))
 }
 
-/** İş bitene kadar (done/failed) yoklar; her yoklamada onProgress(job) çağrılır. */
+/**
+ * İş bitene kadar (done/failed) yoklar; her yoklamada onProgress(job) çağrılır. `signal` iptal edince bekleyen
+ * istek ve uyku anında kesilir (bileşen kapanınca yoklama sürmesin — inceleme C8).
+ */
 export async function waitForJob(jobId, { intervalMs = 4000, onProgress, signal } = {}) {
   for (;;) {
-    if (signal?.aborted) throw new Error('İzleme iptal edildi')
-    const job = await fetchJob(jobId)
+    signal?.throwIfAborted()
+    const job = await fetchJob(jobId, { signal })
     onProgress?.(job)
     if (job.status === 'done') return job.result
     if (job.status === 'failed') throw new Error(job.error || 'İş başarısız oldu')
-    await new Promise((r) => setTimeout(r, intervalMs))
+    await new Promise((resolve, reject) => {
+      const t = setTimeout(resolve, intervalMs)
+      signal?.addEventListener(
+        'abort',
+        () => {
+          clearTimeout(t)
+          reject(signal.reason ?? new Error('İzleme iptal edildi'))
+        },
+        { once: true }
+      )
+    })
   }
+}
+
+/** Kıyaslama: kayıtlı göstergeler yan yana. */
+export async function fetchComparison(ids) {
+  return handle(await fetch(`/api/compare?ids=${ids.map(encodeURIComponent).join(',')}`))
 }
 
 export async function fetchImdbData(tmdbSeriesId) {
@@ -371,23 +389,18 @@ export async function fetchGlobalReport({ fresh = false } = {}) {
   return handle(await fetch(`/api/report/global${fresh ? '?fresh=1' : ''}`))
 }
 
-function reportQuery({ fresh = false, period = null } = {}) {
+function reportQuery({ fresh = false } = {}) {
   const q = new URLSearchParams()
   if (fresh) q.set('fresh', '1')
-  if (period) {
-    q.set('from', period.from)
-    q.set('to', period.to)
-  }
   const s = q.toString()
   return s ? `?${s}` : ''
 }
 
-/** `period` { from: 'YYYY-MM', to: 'YYYY-MM' }: dönem raporu (yalnızca o dönemin kayıtlı verisi); yoksa güncel rapor. */
 export async function fetchSeriesReport(seriesId, opts = {}) {
   return handle(await fetch(`/api/report/series/${encodeURIComponent(seriesId)}${reportQuery(opts)}`))
 }
 
-/** Kıta raporu; `period` yoksa son 12 ay. */
+/** Kıta raporu (son 12 ay). */
 export async function fetchContinentReport(id, opts = {}) {
   return handle(await fetch(`/api/report/continent/${encodeURIComponent(id)}${reportQuery(opts)}`))
 }

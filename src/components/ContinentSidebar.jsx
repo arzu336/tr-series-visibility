@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { CONTINENTS, groupByContinent, resolveIso2FromLabel } from '../lib/continents.js'
+import continentByIso2 from '../data/continents.json'
 import { fetchTurkishLearningIndex, fetchDuolingoStats, fetchTourismSummary, fetchContinentCharts } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
 import countryNames from '../data/country-centroids.json'
@@ -38,9 +39,9 @@ function ExportTourismStats({ tourismItems, continentCountries }) {
 
   return (
     <div className="sidebar__stat">
-      <div className="sidebar__stat-label" title="Resmî turist giriş istatistiklerinden otomatik.">
+      <div className="sidebar__stat-label">
         <IconLuggage size={13} inline />
-        Turizm Rakamları ⓘ
+        Turizm Rakamları
       </div>
       {matched.length === 0 ? (
         <p className="sidebar__stat-note">{EMPTY.continentNoTourism}</p>
@@ -91,8 +92,70 @@ function LevelBar({ levels, total }) {
   )
 }
 
+const POSTER_BASE = 'https://image.tmdb.org/t/p/w185'
+
+/**
+ * Haritada bir dizi vurgulanınca (etiketlerden ya da dizi raporundan "Haritada gör") kıta istatistikleri yerine dizi
+ * kartı: ad, afiş, kıtalara göre yayında olduğu ülkeler (2026-10-14).
+ */
+function SeriesHighlightCard({ highlight, onSelectCountry, onSelectSeries, onClear }) {
+  const s = highlight.series
+  const groups = new Map(CONTINENTS.map((c) => [c.id, []]))
+  for (const [iso2, info] of highlight.byIso2) {
+    const cid = continentByIso2[iso2]
+    if (cid && groups.has(cid)) groups.get(cid).push({ iso2, weeks: info?.weeks ?? null })
+  }
+  const present = CONTINENTS.map((c) => ({ ...c, items: groups.get(c.id) })).filter((c) => c.items.length)
+  const total = highlight.byIso2.size
+  return (
+    <div className="sidebar__body">
+      <div className="sidebar__big-card sidebar__series-card">
+        {s?.posterPath && <img className="sidebar__series-poster" src={`${POSTER_BASE}${s.posterPath}`} alt="" />}
+        <div>
+          <div className="sidebar__big-card-label">Haritada gösterilen dizi</div>
+          <button
+            type="button"
+            className="sidebar__big-card-value sidebar__big-card-value--link"
+            onClick={() => s?.id != null && onSelectSeries?.(s.id)}
+            disabled={s?.id == null}
+          >
+            {highlight.label}
+          </button>
+          <div className="sidebar__big-card-meta">
+            {total} ülkede yayında · {present.length} kıta
+          </div>
+        </div>
+      </div>
+      {present.map((c) => (
+        <div key={c.id} className="sidebar__stat">
+          <div className="sidebar__stat-label">
+            {c.name} · {c.items.length} ülke
+          </div>
+          <ul className="sidebar__country-chips">
+            {c.items
+              .sort((a, b) => nameOf(a.iso2).localeCompare(nameOf(b.iso2), 'tr'))
+              .map((it) => (
+                <li key={it.iso2}>
+                  <button type="button" className="ts-scope__chip" onClick={() => onSelectCountry?.(it.iso2)}>
+                    {nameOf(it.iso2)}
+                    {it.weeks ? ` · ${it.weeks} hafta` : ''}
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </div>
+      ))}
+      <button type="button" className="sidebar__details-toggle" onClick={onClear}>
+        Kıta istatistiklerine dön
+      </button>
+    </div>
+  )
+}
+
 export default function ContinentSidebar({
   countries,
+  highlight = null,
+  onClearHighlight,
   onSelectCountry,
   onSelectSeries,
   onFocusContinent,
@@ -174,7 +237,14 @@ export default function ContinentSidebar({
           ))}
         </nav>
 
-        {selected && selected.countryCount > 0 ? (
+        {highlight?.kind === 'series' ? (
+          <SeriesHighlightCard
+            highlight={highlight}
+            onSelectCountry={onSelectCountry}
+            onSelectSeries={onSelectSeries}
+            onClear={onClearHighlight}
+          />
+        ) : selected && selected.countryCount > 0 ? (
           <div className="sidebar__body">
             {/* Kıta Lideri — izlenme düzeyi */}
             <button

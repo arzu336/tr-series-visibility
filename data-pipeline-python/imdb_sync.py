@@ -45,7 +45,7 @@ from dotenv import load_dotenv
 import db
 import imdb_dataset
 import reytingtv_ranker as rtv
-from logsetup import get_logger
+from logsetup import get_logger, safe_exc
 
 log = get_logger(__name__)
 
@@ -111,7 +111,7 @@ def resolve_tconsts(conn: sqlite3.Connection, tmdb_ids: list[int], fetch_externa
         try:
             tconst = valid_tconst((fetch_external_ids(tid) or {}).get("imdb_id"))
         except requests.RequestException as exc:
-            log.warning(f"TMDB external_ids başarısız ({tid}): {exc}")
+            log.warning(f"TMDB external_ids başarısız ({tid}): {safe_exc(exc)}")
             failed += 1
             continue
         conn.execute(
@@ -270,7 +270,7 @@ def localize_crew_names(conn: sqlite3.Connection, fetch_crew, search_person=None
         try:
             people = fetch_crew(tid) or []
         except requests.RequestException as exc:
-            log.warning(f"TMDB ekip listesi alınamadı ({tid}): {exc}")
+            log.warning(f"TMDB ekip listesi alınamadı ({tid}): {safe_exc(exc)}")
             failed += 1
             continue
         for p in people:
@@ -295,7 +295,7 @@ def localize_crew_names(conn: sqlite3.Connection, fetch_crew, search_person=None
                         if n and fold_name(n) == key and _non_ascii(n) > _non_ascii(better or name):
                             better = n
                 except requests.RequestException as exc:
-                    log.warning(f"TMDB kişi araması başarısız ({name}): {exc}")
+                    log.warning(f"TMDB kişi araması başarısız ({name}): {safe_exc(exc)}")
             if better and better != name and _non_ascii(better) > _non_ascii(name):
                 changed += conn.execute("UPDATE imdb_crew SET name = ? WHERE nconst = ?", (better, nconst)).rowcount
     return {"series": len(tmdb_ids), "renamed_rows": changed, "searched": searched, "failed": failed}

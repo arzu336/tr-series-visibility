@@ -191,7 +191,7 @@ function hicNaNYok(obj) {
 }
 
 describe('buildCountryReport — sözleşme', () => {
-  it('her zaman 13 bölümün hepsini içerir; her bölümde başlık ve metodoloji notu var', async () => {
+  it('her zaman bütün bölümleri içerir; her bölümde başlık ve metodoloji notu var', async () => {
     const r = await buildCountryReport('DE', { deps: deps() })
     expect(Object.keys(r.sections).sort()).toEqual([...SECTION_KEYS].sort())
     for (const s of Object.values(r.sections)) {

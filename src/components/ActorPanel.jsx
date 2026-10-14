@@ -73,7 +73,7 @@ export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlob
                   key={s.id}
                   className="panel__series-item"
                   onClick={() => onSelectSeriesGlobal?.(s.id)}
-                  title="Bu dizinin kadrosunu ve gerçekten yayınlandığı ülkeleri gör"
+                  title="Kadro ve yayında olduğu ülkeler"
                 >
                   <div className="panel__series-row">
                     {s.posterPath ? (

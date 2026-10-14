@@ -8,22 +8,20 @@ import ContinentSidebar from './components/ContinentSidebar.jsx'
 import MapViewToggle from './components/MapViewToggle.jsx'
 
 import ErrorBoundary from './components/ErrorBoundary.jsx'
+import { seriesFromCountries } from './components/SeriesPage.jsx'
 import { useAsync } from './lib/useAsync.js'
 import { useAuth } from './lib/useAuth.js'
 import { usePersistedState, boolStorage } from './lib/usePersistedState.js'
 
 const Globe3D = lazy(() => import('./components/Globe3D.jsx'))
 const Map2D = lazy(() => import('./components/Map2D.jsx'))
-const AnalystDashboard = lazy(() => import('./components/AnalystDashboard.jsx'))
-const TrendsExplorer = lazy(() => import('./components/TrendsExplorer.jsx'))
 const ReportsHub = lazy(() => import('./components/report/ReportsHub.jsx'))
 const AdminUsersPanel = lazy(() => import('./components/AdminUsersPanel.jsx'))
 const PENDING_APPROVALS_POLL_MS = 60000
 const MAP_VIEW_STORAGE_KEY = 'gp_map_view'
-import { fetchVisibility, logout, fetchAdminUsers, fetchImdbData } from './lib/api.js'
+import { fetchVisibility, logout, fetchAdminUsers, fetchImdbData, fetchSeriesMeta } from './lib/api.js'
 import { continentCentroid } from './lib/continents.js'
 import countryNames from './data/country-centroids.json'
-import { readYoutubeNotice } from './components/YoutubeConnections.jsx'
 const SIDEBAR_COLLAPSED_KEY = 'gp_sidebar_collapsed'
 const PANEL_COLLAPSED_KEY = 'gp_panel_collapsed'
 
@@ -61,7 +59,6 @@ export default function App() {
     seriesIdFromUrl() != null ? 'reports' : new URLSearchParams(window.location.search).has('yonetim') ? 'admin' : 'map'
   )
   // YouTube onay ekranından dönüş (?yonetim=youtube&youtube=…): bildirim yönetim ekranında gösterilir, adres temizlenir.
-  const [youtubeNotice] = useState(() => readYoutubeNotice())
   useEffect(() => {
     if (new URLSearchParams(window.location.search).has('yonetim')) {
       window.history.replaceState(null, '', window.location.pathname)
@@ -96,7 +93,7 @@ export default function App() {
   }, [showProfileMenu])
 
   useEffect(() => {
-    const YONETICI_GORUNUMLERI = ['dashboard', 'admin']
+    const YONETICI_GORUNUMLERI = ['admin']
     if (!user?.isAdmin && YONETICI_GORUNUMLERI.includes(view)) setView('map')
   }, [user?.isAdmin, view])
 
@@ -271,13 +268,35 @@ export default function App() {
     setSeriesFilter(null)
   }, [])
 
-  const handleShowSeriesAvailability = useCallback((seriesName, countryEntries) => {
+  const handleShowSeriesAvailability = useCallback((seriesName, countryEntries, series = null) => {
     // Vurgu bilgisi: { weeks } (Netflix Top 10 hafta sayısı; liste kaydı yoksa null → "yayında")
     const byIso2 = new Map((countryEntries || []).map((c) => [c.iso2, { weeks: c.weeks ?? null }]))
-    setHighlightFilter({ kind: 'series', label: seriesName, byIso2 })
+    setHighlightFilter({ kind: 'series', label: seriesName, byIso2, series })
     setActorHighlight(null)
     setSeriesFilter(null)
   }, [])
+
+  // Etiket düzeltmelerindeki "Haritada gör" (2026-10-14): dizi raporuna uğramadan haritaya; yayında olduğu ülkeler
+  // işaretlenir, sağ çubukta dizi kartı (hangi kıta, hangi ülkeler) açılır.
+  const handleShowSeriesOnMapById = useCallback(
+    async (seriesId) => {
+      // Hiçbir ülkede yayında olmayan dizi (eski TV dizileri) harita verisinde yoktur: katalog kaydı ayrıca alınır.
+      let s = seriesFromCountries(countries, seriesId)
+      if (!s) {
+        const meta = await fetchSeriesMeta(seriesId).catch(() => null)
+        if (!meta) return
+        s = { ...meta, availability: [] }
+      }
+      handleShowSeriesAvailability(
+        s.name,
+        s.availability.map((c) => ({ iso2: c.iso2, weeks: null })),
+        { id: s.id, name: s.name, posterPath: s.posterPath ?? null, overview: s.overview ?? null }
+      )
+      setSidebarCollapsed(false)
+      handleBackToMap()
+    },
+    [countries, handleShowSeriesAvailability, handleBackToMap, setSidebarCollapsed]
+  )
 
   // Dizi sayfasındaki "İlgiyi haritada göster": haritayı dizinin ülkelere göre arama ilgisiyle boyar.
   const handleShowInterestFromPage = useCallback(
@@ -293,11 +312,17 @@ export default function App() {
   // Dizi sayfasındaki "Haritada göster": listeye girdiği ülkeleri işaretleyip haritaya döner.
   const handleShowSeriesFromPage = useCallback(
     (seriesName, countryEntries) => {
-      handleShowSeriesAvailability(seriesName, countryEntries)
+      const s = seriesFromCountries(countries, reports.seriesId)
+      handleShowSeriesAvailability(
+        seriesName,
+        countryEntries,
+        s ? { id: s.id, name: s.name, posterPath: s.posterPath ?? null, overview: s.overview ?? null } : null
+      )
+      setSidebarCollapsed(false)
       setHighlightFilter((f) => (f ? { ...f, fromSeriesId: reports.seriesId } : f))
       handleBackToMap()
     },
-    [handleShowSeriesAvailability, handleBackToMap, reports.seriesId]
+    [handleShowSeriesAvailability, handleBackToMap, reports.seriesId, countries, setSidebarCollapsed]
   )
 
   // Haritadaki filtre şeridinden, filtreyi açan dizi sayfasına geri dönüş (2026-10-07).
@@ -371,20 +396,6 @@ export default function App() {
             >
               Harita
             </button>
-            {user?.isAdmin && (
-              <button
-                className={view === 'dashboard' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
-                onClick={() => setView('dashboard')}
-              >
-                Analist Paneli
-              </button>
-            )}
-            <button
-              className={view === 'trends' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
-              onClick={() => setView('trends')}
-            >
-              Arama İlgisi
-            </button>
             <button
               className={view === 'reports' ? 'app__nav-btn app__nav-btn--active' : 'app__nav-btn'}
               onClick={() => {
@@ -444,12 +455,6 @@ export default function App() {
       <main className="app__main">
         <ErrorBoundary name="görünüm" resetKey={view}>
           <Suspense fallback={<div className="status">Yükleniyor…</div>}>
-            {view === 'dashboard' && user?.isAdmin && (
-              <AnalystDashboard canEdit={Boolean(user?.isAdmin)} onViewSeriesOnMap={handleOpenSeriesPage} />
-            )}
-            {view === 'trends' && (
-              <TrendsExplorer onOpenSeries={(id) => handleOpenSeriesPage(id, 'trends')} countries={countries} />
-            )}
             {view === 'reports' && (
               <ReportsHub
                 isAdmin={Boolean(user?.isAdmin)}
@@ -460,8 +465,7 @@ export default function App() {
                 continent={reports.continent ?? null}
                 onChange={(next) => setReports((r) => ({ ...r, ...next }))}
                 onBack={reports.tab === 'dizi' && seriesReturn ? handleBackFromSeries : null}
-                backLabel={seriesReturn === 'trends' ? 'Arama İlgisi’ne dön' : 'Haritaya dön'}
-                period={reports.period ?? null}
+                backLabel="Haritaya dön"
                 seriesActions={{
                   onShowOnMap: handleShowSeriesFromPage,
                   onSelectActor: handleSelectActorFromSeriesPage,
@@ -470,7 +474,7 @@ export default function App() {
               />
             )}
             {view === 'admin' && user?.isAdmin && (
-              <AdminUsersPanel currentUserId={user.id} youtubeNotice={youtubeNotice} />
+              <AdminUsersPanel currentUserId={user.id} onShowSeriesOnMap={handleShowSeriesOnMapById} />
             )}
             {view === 'map' && (
               <>
@@ -480,6 +484,8 @@ export default function App() {
                   <div className="app__map-layout">
                     <ContinentSidebar
                       countries={countries}
+                      highlight={highlightFilter}
+                      onClearHighlight={clearHighlightFilter}
                       onSelectCountry={handleSelectCountryFromReport}
                       onSelectSeries={handleOpenSeriesPage}
                       onFocusContinent={handleFocusContinent}
@@ -494,7 +500,7 @@ export default function App() {
                         <MapFilterCard
                           kicker="Haritada gösterilen"
                           title={seriesFilter.seriesName}
-                          description="Ülkelere göre arama ilgisi — koyu renk daha çok aranıyor (0–100)"
+                          description="Ülkelere göre arama ilgisi"
                           onReturn={
                             seriesFilter.fromSeriesId != null
                               ? () => handleReturnToSeries(seriesFilter.fromSeriesId)
@@ -509,8 +515,8 @@ export default function App() {
                           title={highlightFilter.label}
                           description={
                             highlightFilter.kind === 'actor'
-                              ? 'Takip edilen dizilerinden en az birinin yayınlandığı ülkeler'
-                              : 'Listeye girdiği ülkeler (koyu renk daha çok hafta); kayıt yoksa yayında olduğu ülkeler'
+                              ? 'Dizilerinin yayında olduğu ülkeler'
+                              : 'Listeye girdiği ve yayında olduğu ülkeler'
                           }
                           onReturn={
                             highlightFilter.fromSeriesId != null
@@ -547,17 +553,7 @@ export default function App() {
                           onResetView={handleResetMapView}
                         />
                       )}
-                      <Legend
-                        caption={
-                          seriesFilter
-                            ? `"${seriesFilter.seriesName}" için ülke bazlı arama ilgisi (0-100) — gerçek izlenme rakamı değil, arama ilgisine dayalı bir yakınsama göstergesidir.`
-                            : highlightFilter
-                              ? highlightFilter.kind === 'actor'
-                                ? `"${highlightFilter.label}" oyuncusunun takip edilen dizilerinden en az birinin gerçekten yayınlandığı ülkeler işaretlenir.`
-                                : `"${highlightFilter.label}" dizisinin gerçekten yayınlandığı ülkeler işaretlenir.`
-                              : undefined
-                        }
-                      />
+                      {!seriesFilter && !highlightFilter && <Legend />}
                       <CountryPanel
                         country={selected}
                         allCountries={countries}

@@ -23,7 +23,7 @@ function MapLinkButton({ seriesId, onViewSeriesOnMap }) {
       type="button"
       className="dashboard__map-link"
       onClick={() => onViewSeriesOnMap(seriesId)}
-      title="Haritada gör (panelden çıkılır)"
+      title="Yayında olduğu ülkeleri haritada gör"
     >
       Haritada gör
     </button>
@@ -462,8 +462,8 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
   const selectedInView = needsReview.filter((item) => selectedIds.has(item.id)).length
 
   return (
-    <div className="dashboard">
-      <h2>Analist Paneli</h2>
+    <section className="dashboard__section" id="etiket-duzeltmeleri">
+      <h3 className="dashboard__section-title">Etiket düzeltmeleri</h3>
       {!canEdit && <p className="dashboard__hint">Salt okunur — düzenleme yalnızca Yönetici'ye açık.</p>}
 
       <nav className="app__nav dashboard__tabs">
@@ -725,6 +725,6 @@ export default function AnalystDashboard({ canEdit = true, onViewSeriesOnMap }) 
       {tab === 'destinations' && <DestinationSection canEdit={canEdit} onViewSeriesOnMap={onViewSeriesOnMap} />}
 
       {tab === 'sentiment' && <MediaSentimentAuditSection canEdit={canEdit} />}
-    </div>
+    </section>
   )
 }

@@ -8,7 +8,6 @@ import { IconReport } from './Icons.jsx'
 import { fetchCountryRegionalInterest, fetchCountryCharts, fetchCountryContext } from '../lib/api.js'
 import countryNames from '../data/country-centroids.json'
 import ChartList, { fmtDateTr } from './ChartList.jsx'
-import { AVAILABILITY_NOTE } from '../lib/methodologyNotes.js'
 import { useAsync } from '../lib/useAsync.js'
 import { onEnterOrSpace } from '../lib/useDialog.js'
 import { EMPTY } from '../lib/emptyStates.js'
@@ -476,9 +475,9 @@ export default function CountryPanel({
 
               {country.dataSource === 'proxy' ? null : (
                 <>
-                  <h3 title={AVAILABILITY_NOTE}>
+                  <h3>
                     Yayındaki diziler — {country.seriesCount} dizi
-                    {charts?.access?.platformCount ? `, ${charts.access.platformCount} platformda` : ''} ⓘ
+                    {charts?.access?.platformCount ? `, ${charts.access.platformCount} platformda` : ''}
                   </h3>
                   <ul className="panel__series-list">
                     {sortedSeriesList.map((s, i) => {

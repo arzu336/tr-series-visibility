@@ -459,13 +459,21 @@ export function PressSection({ seriesId, isAdmin, onScanned }) {
       .catch(() => {})
   }, [azTarandi, seriesId])
 
+  // Elle başlatılan tarama da bileşen kapanınca iptal edilir (yoklama ve setState sürmesin).
+  const scanCtrl = useRef(null)
+  useEffect(() => () => scanCtrl.current?.abort(), [])
   async function handleScan() {
+    scanCtrl.current?.abort()
+    const ctrl = new AbortController()
+    scanCtrl.current = ctrl
     setScan({ status: 'running', result: null, error: null, progress: null, startedAt: null })
     try {
       const { job } = await enrichSeriesNow(seriesId)
-      await follow(job.id)
+      if (ctrl.signal.aborted) return
+      await follow(job.id, ctrl.signal)
     } catch (err) {
-      setScan({ status: 'error', result: null, error: err.message, progress: null, startedAt: null })
+      if (!ctrl.signal.aborted)
+        setScan({ status: 'error', result: null, error: err.message, progress: null, startedAt: null })
     }
   }
 

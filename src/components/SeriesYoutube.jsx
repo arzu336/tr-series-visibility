@@ -1,8 +1,9 @@
 import { fetchSeriesYoutube } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
 
-// Dizi sayfası → YouTube: resmî yayıncı kanallarındaki bölüm videolarının herkese açık sayıları ve yorumların
-// dil dağılımı. Ülke kırılımı değildir (o yalnızca kanal sahibinin izniyle gelir); veri yoksa bölüm görünmez.
+// Dizi sayfası → YouTube: resmî yayıncı kanallarındaki ve yurt dışına yönelik resmî dublaj/altyazı kanallarındaki
+// bölüm videolarının herkese açık sayıları (dile göre) ve yorumların dil dağılımı. Ülke kırılımı değildir (o yalnızca
+// kanal sahibinin izniyle gelir); veri yoksa bölüm görünmez.
 
 const fmt = (n) => new Intl.NumberFormat('tr-TR', { notation: n >= 1e6 ? 'compact' : 'standard' }).format(n)
 const langName = (code) => {
@@ -13,6 +14,7 @@ const langName = (code) => {
     return code
   }
 }
+const viewLang = (code) => (code === 'tr' ? 'Türkçe' : code === 'mul' ? 'Çok dilli' : langName(code))
 const day = (iso) => new Date(iso).toLocaleDateString('tr-TR', { day: 'numeric', month: 'long' })
 
 export default function SeriesYoutube({ seriesId }) {
@@ -21,6 +23,8 @@ export default function SeriesYoutube({ seriesId }) {
   const { totals, growth30, comments } = data
   const top = comments?.langs.slice(0, 6) ?? []
   const max = Math.max(...top.map((l) => l.share), 0.01)
+  const byLang = (data.byLang || []).filter((l) => l.views > 0)
+  const maxLang = Math.max(...byLang.map((l) => l.views), 1)
   return (
     <section className="series-page__section">
       <h2>YouTube</h2>
@@ -33,6 +37,22 @@ export default function SeriesYoutube({ seriesId }) {
           yana)
         </p>
       )}
+      {byLang.length > 1 || byLang.some((l) => l.lang !== 'tr') ? (
+        <>
+          <h3 className="series-interest__title">Dile göre izlenme</h3>
+          <div className="benchmark-card__bars" role="list" aria-label="Dublaj ve altyazı diline göre izlenme">
+            {byLang.map((l) => (
+              <div key={l.lang} className="benchmark-card__row" role="listitem">
+                <div className="benchmark-card__row-label">{viewLang(l.lang)}</div>
+                <div className="benchmark-card__row-bar-track">
+                  <div className="benchmark-card__row-bar" style={{ width: `${(l.views / maxLang) * 100}%` }} />
+                </div>
+                <div className="benchmark-card__row-value">{fmt(l.views)}</div>
+              </div>
+            ))}
+          </div>
+        </>
+      ) : null}
       {top.length > 0 && (
         <>
           <h3 className="series-interest__title">Yorumların dili</h3>
@@ -48,8 +68,7 @@ export default function SeriesYoutube({ seriesId }) {
             ))}
           </div>
           <p className="dashboard__hint">
-            Son bölümlerden {comments.sampled} yorum örneklendi ({day(comments.sampledAt)}). Dil ülke değildir: yorumun
-            hangi bölgeden yazıldığına dair kaba bir işarettir.
+            Son bölümlerden {comments.sampled} yorum örneklendi ({day(comments.sampledAt)}).
           </p>
         </>
       )}

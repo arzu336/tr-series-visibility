@@ -5,16 +5,18 @@ import {
   fetchTrendsTimeSeries,
   fetchImdbData,
   fetchSeriesMeta,
+  fetchComparison,
 } from '../lib/api.js'
 import MultiSeriesTrendChart from './MultiSeriesTrendChart.jsx'
 import { EMPTY } from '../lib/emptyStates.js'
 import { IconStar } from './Icons.jsx'
 import Flag from './Flag.jsx'
+import CompareTable from './CompareTable.jsx'
 import countryNames from '../data/country-centroids.json'
 
-const MAX_COMPARE = 3
+const MAX_COMPARE = 5
 const POSTER_BASE = 'https://image.tmdb.org/t/p/w342'
-const CHIP_COLORS = ['#3b82f6', '#EE3135', '#22c55e']
+const CHIP_COLORS = ['#3b82f6', '#EE3135', '#22c55e', '#f59e0b', '#a855f7']
 
 function CompareEmptyState() {
   return (
@@ -63,10 +65,7 @@ function Head2HeadCard({ card, isRatingLeader, isShareLeader, isCountryLeader })
             Arama payı {card.sharePct != null ? `%${card.sharePct}` : '—'}
             {isShareLeader && ' · önde'}
           </span>
-          <span
-            className={pill(isCountryLeader)}
-            title="Karşılaştırmalı arama verisinde bu dizinin sıfırdan büyük pay aldığı ülke sayısı — erişim/izlenme değil"
-          >
+          <span className={pill(isCountryLeader)} title="Arama ilgisi olan ülke sayısı">
             {card.countryCount ?? '—'} ülkede pay
             {isCountryLeader && ' · önde'}
           </span>
@@ -119,13 +118,14 @@ function RegionalDominanceTable({ topRows, cards }) {
   )
 }
 
-export default function ComparisonView({ seriesList, suggestions = [] }) {
+export default function ComparisonView({ seriesList }) {
   const [picked, setPicked] = useState([])
   const [query, setQuery] = useState('')
   const [status, setStatus] = useState('idle')
   const [error, setError] = useState(null)
   const [cards, setCards] = useState([])
   const [regionalRows, setRegionalRows] = useState([])
+  const [comparison, setComparison] = useState([])
 
   function addSeries(name) {
     const s = seriesList.find((s) => s.name === name)
@@ -145,7 +145,12 @@ export default function ComparisonView({ seriesList, suggestions = [] }) {
     setError(null)
     try {
       const names = picked.map((p) => p.name)
-      const [share, regional] = await Promise.all([fetchShareOfSearch(names), fetchRegionalBreakdown(names)])
+      const [share, regional, cmp] = await Promise.all([
+        fetchShareOfSearch(names),
+        fetchRegionalBreakdown(names),
+        fetchComparison(picked.map((p) => p.id)).catch(() => ({ items: [] })),
+      ])
+      setComparison(cmp.items || [])
       const shareByTitle = new Map(share.items.map((i) => [i.title, i.shareOfSearchPct]))
 
       const perSeries = await Promise.all(
@@ -224,18 +229,6 @@ export default function ComparisonView({ seriesList, suggestions = [] }) {
             </button>
           </div>
         )}
-        {picked.length < MAX_COMPARE && suggestions.some((s) => !picked.some((p) => p.id === s.id)) && (
-          <div className="compare-suggest">
-            <span className="compare-suggest__label">Hızlı ekle:</span>
-            {suggestions
-              .filter((s) => !picked.some((p) => p.id === s.id) && seriesList.some((x) => x.id === s.id))
-              .map((s) => (
-                <button key={s.id} type="button" className="ts-scope__chip" onClick={() => addSeries(s.name)}>
-                  + {s.name}
-                </button>
-              ))}
-          </div>
-        )}
         {picked.length >= MAX_COMPARE && (
           <p className="dashboard__hint" style={{ margin: 0 }}>
             En fazla {MAX_COMPARE} dizi seçilebilir.
@@ -266,6 +259,14 @@ export default function ComparisonView({ seriesList, suggestions = [] }) {
               />
             ))}
           </div>
+
+          <section className="series-page__section">
+            <h2>Göstergeler yan yana</h2>
+            <CompareTable
+              items={cards.map((c) => comparison.find((x) => x.id === c.id)).filter(Boolean)}
+              colors={cards.filter((c) => comparison.some((x) => x.id === c.id)).map((c) => c.color)}
+            />
+          </section>
 
           <div className="series-page__grid">
             <div className="series-page__col">

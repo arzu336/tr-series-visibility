@@ -14,6 +14,7 @@ import { getImdbDataForTmdbSeries } from '../imdb.js'
 import { languagesOfCountry } from '../../src/lib/langCountries.js'
 import { getForeignStudentSummary } from './foreignStudents.js'
 import { generateFindings } from './reportFindings.js'
+import { buildYearTv } from './yearReport.js'
 import * as notes from '../../src/lib/methodologyNotes.js'
 import { EMPTY } from '../../src/lib/emptyStates.js'
 
@@ -34,6 +35,7 @@ const HIGHLIGHTED_MAX = 3
 export const SECTION_KEYS = [
   'scores',
   'platformLists',
+  'tvAirings',
   'wikiInterest',
   'ranking',
   'trend',
@@ -53,6 +55,7 @@ export const SECTION_KEYS = [
 export const SECTION_TITLES = {
   scores: 'İzlenme düzeyi ve yayın varlığı',
   platformLists: 'Türk dizileri sıralaması',
+  tvAirings: 'Televizyonda yayınlanan diziler (son 30 gün)',
   wikiInterest: 'Okunma ilgisi',
   ranking: 'Ülkeler arası izlenme sırası',
   trend: 'Trend',
@@ -72,6 +75,7 @@ export const SECTION_TITLES = {
 export const SECTION_NOTES = {
   scores: `${notes.WATCH_LEVEL_NOTE} ${notes.AVAILABILITY_NOTE}`,
   platformLists: notes.PLATFORM_LISTS_NOTE,
+  tvAirings: 'Ülkenin televizyon kanallarının yayın akışında son 30 günde yer alan Türk dizileri ve yayın sayıları.',
   wikiInterest:
     'Türk dizilerinin ülkenin dillerindeki aylık okunma sayısıdır. Birden çok ülkede ' +
     'konuşulan dillerde okunma tek bir ülkeye ayrılamaz.',
@@ -690,7 +694,7 @@ function readWikiRows(langs, seriesIds) {
 
 export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} } = {}) {
   const iso2 = String(iso2Raw).toUpperCase()
-  const cacheKey = `report:country:v3:${iso2}`
+  const cacheKey = `report:country:v4:${iso2}`
   const cache = deps.cache || { get: getCached, set: setCached }
   if (useCache) {
     const cached = cache.get(cacheKey)
@@ -765,9 +769,19 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
     return s ? OK(s) : yetersiz('bu ülkeden öğrenci kaydı yok')
   })
 
+  // Televizyon yayınları (son 30 gün): yayın akışı toplanan ülkelerde listelerin görmediği izlenme (2026-10-14;
+  // Orta Asya'da diziler büyük ölçüde televizyonda). Ülke paneli zaten ayrıca gösteriyor; brifinge de girer.
+  const tvAirings = await guarded('tvAirings', () => {
+    const since = new Date(now.getTime() - 30 * 86400000).toISOString().slice(0, 10)
+    const rows = db.prepare('SELECT * FROM tv_airings WHERE iso2 = ? AND date >= ?').all(iso2, since)
+    const r = buildYearTv(rows, new Map(raw.series.map((s) => [s.id, s.name])))
+    return r.status === 'hesaplandi' ? OK(r.data) : yetersiz('bu ülke için yayın akışı kaydı yok')
+  })
+
   const sections = {
     scores,
     platformLists,
+    tvAirings,
     wikiInterest,
     foreignStudents,
     ranking,

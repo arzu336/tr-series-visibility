@@ -14,11 +14,10 @@ import countryNames from '../data/country-centroids.json'
 import Flag from './Flag.jsx'
 import ChartList from './ChartList.jsx'
 
-// Televizyon yayınları, çevrimiçi izlenme (İran) ve dağıtımcı satış kayıtları: ülke paneli, dizi sayfası, yönetim
-// ekranı. Veri yoksa bölümler görünmez.
+// Çevrimiçi izlenme (video siteleri ve ülke yayıncılarının YouTube kanalları): ülke paneli ve dizi sayfası. TV yayın
+// akışı ve satış kayıtları ekrandan kaldırıldı (2026-10-14, kullanıcı isteği); toplama sürüyor, TvAdmin yönetimde değil.
 
 const day = (d) => (d ? new Date(`${d}T00:00:00Z`).toLocaleDateString('tr-TR', { day: 'numeric', month: 'short' }) : '')
-const period = (s, e) => [s, e].filter(Boolean).join(' – ')
 const views = (n) => Number(n || 0).toLocaleString('tr-TR')
 
 /**
@@ -28,74 +27,23 @@ const views = (n) => Number(n || 0).toLocaleString('tr-TR')
 export function CountryTv({ iso2, seriesInfo, onSelectSeries }) {
   const { status, data } = useAsync(() => fetchCountryTv(iso2), [iso2])
   const online = data?.online || []
-  if (status !== 'ready' || (!data.airings.length && !data.sales.length && !online.length)) return null
-  const info = (id, fallback) => ({
-    name: seriesInfo.get(id)?.name || fallback || `#${id}`,
-    posterPath: seriesInfo.get(id)?.posterPath,
-  })
+  if (status !== 'ready' || !online.length) return null
+  const info = (id) => ({ name: seriesInfo.get(id)?.name || `#${id}`, posterPath: seriesInfo.get(id)?.posterPath })
   return (
     <>
-      {data.airings.length > 0 && (
-        <>
-          <h3>Televizyonda — son 30 gün</h3>
-          <ChartList
-            compact
-            showPosters
-            items={data.airings.map((a, i) => {
-              const s = info(a.seriesId, a.localTitle)
-              return {
-                rank: i + 1,
-                seriesId: a.seriesId,
-                kind: 'series',
-                ...s,
-                meta: [
-                  a.localTitle !== s.name ? `"${a.localTitle}"` : null,
-                  a.channels.join(', '),
-                  `${a.slots} yayın`,
-                  `son ${day(a.last)}`,
-                ]
-                  .filter(Boolean)
-                  .join(' · '),
-              }
-            })}
-            onSelect={onSelectSeries}
-          />
-        </>
-      )}
-      {online.length > 0 && (
-        <>
-          <h3>Çevrimiçi izlenme</h3>
-          <ChartList
-            compact
-            showPosters
-            items={online.map((o, i) => ({
-              rank: i + 1,
-              seriesId: o.seriesId,
-              kind: 'series',
-              ...info(o.seriesId),
-              meta: `${views(o.views)} izlenme · ${o.videos} video`,
-            }))}
-            onSelect={onSelectSeries}
-          />
-        </>
-      )}
-      {data.sales.length > 0 && (
-        <>
-          <h3>Satış kayıtları</h3>
-          <ChartList
-            compact
-            showPosters
-            items={data.sales.map((x, i) => ({
-              rank: i + 1,
-              seriesId: x.seriesId,
-              kind: 'series',
-              ...info(x.seriesId),
-              meta: [x.buyer, x.distributor, period(x.start, x.end) || null].filter(Boolean).join(' · '),
-            }))}
-            onSelect={onSelectSeries}
-          />
-        </>
-      )}
+      <h3>Çevrimiçi izlenme</h3>
+      <ChartList
+        compact
+        showPosters
+        items={online.map((o, i) => ({
+          rank: i + 1,
+          seriesId: o.seriesId,
+          kind: 'series',
+          ...info(o.seriesId),
+          meta: `${views(o.views)} izlenme · ${o.videos} video`,
+        }))}
+        onSelect={onSelectSeries}
+      />
     </>
   )
 }
@@ -104,68 +52,25 @@ export function CountryTv({ iso2, seriesInfo, onSelectSeries }) {
 export function SeriesTv({ seriesId }) {
   const { status, data } = useAsync(() => fetchSeriesTv(seriesId), [seriesId])
   const online = data?.online || []
-  if (status !== 'ready' || (!data.airings.length && !data.sales.length && !online.length)) return null
+  if (status !== 'ready' || !online.length) return null
   const name = (iso2) => countryNames[iso2]?.name || iso2
   return (
     <section className="series-page__section">
-      <h2>{data.airings.length || data.sales.length ? 'Televizyonda' : 'Çevrimiçi izlenme'}</h2>
-      {data.airings.length > 0 && (
-        <>
-          <p className="dashboard__hint">Son 30 günde yayınlandığı ülkeler.</p>
-          <ul className="series-page__rows">
-            {data.airings.map((a) => (
-              <li key={a.iso2} className="series-page__row">
-                <span className="series-page__country">
-                  <Flag iso2={a.iso2} />
-                  {name(a.iso2)}
-                </span>
-                <span className="series-page__row-meta">
-                  {a.channels.join(', ')} · {a.slots} yayın{a.localTitle ? ` · "${a.localTitle}"` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      {online.length > 0 && (
-        <>
-          <h3 className="series-interest__title">Çevrimiçi izlenme</h3>
-          <p className="dashboard__hint">Dublajlı ve altyazılı bölümlerin video sitelerindeki toplam izlenmesi.</p>
-          <ul className="series-page__rows">
-            {online.map((o) => (
-              <li key={o.iso2} className="series-page__row">
-                <span className="series-page__country">
-                  <Flag iso2={o.iso2} />
-                  {name(o.iso2)}
-                </span>
-                <span className="series-page__row-meta">
-                  {views(o.views)} izlenme · {o.videos} video
-                  {o.weeklyGain ? ` · son hafta +${views(o.weeklyGain)}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
-      {data.sales.length > 0 && (
-        <>
-          <h3 className="series-interest__title">Satış kayıtları</h3>
-          <ul className="series-page__rows">
-            {data.sales.map((s, i) => (
-              <li key={i} className="series-page__row">
-                <span className="series-page__country">
-                  <Flag iso2={s.iso2} />
-                  {name(s.iso2)}
-                </span>
-                <span className="series-page__row-meta">
-                  {s.buyer} · {s.distributor}
-                  {period(s.start, s.end) ? ` · ${period(s.start, s.end)}` : ''}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </>
-      )}
+      <h2>Çevrimiçi izlenme</h2>
+      <ul className="series-page__rows">
+        {online.map((o) => (
+          <li key={o.iso2} className="series-page__row">
+            <span className="series-page__country">
+              <Flag iso2={o.iso2} />
+              {name(o.iso2)}
+            </span>
+            <span className="series-page__row-meta">
+              {views(o.views)} izlenme · {o.videos} video
+              {o.weeklyGain ? ` · son hafta +${views(o.weeklyGain)}` : ''}
+            </span>
+          </li>
+        ))}
+      </ul>
     </section>
   )
 }

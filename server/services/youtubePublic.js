@@ -1,7 +1,10 @@
 import db from '../db.js'
-import { getCached } from '../cache.js'
+import { getRawSeriesDataCached } from '../data-pipeline.js'
 import { getEnglishTitles } from './localTitles.js'
 import { buildTitleMatcher } from './youtubeAnalytics.js'
+import { getPipelineDb } from './pipelineDb.js'
+import { stripWikiQualifier } from './tvGuide.js'
+import './onlineViews.js' // online_views tablosu (ülke başına çevrimiçi izlenme)
 import { languageDistribution } from './commentLanguage.js'
 
 // YouTube herkese açık veri (2026-10-06): yalnızca bir API anahtarıyla (YOUTUBE_API_KEY), kanal sahibinin izni
@@ -16,7 +19,134 @@ const DATA_API = 'https://www.googleapis.com/youtube/v3'
 
 // Resmî yayıncı kanalları (YouTube kullanıcı adı). İlk çalıştırmada çözülür; bulunamayan ad yönetim ekranında
 // hata olarak görünür. YOUTUBE_PUBLIC_CHANNELS (virgülle ayrılmış) ile değiştirilebilir.
-export const DEFAULT_CHANNELS = ['@atvturkiye', '@showtv', '@startv', '@kanald', '@trt1', '@nowtv', '@tv8', '@kanal7']
+export const DEFAULT_CHANNELS = [
+  '@atvturkiye',
+  '@showtv',
+  '@startvresmi',
+  '@kanald',
+  '@trt1',
+  '@nowtvturkiye',
+  '@tv8',
+  '@kanal7',
+  // Yurt dışına yönelik resmî dublaj/altyazı kanalları (2026-10-14): dizilerin dünyada hangi dilde izlendiği.
+  '@tabii',
+  '@tabii.urdu',
+  '@trtdrama_ar',
+  '@trtdrama_en',
+  '@trtdrama_ru',
+  '@trtdramaurdu',
+  '@trtdramafarsi',
+  '@trtdramaespanol',
+  '@kurulusosmanurduatv',
+  // Ülke yayıncılarının resmî kanalları (2026-10-14): Kazakistan'da yayıncılar dublajlı bölümleri YouTube'a yüklüyor;
+  // izlenme o ülkeye yazılır (online_views) — platformda "Çevrimiçi izlenme" olarak görünür.
+  '@TheSevenChannel',
+  '@TheSevenBagdarlama',
+  '@astanatvmovie1849',
+  // Kırgızistan devlet kanalı: Kırgızca dublajlı Türk dizileri geçmiş yıllarda yüklenmiş (arşiv taraması).
+  '@eltr_kyrgyzstan',
+  '@EltrMadaniyat',
+]
+// Kanalın ülkesi (yayıncı o ülkede; izlenme ülkeye yazılır). Türkiye kanalları ve dil kanalları ülkeye yazılmaz.
+export const CHANNEL_COUNTRY = {
+  '@TheSevenChannel': 'KZ',
+  '@TheSevenBagdarlama': 'KZ',
+  '@astanatvmovie1849': 'KZ',
+  '@eltr_kyrgyzstan': 'KG',
+  '@EltrMadaniyat': 'KG',
+}
+// Kanalın yayın dili (dublaj/altyazı). Listede olmayan kanal Türkçe sayılır.
+export const CHANNEL_LANG = {
+  '@tabii.urdu': 'ur',
+  '@trtdrama_ar': 'ar',
+  '@trtdrama_en': 'en',
+  '@trtdrama_ru': 'ru',
+  '@trtdramaurdu': 'ur',
+  '@trtdramafarsi': 'fa',
+  '@trtdramaespanol': 'es',
+  '@kurulusosmanurduatv': 'ur',
+  '@tabii': 'mul',
+  '@TheSevenChannel': 'ru,kk',
+  '@TheSevenBagdarlama': 'ru,kk',
+  '@astanatvmovie1849': 'kk',
+  '@eltr_kyrgyzstan': 'ky,ru',
+  '@EltrMadaniyat': 'ky,ru',
+}
+// IMDb yerel adları bölgeyle tutuluyor: dilin konuşulduğu bölgeler.
+const LANG_REGIONS = {
+  ar: ['SA', 'EG', 'AE', 'JO', 'LB', 'IQ', 'KW', 'QA', 'BH', 'OM', 'SY', 'MA', 'DZ', 'TN', 'LY', 'YE', 'PS'],
+  ru: ['RU', 'SUHH', 'KZ', 'BY'],
+  kk: ['KZ'],
+  ky: ['KG'],
+  es: ['ES', 'MX', 'AR', 'CO', 'CL', 'PE', 'VE', 'EC', 'UY', 'XSA'],
+  fa: ['IR'],
+  ur: ['PK'],
+}
+
+for (const col of ['lang TEXT', 'country TEXT']) {
+  try {
+    db.exec(`ALTER TABLE yt_public_channels ADD COLUMN ${col}`)
+  } catch {
+    // sütun zaten var
+  }
+}
+// Resmî dublaj kanallarının kendi yerel adları ("Hold My Hand", "Maskan-e-Maasuman") → dizi; her satır kaynakla
+// doğrulanarak eklenir (tahminle eşleme yok).
+db.exec(`
+  CREATE TABLE IF NOT EXISTS yt_title_map (
+    local_name TEXT PRIMARY KEY,
+    series_id INTEGER NOT NULL,
+    lang TEXT,
+    note TEXT
+  )
+`)
+
+/** Doğrulanmış yerel adlar: Map<diziId, ad[]>. */
+function verifiedLocalNames() {
+  const out = new Map()
+  for (const r of db.prepare('SELECT local_name, series_id FROM yt_title_map').all()) {
+    if (!out.has(r.series_id)) out.set(r.series_id, [])
+    out.get(r.series_id).push(r.local_name)
+  }
+  return out
+}
+
+/**
+ * Dizilerin bir dildeki adları (ansiklopedi maddesi, Wikidata adı, IMDb'de o dilin bölgelerindeki ad); 5 harften kısa
+ * genel adlar atlanır. Dönen: Map<diziId, ad[]>.
+ */
+export function localizedNamesFor(lang) {
+  const out = new Map()
+  const add = (id, t) => {
+    const n = stripWikiQualifier(t)
+    if (!n || n.replace(/\s+/g, '').length < 5) return
+    if (!out.has(id)) out.set(id, new Set())
+    out.get(id).add(n)
+  }
+  try {
+    for (const r of db.prepare('SELECT tmdb_id, title FROM series_wiki_articles WHERE lang = ?').all(lang))
+      add(r.tmdb_id, r.title)
+    for (const r of db.prepare('SELECT tmdb_id, label FROM series_wikidata_labels WHERE lang = ?').all(lang))
+      add(r.tmdb_id, r.label)
+  } catch {
+    // tablolar yoksa atla
+  }
+  const regions = LANG_REGIONS[lang] || []
+  if (regions.length) {
+    try {
+      const rows = getPipelineDb()
+        ?.prepare(
+          `SELECT m.tmdb_id, l.title FROM imdb_localized_titles l JOIN imdb_title_map m ON m.tconst = l.tconst
+           WHERE l.region IN (${regions.map(() => '?').join(',')})`
+        )
+        .all(...regions)
+      for (const r of rows || []) add(r.tmdb_id, r.title)
+    } catch {
+      // IMDb tabloları yoksa atla
+    }
+  }
+  return new Map([...out].map(([id, set]) => [id, [...set]]))
+}
 
 const PAGES_PER_CHANNEL_RUN = 40 // kanal başına çalıştırma başına en çok 2.000 video; eskiler günlere yayılır
 const COMMENT_VIDEOS = 5
@@ -102,8 +232,9 @@ const upsertDaily = db.prepare(`
     likes = excluded.likes, comments = excluded.comments
 `)
 
-function catalogSeries() {
-  return getCached('raw-series-providers')?.series || []
+/** Katalog; önbellek dolmuşsa yenileyen yoldan (inceleme C3: boş katalogla eşleme yapılmasın). */
+async function catalogSeries() {
+  return (await getRawSeriesDataCached())?.series || []
 }
 
 // ---------------------------------------------------------------------------------------------- adımlar
@@ -164,6 +295,79 @@ async function syncChannelVideos(handle, client, match, now) {
     handle
   )
   return added
+}
+
+/**
+ * Kanal diline göre eşleyici: Türkçe ve İngilizce adlara ek olarak o dildeki adlar (Arapça kanalda "قيامة أرطغرل") ve
+ * kaynakla doğrulanmış elle eşlemeler. Kanal birden çok dilde yükleyebilir ("ru,kk"): adlar birleştirilir.
+ */
+export function makeMatcherFactory(series) {
+  const english = new Map(series.map((s) => [s.id, getEnglishTitles(s.id, s.name)]))
+  const verified = verifiedLocalNames()
+  const matchers = new Map()
+  return (lang) => {
+    if (!matchers.has(lang)) {
+      const local = new Map()
+      for (const l of String(lang || '').split(','))
+        if (l && !['tr', 'en', 'mul'].includes(l))
+          for (const [id, names] of localizedNamesFor(l)) local.set(id, [...(local.get(id) || []), ...names])
+      matchers.set(
+        lang,
+        buildTitleMatcher(series, {
+          englishTitlesOf: (s) => [
+            ...(english.get(s.id) || []),
+            ...(local.get(s.id) || []),
+            ...(verified.get(s.id) || []),
+          ],
+        })
+      )
+    }
+    return matchers.get(lang)
+  }
+}
+
+/** Daha önce eşleşmemiş videolar güncel adlarla yeniden eşlenir (ağa çıkmadan). Dönen: yeni eşlenen video sayısı. */
+export function rematchUnmatched(matcherFor) {
+  const setSeries = db.prepare('UPDATE yt_public_videos SET series_id = ? WHERE video_id = ?')
+  let n = 0
+  for (const ch of db.prepare('SELECT channel_id, lang FROM yt_public_channels WHERE channel_id IS NOT NULL').all()) {
+    const match = matcherFor(ch.lang || 'tr')
+    for (const v of db
+      .prepare('SELECT video_id, title FROM yt_public_videos WHERE channel_id = ? AND series_id IS NULL')
+      .all(ch.channel_id)) {
+      const id = match(v.title)
+      if (id) {
+        setSeries.run(id, v.video_id)
+        n++
+      }
+    }
+  }
+  return n
+}
+
+/**
+ * Ülke yayıncısı kanallarındaki dizi videolarının toplamı → online_views (ülke başına çevrimiçi izlenme; İran'daki
+ * video sitesiyle aynı tablo). Haftalık anlık görüntü yerine günlük yazılır; okuma tarafı en son kaydı alır.
+ */
+export function writeCountryViews(now) {
+  const day = now.toISOString().slice(0, 10)
+  const rows = db
+    .prepare(
+      `SELECT c.country iso2, v.series_id, COUNT(*) videos, SUM(v.views) views, MAX(v.views) top, MAX(v.published_at) latest
+       FROM yt_public_videos v JOIN yt_public_channels c ON c.channel_id = v.channel_id
+       WHERE c.country IS NOT NULL AND v.series_id IS NOT NULL AND v.views IS NOT NULL
+       GROUP BY c.country, v.series_id`
+    )
+    .all()
+  const put = db.prepare(
+    `INSERT INTO online_views (series_id, iso2, fetched_on, query, videos, views, top_views, latest_upload)
+     VALUES (?, ?, ?, 'youtube', ?, ?, ?, ?)
+     ON CONFLICT(series_id, iso2, fetched_on) DO UPDATE SET videos = excluded.videos, views = excluded.views,
+       top_views = excluded.top_views, latest_upload = excluded.latest_upload`
+  )
+  for (const r of rows)
+    put.run(r.series_id, r.iso2, day, r.videos, r.views, r.top, (r.latest || '').slice(0, 10) || null)
+  return rows.length
 }
 
 /** Diziye eşlenmiş bütün videoların güncel sayıları (50'şerli) ve bugünün dizi toplamı. */
@@ -247,20 +451,29 @@ export async function runYoutubePublicIfNeeded({
   cfg = publicConfig(),
   fetchFn = fetch,
   now = new Date(),
-  series = catalogSeries(),
+  series = null,
   force = false,
 } = {}) {
   if (!cfg.ready || running) return null
+  series ??= await catalogSeries()
   const last = metaGet.get('ytPublicLastRun')?.value
   if (!force && last && now - new Date(last) < RUN_EVERY_MS) return null
   running = true
   const client = makeClient({ cfg, fetchFn, now })
   const result = { videos: 0, statsVideos: 0, commentSeries: 0, errors: [], quotaExhausted: false }
   try {
-    const match = buildTitleMatcher(series, { englishTitlesOf: (s) => getEnglishTitles(s.id, s.name) })
+    const matcherFor = makeMatcherFactory(series)
+    rematchUnmatched(matcherFor)
     for (const handle of cfg.handles) {
       try {
-        result.videos += await syncChannelVideos(handle, client, match, now)
+        const lang = CHANNEL_LANG[handle] || 'tr'
+        insertChannel.run(handle)
+        db.prepare('UPDATE yt_public_channels SET lang = ?, country = ? WHERE handle = ?').run(
+          lang,
+          CHANNEL_COUNTRY[handle] || null,
+          handle
+        )
+        result.videos += await syncChannelVideos(handle, client, matcherFor(lang), now)
       } catch (err) {
         if (err instanceof QuotaExhausted) throw err
         insertChannel.run(handle)
@@ -273,6 +486,7 @@ export async function runYoutubePublicIfNeeded({
       }
     }
     result.statsVideos = await refreshStats(client, now)
+    writeCountryViews(now)
     result.commentSeries = await sampleComments(client, now)
     metaSet.run('ytPublicLastRun', now.toISOString())
   } catch (err) {
@@ -340,7 +554,16 @@ export function getSeriesYoutube(seriesId) {
     )
     .all(seriesId)
   const known = langs.reduce((s, l) => s + l.comments, 0)
+  // Kanal diline göre izlenme (Türkçe yayıncı kanalları 'tr'; dublaj/altyazı kanalları kendi dilinde).
+  const byLang = db
+    .prepare(
+      `SELECT COALESCE(c.lang, 'tr') lang, COUNT(*) videos, COALESCE(SUM(v.views), 0) views FROM yt_public_videos v
+       LEFT JOIN yt_public_channels c ON c.channel_id = v.channel_id
+       WHERE v.series_id = ? AND v.views IS NOT NULL GROUP BY COALESCE(c.lang, 'tr') ORDER BY views DESC`
+    )
+    .all(seriesId)
   return {
+    byLang,
     totals: { videos: last.videos, views: last.views, likes: last.likes, comments: last.comments, date: last.date },
     growth30: base ? { views: last.views - base.views, since: base.date } : null,
     history: history.map((h) => ({ date: h.date, views: h.views })),

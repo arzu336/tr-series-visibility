@@ -143,3 +143,12 @@ describe('herkese açık veri toplama (sahte YouTube)', () => {
     expect(g.calls).toHaveLength(1)
   })
 })
+
+describe('yurt dışı dublaj kanalları', () => {
+  it('her yurt dışı kanalın dili tanımlı ve varsayılan listede', async () => {
+    const { DEFAULT_CHANNELS, CHANNEL_LANG } = await import('./youtubePublic.js')
+    for (const h of Object.keys(CHANNEL_LANG)) expect(DEFAULT_CHANNELS).toContain(h)
+    expect(CHANNEL_LANG['@trtdrama_ar']).toBe('ar')
+    expect(CHANNEL_LANG['@tabii.urdu']).toBe('ur')
+  })
+})

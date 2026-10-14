@@ -104,10 +104,9 @@ export default function YoutubeConnections({ notice = null }) {
       {status === 'loading' && <p className="dashboard__empty">Yükleniyor…</p>}
       {status === 'error' && <p className="dashboard__empty">Durum alınamadı: {error}</p>}
       {status === 'ready' && !data.configured && (
-        <div className="status status--error">
-          Bağlantı henüz yapılandırılmadı. Sunucu ayarlarında eksik: {data.missing.join(', ')}. Kurulum adımları:
-          docs/youtube-analytics-kurulum.md
-        </div>
+        <p className="dashboard__hint">
+          Kanal sahibi bağlantısı kurulmadı (isteğe bağlı; gereken ayarlar: {data.missing.join(', ')}).
+        </p>
       )}
       {status === 'ready' && data.configured && (
         <>
@@ -178,8 +177,8 @@ export default function YoutubeConnections({ notice = null }) {
         <>
           <h4 className="series-interest__title">Herkese açık veri (izin gerektirmez)</h4>
           <p className="dashboard__hint">
-            Resmî yayıncı kanallarındaki videoların izlenme, beğeni ve yorum sayıları ile yorumların dili; günde bir
-            toplanır. Ülke kırılımı yoktur.
+            Resmî yayıncı ve dublaj kanallarındaki videoların izlenme, beğeni ve yorum sayıları ile yorumların dili;
+            günde bir toplanır.
           </p>
           {!data.public.configured ? (
             <div className="status status--error">

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo } from 'react'
 import countryNames from '../../data/country-centroids.json'
 import continentByIso2 from '../../data/continents.json'
 import { fetchTrendSeriesList } from '../../lib/api.js'
@@ -8,85 +8,9 @@ import { CONTINENTS } from '../../lib/continents.js'
 import CountryReportView from './CountryReportView.jsx'
 import SeriesReportView from './SeriesReportView.jsx'
 import GlobalReportView from './GlobalReportView.jsx'
+import ComparisonView from '../ComparisonView.jsx'
 import SearchPicker from './SearchPicker.jsx'
 import { AllCountries, CountryQuickPicks, SeriesQuickPicks } from '../QuickPicks.jsx'
-
-// Dönem seçici (2026-10-13): ay düzeyinde tarih aralığı → o dönemin kayıtlı verisinden dönem raporu; "Güncel rapor"
-// bugünkü rapora döner. Kullanıcı isteğiyle hazır seçenekler (yıllar, son 12 ay) kaldırıldı; aralık 2010'dan.
-const FIRST_YEAR = 2010
-const AYLAR = [
-  'Ocak',
-  'Şubat',
-  'Mart',
-  'Nisan',
-  'Mayıs',
-  'Haziran',
-  'Temmuz',
-  'Ağustos',
-  'Eylül',
-  'Ekim',
-  'Kasım',
-  'Aralık',
-]
-const ym = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`
-
-// Tarayıcının yerleşik ay kutusu (input type=month) yazılanı çoğu zaman almıyordu (kullanıcı: "aralığı uygula
-// çalışmıyor") → ay ve yıl için iki açılır liste.
-function MonthField({ label, value, onChange, max }) {
-  const [y, m] = value.split('-')
-  const years = Array.from({ length: Number(max.slice(0, 4)) - FIRST_YEAR + 1 }, (_, i) => Number(max.slice(0, 4)) - i)
-  return (
-    <fieldset className="report__month">
-      <legend>{label}</legend>
-      <select aria-label={`${label} ayı`} value={m} onChange={(e) => onChange(`${y}-${e.target.value}`)}>
-        {AYLAR.map((ad, i) => (
-          <option key={ad} value={String(i + 1).padStart(2, '0')}>
-            {ad}
-          </option>
-        ))}
-      </select>
-      <select aria-label={`${label} yılı`} value={y} onChange={(e) => onChange(`${e.target.value}-${m}`)}>
-        {years.map((yr) => (
-          <option key={yr} value={yr}>
-            {yr}
-          </option>
-        ))}
-      </select>
-    </fieldset>
-  )
-}
-
-export function PeriodPicker({ value, onChange, currentLabel = 'Güncel rapor', defaultFrom = null }) {
-  const now = ym(new Date())
-  const [from, setFrom] = useState(value?.from ?? defaultFrom ?? `${now.slice(0, 4)}-01`)
-  const [to, setTo] = useState(value?.to ?? now)
-  const error = from > to ? 'Başlangıç, bitişten sonra olamaz.' : to > now ? 'Bitiş bugünden sonra olamaz.' : null
-  const applied = value && value.from === from && value.to === to
-  return (
-    <div
-      className={`report__range report__period${value ? ' report__range--active' : ''}`}
-      role="group"
-      aria-label="Rapor dönemi"
-    >
-      <MonthField label="Başlangıç" value={from} onChange={setFrom} max={now} />
-      <MonthField label="Bitiş" value={to} onChange={setTo} max={now} />
-      <button
-        type="button"
-        className="series-page__btn report__apply"
-        disabled={Boolean(error) || applied}
-        onClick={() => onChange({ from, to })}
-      >
-        {applied ? 'Uygulandı' : 'Aralığı uygula'}
-      </button>
-      {value && (
-        <button type="button" className="series-page__btn" onClick={() => onChange(null)}>
-          {currentLabel}
-        </button>
-      )}
-      {error && <span className="report__range-error">{error}</span>}
-    </div>
-  )
-}
 
 // Raporlar: tek menü, üç sekme (2026-10-06), üçü de aynı belge biçiminde (özet → başlıklar → ek). Küresel
 // görünüm eski "Etki analizi"nin yerini aldı; bütün ülkeleri kapsadığı için yalnızca yöneticiye görünür.
@@ -109,16 +33,16 @@ export default function ReportsHub({
   onBack = null,
   backLabel,
   seriesActions = {},
-  period = null,
 }) {
   const tabs = [
     ...(isAdmin ? [{ key: 'kuresel', label: 'Küresel görünüm', Icon: IconGlobe }] : []),
     { key: 'ulke', label: 'Ülke brifingi', Icon: IconReport },
     { key: 'dizi', label: 'Dizi raporu', Icon: IconTv },
     { key: 'kita', label: 'Kıta raporu', Icon: IconGlobe },
+    { key: 'kiyas', label: 'Kıyaslama', Icon: IconChart },
   ]
   const active = tabs.some((t) => t.key === tab) ? tab : 'ulke'
-  const seriesReq = useAsync(fetchTrendSeriesList, [], { enabled: active === 'dizi' })
+  const seriesReq = useAsync(fetchTrendSeriesList, [], { enabled: active === 'dizi' || active === 'kiyas' })
   const seriesOptions = useMemo(
     () =>
       [...(seriesReq.data?.items || [])]
@@ -159,8 +83,7 @@ export default function ReportsHub({
           />
           {iso2 ? (
             <>
-              <PeriodPicker value={period} onChange={(p) => onChange({ period: p })} />
-              <CountryReportView iso2={iso2} countryName={countryNames[iso2]?.name || iso2} period={period} />
+              <CountryReportView iso2={iso2} countryName={countryNames[iso2]?.name || iso2} />
             </>
           ) : (
             <>
@@ -185,10 +108,8 @@ export default function ReportsHub({
             value={seriesId}
             onSelect={(v) => onChange({ tab: 'dizi', seriesId: v })}
           />
-          {seriesId && <PeriodPicker value={period} onChange={(p) => onChange({ period: p })} />}
           {seriesId ? (
             <SeriesReportView
-              period={period}
               seriesId={seriesId}
               allCountries={countries}
               onBack={onBack}
@@ -228,16 +149,9 @@ export default function ReportsHub({
           </div>
           {continent ? (
             <>
-              <PeriodPicker
-                value={period}
-                onChange={(p) => onChange({ period: p })}
-                currentLabel="Son 12 ay"
-                defaultFrom={ym(new Date(new Date().getFullYear(), new Date().getMonth() - 11, 1))}
-              />
               <CountryReportView
                 continent={continent}
                 countryName={CONTINENTS.find((c) => c.id === continent)?.name || continent}
-                period={period}
               />
             </>
           ) : (
@@ -245,6 +159,14 @@ export default function ReportsHub({
               Kıta seçin: o kıtanın ülkelerinde en çok izlenen Türk dizileri, ülkeler, okunma, basın ve turizm.
             </p>
           )}
+        </>
+      )}
+
+      {active === 'kiyas' && (
+        <>
+          <p className="dashboard__hint">Diziyi arayıp ekleyin; en fazla 5 dizi yan yana karşılaştırılır.</p>
+          {seriesReq.status === 'error' && <p className="report__error">Dizi listesi alınamadı: {seriesReq.error}</p>}
+          <ComparisonView seriesList={seriesReq.data?.items || []} />
         </>
       )}
 

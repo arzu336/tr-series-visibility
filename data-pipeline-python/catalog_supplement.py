@@ -37,7 +37,7 @@ from dotenv import load_dotenv
 import db
 import reytingtv_ranker as rtv
 from identity import IdentityResolver
-from logsetup import get_logger
+from logsetup import get_logger, safe_exc
 from models import UnresolvedReason
 from providers.base import classify_program_kind
 
@@ -202,7 +202,7 @@ def run(dry_run: bool = False, db_path: Path = DB_PATH, node_db_path: Path = NOD
             try:
                 verdict, cands = pick_candidate(g["clean"], search(g["clean"]))
             except requests.RequestException as exc:
-                log.warning(f"TMDB araması başarısız ({g['clean']}): {exc}")
+                log.warning(f"TMDB araması başarısız ({g['clean']}): {safe_exc(exc)}")
                 continue
             source = ",".join(sorted(g["providers"]))
             if verdict == "none":

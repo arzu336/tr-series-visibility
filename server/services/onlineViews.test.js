@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { summarizeVideos } from './onlineViews.js'
+import { summarizeVideos, parseMover, SOURCES } from './onlineViews.js'
 
 describe('çevrimiçi izlenme', () => {
   it('yalnızca adın ve dizi işaretinin geçtiği videolar, tekil', () => {
@@ -25,5 +25,20 @@ describe('çevrimiçi izlenme', () => {
       { id: 3, title: 'سریال حلقه Halka قسمت ۴', visit_cnt: 700 },
     ]
     expect(summarizeVideos(videos, 'حلقه', { original: 'Halka' }).views).toBe(5700)
+  })
+
+  it('mover.uz arama sayfası: kimlik, başlık, izlenme ve sonraki sayfa', () => {
+    const html =
+      '<div class="video-item"><h5 class="title"><a href="https://mover.uz/watch/U5CdVCSS" title="UZOQ SHAHAR 199 qism uzbek tilida">x</a></h5>' +
+      '<div class="meta"><div class="user"><a href="https://mover.uz/channel/x">x</a></div><div class="views">1 028</div></div></div>' +
+      '<a href="https://mover.uz/search?val=Uzoq+shahar&amp;page=2">2</a>'
+    const p = parseMover(html, { query: 'Uzoq shahar', page: 1 })
+    expect(p.videos).toEqual([{ id: 'U5CdVCSS', title: 'UZOQ SHAHAR 199 qism uzbek tilida', views: 1028, date: null }])
+    expect(p.next).toBe('https://mover.uz/search?val=Uzoq%20shahar&page=2')
+    const mover = SOURCES.find((s) => s.key === 'mover')
+    expect(summarizeVideos(p.videos, 'Uzoq shahar', { original: 'Uzak Şehir', markers: mover }).views).toBe(1028)
+    expect(
+      summarizeVideos([{ id: 1, title: 'Uzoq shahar konsert', views: 9 }], 'Uzoq shahar', { markers: mover }).videos
+    ).toBe(0)
   })
 })

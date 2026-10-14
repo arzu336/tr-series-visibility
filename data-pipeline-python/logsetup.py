@@ -32,6 +32,12 @@ def _kur() -> None:
     root.setLevel(getattr(logging, seviye, logging.INFO))
 
 
+def safe_exc(exc: BaseException) -> str:
+    """requests hataları tam URL'yi (api_key dahil) taşır — yalnızca tür ve HTTP kodu (inceleme C4)."""
+    code = getattr(getattr(exc, "response", None), "status_code", None)
+    return type(exc).__name__ + (f" HTTP {code}" if code else "")
+
+
 def get_logger(name: str) -> logging.Logger:
     _kur()
     # __main__ olarak çalışan betik dosya adıyla görünsün.
