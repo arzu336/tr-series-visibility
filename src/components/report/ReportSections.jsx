@@ -659,7 +659,7 @@ function SalesSection({ data }) {
   )
 }
 
-/** İhracat etkisi: sade cümleler + ilişkili sektör tablosu; yalnızca hesaplanan maddeler. */
+/** İhracat etkisi: sade cümleler; yalnızca hesaplanan maddeler. */
 export function exportSentences(data) {
   const out = []
   const l = data.latest
@@ -672,20 +672,11 @@ export function exportSentences(data) {
           : '.')
     )
   }
-  if (l?.relatedChangePct != null) {
-    out.push(
-      `Dizilerle ilişkilendirilebilen sektörlerde (hazır giyim, tekstil, deri, halı, mobilya, mücevher, gıda) ihracat ${yuzde(l.relatedChangePct)} ${artti(l.relatedChangePct)}` +
-        (l.turkeyRelatedChangePct != null
-          ? `; bu sektörlerde Türkiye geneli ${yuzde(l.turkeyRelatedChangePct)} ${artti(l.turkeyRelatedChangePct)}.`
-          : '.') +
-        (l.relatedShare != null ? ` Bu sektörlerin ülkeye ihracattaki payı ${yuzde(l.relatedShare)}.` : '')
-    )
-  }
   const c = data.correlation
   if (ok(c)) {
     const guc = Math.abs(c.value) >= 0.5 ? 'güçlü' : Math.abs(c.value) >= 0.3 ? 'orta' : 'zayıf'
     out.push(
-      `Dizilere okunma ilgisi ile ilişkili sektör ihracatı ${c.lagMonths} ay arayla ${c.value >= 0 ? 'aynı' : 'ters'} yönde, ${guc} düzeyde birlikte değişiyor` +
+      `Dizilere okunma ilgisi ile Türkiye'nin bu ülkeye ihracatı ${c.lagMonths} ay arayla ${c.value >= 0 ? 'aynı' : 'ters'} yönde, ${guc} düzeyde birlikte değişiyor` +
         ` (${c.sampleSize} aylık veri${c.significant ? ', istatistiksel olarak anlamlı' : ', rastlantı olabilir'}).`
     )
   }
@@ -696,7 +687,7 @@ export function exportSentences(data) {
     const grup =
       adlar.length > 1 ? `benzer ülkelerde (${adlar.join(', ')}) ortalama` : `benzer bir ülke olan ${adlar[0]} için`
     out.push(
-      `${periodRange(d.window)} döneminde bu ülkeye ilişkili sektör ihracatı önceki 12 aya göre ${yuzde(d.treatmentChangePct)} ${artti(d.treatmentChangePct)}; ` +
+      `${periodRange(d.window)} döneminde Türkiye'nin bu ülkeye ihracatı önceki 12 aya göre ${yuzde(d.treatmentChangePct)} ${artti(d.treatmentChangePct)}; ` +
         `${grup} değişim ${yuzde(d.controlChangePct)} ${d.controlChangePct >= 0 ? 'artış' : 'azalış'}. ` +
         `Yani bu ülke, benzerlerinden ${fmtNum(Math.abs(fark), 1)} puan ${fark >= 0 ? 'daha iyi' : 'daha kötü'} seyretti.`
     )
@@ -704,25 +695,12 @@ export function exportSentences(data) {
   return out
 }
 
-const fmtUsd = (n) =>
-  n >= 1e9
-    ? `${fmtNum(n / 1e9, 2)} milyar $`
-    : n >= 1e6
-      ? `${fmtNum(n / 1e6, 1)} milyon $`
-      : `${fmtNum(n / 1e3, 0)} bin $`
-
-const signedPct = (n) => (n == null ? '—' : `${n < 0 ? '−' : '+'}%${fmtNum(Math.abs(n), 1)}`)
-
 function ExportSignalSection({ data }) {
   const items = exportSentences(data)
-  const sectors = data.latest?.sectors || []
-  if (!items.length && !sectors.length) return <p className="report__lead">Bu ülke için ihracat verisi yok.</p>
+  if (!items.length && !data.chart) return <p className="report__lead">Bu ülke için ihracat verisi yok.</p>
   return (
     <>
-      <DualLineChart
-        months={data.chart}
-        labels={{ primary: 'İlişkili sektör ihracatı ($)', secondary: 'Okunma ilgisi' }}
-      />
+      <DualLineChart months={data.chart} labels={{ primary: 'İhracat ($)', secondary: 'Okunma ilgisi' }} />
       <ul className="brief__sentences">
         {items.map((t) => (
           <li key={t}>{t}</li>
@@ -730,28 +708,6 @@ function ExportSignalSection({ data }) {
       </ul>
       <ControlBars did={data.didEstimate} nameOf={countryName} label="Bu ülke" />
       <AiNote text={data.insight} />
-      {sectors.length > 0 && (
-        <table className="dashboard__table dashboard__table--compact report__table">
-          <thead>
-            <tr>
-              <th scope="col">Sektör</th>
-              <th scope="col">Aylık ihracat</th>
-              <th scope="col">Geçen yıla göre</th>
-              <th scope="col">Türkiye geneli</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sectors.map((s) => (
-              <tr key={s.sector}>
-                <td>{s.sector}</td>
-                <td>{fmtUsd(s.usd)}</td>
-                <td>{signedPct(s.changePct)}</td>
-                <td>{signedPct(s.turkeyChangePct)}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
     </>
   )
 }

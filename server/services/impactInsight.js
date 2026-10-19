@@ -76,23 +76,14 @@ export function exportFacts(countryName, d) {
       out.push(
         `${ay} ayında Türkiye'nin ${countryName}'a ihracatı geçen yılın aynı ayına göre ${yuzde(l.totalChangePct)} ${yon(l.totalChangePct)}${num(l.turkeyTotalChangePct) ? `; Türkiye'nin toplam ihracatı ${yuzde(l.turkeyTotalChangePct)} ${yon(l.turkeyTotalChangePct)}` : ''}`
       )
-    if (num(l.relatedChangePct))
-      out.push(
-        `Dizilerle ilişkilendirilebilen sektörlerde (hazır giyim, tekstil, deri, halı, mobilya, mücevher, gıda) ihracat ${yuzde(l.relatedChangePct)} ${yon(l.relatedChangePct)}${num(l.turkeyRelatedChangePct) ? `; Türkiye geneli bu sektörlerde ${yuzde(l.turkeyRelatedChangePct)} ${yon(l.turkeyRelatedChangePct)}` : ''}${num(l.relatedShare) ? `; bu sektörlerin ülkeye ihracattaki payı ${yuzde(l.relatedShare)}` : ''}`
-      )
-    for (const s of (l.sectors || []).slice(0, 4))
-      if (num(s.changePct))
-        out.push(
-          `${s.sector}: ${yuzde(s.changePct)} ${yon(s.changePct)}${num(s.turkeyChangePct) ? ` (Türkiye geneli ${yuzde(s.turkeyChangePct)} ${yon(s.turkeyChangePct)})` : ''}`
-        )
   }
   if (ok(d.correlation))
     out.push(
-      `Dizilere okunma ilgisi ile ilişkili sektör ihracatı ${d.correlation.lagMonths} ay gecikmeyle birlikte değişiyor: korelasyon ${d.correlation.value} (${d.correlation.sampleSize} ay, ${d.correlation.significant ? 'istatistiksel olarak anlamlı' : 'anlamlı değil, rastlantı olabilir'})`
+      `Dizilere okunma ilgisi ile Türkiye'nin bu ülkeye ihracatı ${d.correlation.lagMonths} ay gecikmeyle birlikte değişiyor: korelasyon ${d.correlation.value} (${d.correlation.sampleSize} ay, ${d.correlation.significant ? 'istatistiksel olarak anlamlı' : 'anlamlı değil, rastlantı olabilir'})`
     )
   if (ok(d.didEstimate))
     out.push(
-      `${d.didEstimate.window} penceresinde ilişkili sektör ihracatı önceki 12 aya göre ${yuzde(d.didEstimate.treatmentChangePct)} ${yon(d.didEstimate.treatmentChangePct)}; benzer ülkeler (${(d.didEstimate.controls || []).map((c) => nameOf(c.iso2)).join(', ')}) ortalama ${yuzde(d.didEstimate.controlChangePct)} ${yon(d.didEstimate.controlChangePct)}; fark ${d.didEstimate.value} puan`
+      `${d.didEstimate.window} penceresinde bu ülkeye ihracat önceki 12 aya göre ${yuzde(d.didEstimate.treatmentChangePct)} ${yon(d.didEstimate.treatmentChangePct)}; benzer ülkeler (${(d.didEstimate.controls || []).map((c) => nameOf(c.iso2)).join(', ')}) ortalama ${yuzde(d.didEstimate.controlChangePct)} ${yon(d.didEstimate.controlChangePct)}; fark ${d.didEstimate.value} puan`
     )
   return out
 }
@@ -102,12 +93,10 @@ export function seriesExportFacts(seriesName, d) {
   if (!d?.countries?.length) return []
   const ay = periodName(`${d.year}-${ay2(d.month)}`)
   const out = [
-    `${ay} ayında ${seriesName} dizisinin izlendiği ${d.countries.length} ülkede ilişkili sektör ihracatı geçen yıla göre ortalama ${yuzde(d.avgRelatedChangePct)} ${yon(d.avgRelatedChangePct)}${num(d.turkeyRelatedChangePct) ? `; Türkiye geneli ${yuzde(d.turkeyRelatedChangePct)} ${yon(d.turkeyRelatedChangePct)}` : ''}`,
+    `${ay} ayında ${seriesName} dizisinin izlendiği ${d.countries.length} ülkeye Türkiye'nin ihracatı geçen yıla göre ortalama ${yuzde(d.avgChangePct)} ${yon(d.avgChangePct)}${num(d.turkeyChangePct) ? `; Türkiye'nin toplam ihracatı ${yuzde(d.turkeyChangePct)} ${yon(d.turkeyChangePct)}` : ''}`,
   ]
   for (const c of d.countries.slice(0, 6))
-    out.push(
-      `${c.name}: ilişkili sektörler ${yuzde(c.relatedChangePct)} ${yon(c.relatedChangePct)}${num(c.totalChangePct) ? `, toplam ihracat ${yuzde(c.totalChangePct)} ${yon(c.totalChangePct)}` : ''}`
-    )
+    out.push(`${c.name}: ihracat ${yuzde(c.totalChangePct)} ${yon(c.totalChangePct)}`)
   return out
 }
 

@@ -316,27 +316,20 @@ export function SeriesContentSection({ data }) {
   )
 }
 
-const fmtUsd = (n) =>
-  n >= 1e9
-    ? `${fmtNum(n / 1e9, 2)} milyar $`
-    : n >= 1e6
-      ? `${fmtNum(n / 1e6, 1)} milyon $`
-      : `${fmtNum(n / 1e3, 0)} bin $`
 const signed = (n) => (n == null ? '—' : `${n < 0 ? '−' : '+'}%${fmtNum(Math.abs(n), 1)}`)
 
-/** Dizinin pazarlarında ilişkili sektör ihracatı: ülke, aylık tutar, yıllık değişim; ortalama vs Türkiye geneli. */
+/** Dizinin pazarlarına Türkiye'nin ihracatı: ülke, aylık tutar, yıllık değişim; ortalama vs Türkiye geneli. */
 export function SeriesExportsSection({ data }) {
   const ay = fmtPeriod(`${data.year}-${String(data.month).padStart(2, '0')}`)
-  const fark = data.turkeyRelatedChangePct == null ? null : data.avgRelatedChangePct - data.turkeyRelatedChangePct
+  const fark = data.turkeyChangePct == null ? null : data.avgChangePct - data.turkeyChangePct
   return (
     <>
       <p className="report__lead">
-        {ay} ayında dizinin izlendiği {data.countries.length} ülkede dizilerle ilişkilendirilebilen sektörlerin (hazır
-        giyim, tekstil, deri, halı, mobilya, mücevher, gıda) ihracatı geçen yıla göre ortalama{' '}
-        {signed(data.avgRelatedChangePct)} değişti
-        {data.turkeyRelatedChangePct != null && (
+        {ay} ayında dizinin izlendiği {data.countries.length} ülkeye Türkiye'nin ihracatı geçen yıla göre ortalama{' '}
+        {signed(data.avgChangePct)} değişti
+        {data.turkeyChangePct != null && (
           <>
-            ; Türkiye geneli {signed(data.turkeyRelatedChangePct)}. Yani bu pazarlar genelden{' '}
+            ; Türkiye'nin toplam ihracatı {signed(data.turkeyChangePct)}. Yani bu pazarlar genelden{' '}
             {fmtNum(Math.abs(fark), 1)} puan {fark >= 0 ? 'daha iyi' : 'daha kötü'} seyretti
           </>
         )}
@@ -346,9 +339,7 @@ export function SeriesExportsSection({ data }) {
         <thead>
           <tr>
             <th scope="col">Ülke</th>
-            <th scope="col">İlişkili sektörler (aylık)</th>
             <th scope="col">Geçen yıla göre</th>
-            <th scope="col">Toplam ihracat</th>
           </tr>
         </thead>
         <tbody>
@@ -357,8 +348,6 @@ export function SeriesExportsSection({ data }) {
               <td>
                 <Flag iso2={c.iso2} /> {c.name}
               </td>
-              <td>{fmtUsd(c.relatedUsd)}</td>
-              <td>{signed(c.relatedChangePct)}</td>
               <td>{signed(c.totalChangePct)}</td>
             </tr>
           ))}

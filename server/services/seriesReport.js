@@ -408,7 +408,7 @@ function readClassification(seriesId) {
 
 export async function buildSeriesReport(seriesId, { useCache = true, deps = {} } = {}) {
   const id = Number(seriesId)
-  const cacheKey = `report:series:v11:${id}`
+  const cacheKey = `report:series:v12:${id}`
   if (useCache) {
     const cached = getCached(cacheKey)
     if (cached) return cached

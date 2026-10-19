@@ -1,9 +1,8 @@
 import {
   getExportSeries,
-  getRelatedSeries,
+  getTotalSeries,
   getSectorYoy,
   getExportIso2s,
-  RELATED_SECTORS,
   SECTOR_TOTAL,
   COUNTRY_ALL,
 } from './exportsData.js'
@@ -13,14 +12,12 @@ import { rankControlCountries } from '../control-matching.js'
 import countryNames from '../../src/data/country-centroids.json' with { type: 'json' }
 import { buildImpactChart, readImpactInsight, exportFacts, seriesExportFacts } from './impactInsight.js'
 
-// İhracat etkisi (2026-10-16): dizilerin izlendiği ülkelerde Türkiye'nin ihracatı — özellikle dizilerle
-// ilişkilendirilebilecek tüketim sektörleri (hazır giyim, tekstil, deri, halı, mobilya, mücevher, gıda) — nasıl
-// değişti? Turizm etkisiyle aynı üç bakış: (1) son ayın geçen yıla göre değişimi, Türkiye geneliyle kıyaslı,
-// (2) okunma ilgisi × ilişkili sektör ihracatı korelasyonu (yıllık değişim, gecikmeli), (3) benzer ülkelere göre
-// fark (DiD). Korelasyon nedensellik değildir; cümleler yalnızca hesaplanan maddelerden kurulur.
+// İhracat etkisi (2026-10-16; 2026-10-19: sektör ayrımı kaldırıldı, kullanıcı kararı — hangi sektörün diziyle
+// ilişkili olduğunu varsaymak keyfi): dizilerin izlendiği ülkelerde Türkiye'nin TOPLAM ihracatı nasıl değişti?
+// Turizm etkisiyle aynı üç bakış: (1) son ayın geçen yıla göre değişimi, Türkiye geneliyle kıyaslı, (2) okunma ilgisi ×
+// ihracat korelasyonu (yıllık değişim, gecikmeli), (3) benzer ülkelere göre fark (DiD). Korelasyon nedensellik
+// değildir; cümleler yalnızca hesaplanan maddelerden kurulur.
 
-const RELATED_SET = new Set(RELATED_SECTORS)
-const SECTORS_SHOWN = 6
 const KONTROL_ADAY = 15
 const MAX_KONTROL = 5
 const yetersiz = (reason) => ({ status: 'hesaplanamaz', reason })
@@ -31,53 +28,27 @@ const pct = (cur, prev) => (num(cur) && num(prev) && prev > 0 ? r1(((cur - prev)
 const ay2 = (m) => String(m).padStart(2, '0')
 export const nameOf = (iso2) => countryNames[iso2]?.name || iso2
 
-/** Son ay: toplam ve ilişkili sektör ihracatı, geçen yıla göre; Türkiye geneli aynı ay. Saf. */
+/** Son ay: toplam ihracat, geçen yıla göre; Türkiye geneli aynı ay. Saf. */
 export function buildLatestExports(countryYoy, turkeyYoy) {
   if (!countryYoy?.rows?.length) return null
-  const sum = (rows, filter) =>
-    rows.filter(filter).reduce(
-      (a, r) => ({
-        cur: a.cur + (r.cur || 0),
-        prev: a.prev + (num(r.prev) ? r.prev : 0),
-        hasPrev: a.hasPrev && num(r.prev),
-      }),
-      { cur: 0, prev: 0, hasPrev: true }
-    )
   const total = countryYoy.rows.find((r) => r.sector === SECTOR_TOTAL)
-  const related = sum(countryYoy.rows, (r) => RELATED_SET.has(r.sector))
   const tTotal = turkeyYoy?.rows?.find((r) => r.sector === SECTOR_TOTAL)
-  const tRelated = turkeyYoy ? sum(turkeyYoy.rows, (r) => RELATED_SET.has(r.sector)) : null
-  const turkeyByS = new Map((turkeyYoy?.rows || []).map((r) => [r.sector, r]))
-  const sectors = countryYoy.rows
-    .filter((r) => RELATED_SET.has(r.sector) && r.cur > 0)
-    .sort((a, b) => b.cur - a.cur)
-    .slice(0, SECTORS_SHOWN)
-    .map((r) => ({
-      sector: r.sector,
-      usd: Math.round(r.cur),
-      changePct: pct(r.cur, r.prev),
-      turkeyChangePct: pct(turkeyByS.get(r.sector)?.cur, turkeyByS.get(r.sector)?.prev),
-    }))
+  if (!total) return null
   return {
     year: countryYoy.year,
     month: countryYoy.month,
-    totalUsd: total ? Math.round(total.cur) : null,
-    totalChangePct: total ? pct(total.cur, total.prev) : null,
-    relatedUsd: Math.round(related.cur),
-    relatedChangePct: related.hasPrev ? pct(related.cur, related.prev) : null,
-    relatedShare: total && total.cur > 0 ? r1((related.cur / total.cur) * 100) : null,
+    totalUsd: Math.round(total.cur),
+    totalChangePct: pct(total.cur, total.prev),
     turkeyTotalChangePct: tTotal ? pct(tTotal.cur, tTotal.prev) : null,
-    turkeyRelatedChangePct: tRelated && tRelated.hasPrev ? pct(tRelated.cur, tRelated.prev) : null,
-    sectors,
   }
 }
 
-/** Okunma ilgisi × ilişkili sektör ihracatı (aylık, yıllık değişim, 0–6 ay gecikme). Saf. */
-export function buildExportCorrelation(reading, relatedSeries) {
+/** Okunma ilgisi × toplam ihracat (aylık, yıllık değişim, 0–6 ay gecikme). Saf. */
+export function buildExportCorrelation(reading, exportSeries) {
   if (!reading.langs.length)
     return yetersiz('ülkenin dili birden çok ülkede konuşuluyor; okunma ilgisi bu ülkeye ayrılamaz')
   const ex = new Map(
-    relatedSeries.filter((s) => num(s.usd) && s.usd > 0).map((s) => [`${s.year}-${ay2(s.month)}`, s.usd])
+    exportSeries.filter((s) => num(s.usd) && s.usd > 0).map((s) => [`${s.year}-${ay2(s.month)}`, s.usd])
   )
   const c = readingTourismCorrelation(reading.series, ex)
   if (c.r == null)
@@ -97,15 +68,15 @@ export function buildExportCorrelation(reading, relatedSeries) {
   })
 }
 
-/** Son 12 ayın ilişkili sektör ihracatı, önceki 12 aya göre; kontrol ülkeleriyle fark (yüzde puan). */
-export async function buildExportDid(iso2, relatedFor, rankControls) {
-  const win = last12Pair(relatedFor(iso2))
+/** Son 12 ayın toplam ihracatı, önceki 12 aya göre; kontrol ülkeleriyle fark (yüzde puan). */
+export async function buildExportDid(iso2, seriesFor, rankControls) {
+  const win = last12Pair(seriesFor(iso2))
   if (!win) return yetersiz('art arda 24 aylık ihracat serisi yok')
   const adaylar = (await rankControls(iso2, new Set([iso2]), KONTROL_ADAY)) || []
   const kontroller = []
   for (const k of adaylar) {
     if (kontroller.length >= MAX_KONTROL) break
-    const kw = last12Pair(relatedFor(k.iso2), win.to)
+    const kw = last12Pair(seriesFor(k.iso2), win.to)
     if (!kw || kw.before <= 0) continue
     const did = differenceInDifferences({
       treatmentBefore: win.before,
@@ -155,27 +126,27 @@ export function last12Pair(series, to = null) {
 }
 
 /**
- * Ülke brifingi bölümü. `deps` test için: getSectorYoy, getRelatedSeries, readingSeriesFor, rankControlCountries.
+ * Ülke brifingi bölümü. `deps` test için: getSectorYoy, getTotalSeries, readingSeriesFor, rankControlCountries.
  */
 export async function buildExportSignal(iso2, deps = {}) {
   const {
     getSectorYoy: yoyAl = getSectorYoy,
-    getRelatedSeries: iliskiliAl = getRelatedSeries,
+    getTotalSeries: toplamAl = getTotalSeries,
     readingSeriesFor: okumaAl = readingSeriesFor,
     rankControlCountries: kontrol = rankControlCountries,
   } = deps
   const latest = buildLatestExports(yoyAl(iso2), yoyAl(COUNTRY_ALL))
   if (!latest) return yetersiz('bu ülke için ihracat kaydı yok')
-  const correlation = buildExportCorrelation(okumaAl(iso2), iliskiliAl(iso2))
+  const correlation = buildExportCorrelation(okumaAl(iso2), toplamAl(iso2))
   let didEstimate
   try {
-    didEstimate = await buildExportDid(iso2, iliskiliAl, kontrol)
+    didEstimate = await buildExportDid(iso2, toplamAl, kontrol)
   } catch (err) {
     didEstimate = yetersiz(`kontrol ülkesi önerisi alınamadı: ${err.message}`)
   }
   const okuma = okumaAl(iso2).series
   const chart = buildImpactChart(
-    iliskiliAl(iso2).map((r) => ({ year: r.year, month: r.month, value: r.usd })),
+    toplamAl(iso2).map((r) => ({ year: r.year, month: r.month, value: r.usd })),
     okuma
   )
   const data = { latest, correlation, didEstimate, chart }
@@ -184,8 +155,8 @@ export async function buildExportSignal(iso2, deps = {}) {
 }
 
 /**
- * Dizi raporu bölümü: dizinin satıldığı/listelere girdiği ülkelerde ilişkili sektör ihracatının son aydaki
- * yıllık değişimi; ortalaması Türkiye geneliyle kıyaslanır. `iso2s`: dizinin pazarları.
+ * Dizi raporu bölümü: dizinin satıldığı/listelere girdiği ülkelerde Türkiye'nin toplam ihracatının son aydaki yıllık
+ * değişimi; ortalaması Türkiye geneliyle kıyaslanır. `iso2s`: dizinin pazarları.
  */
 export function buildSeriesExports(iso2s, deps = {}) {
   const { getSectorYoy: yoyAl = getSectorYoy, getExportIso2s: hepsi = getExportIso2s } = deps
@@ -195,26 +166,24 @@ export function buildSeriesExports(iso2s, deps = {}) {
   for (const iso2 of new Set(iso2s)) {
     if (iso2 === 'TR' || !have.has(iso2)) continue
     const l = buildLatestExports(yoyAl(iso2), turkey)
-    if (!l || l.relatedChangePct == null) continue
+    if (!l || l.totalChangePct == null) continue
     countries.push({
       iso2,
       name: nameOf(iso2),
       year: l.year,
       month: l.month,
-      relatedUsd: l.relatedUsd,
-      relatedChangePct: l.relatedChangePct,
       totalChangePct: l.totalChangePct,
     })
   }
   if (!countries.length) return null
-  countries.sort((a, b) => b.relatedUsd - a.relatedUsd)
+  countries.sort((a, b) => b.totalChangePct - a.totalChangePct)
   const ref = buildLatestExports(turkey, null)
   const data = {
     year: countries[0].year,
     month: countries[0].month,
     countries,
-    avgRelatedChangePct: r1(countries.reduce((t, c) => t + c.relatedChangePct, 0) / countries.length),
-    turkeyRelatedChangePct: ref?.relatedChangePct ?? null,
+    avgChangePct: r1(countries.reduce((t, c) => t + c.totalChangePct, 0) / countries.length),
+    turkeyChangePct: ref?.totalChangePct ?? null,
   }
   if (deps.seriesId != null && deps.seriesName)
     data.insight = readImpactInsight('seriesExport', deps.seriesId, seriesExportFacts(deps.seriesName, data))

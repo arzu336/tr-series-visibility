@@ -17,22 +17,6 @@ const MONTH_MS = 30 * 24 * 60 * 60 * 1000
 export const SECTOR_TOTAL = 'TOPLAM'
 export const COUNTRY_ALL = 'ALL' // Türkiye geneli (bütün ülkeler)
 
-/** Dizilerle ilişkilendirilebilecek tüketim sektörleri (TİM sektör adları, birebir). */
-export const RELATED_SECTORS = [
-  'Hazırgiyim ve Konfeksiyon',
-  'Tekstil ve Hammaddeleri',
-  'Deri ve Deri Mamulleri',
-  'Halı',
-  'Mobilya, Kağıt ve Orman Ürünleri',
-  'Mücevher',
-  'Kuru Meyve ve Mamulleri',
-  'Fındık ve Mamulleri',
-  'Zeytin ve Zeytinyağı',
-  'Meyve Sebze Mamulleri',
-  'Su Ürünleri ve Hayvansal Mamuller',
-  'Hububat, Bakliyat, Yağlı Tohumlar ve Mamulleri',
-]
-
 db.exec(`
   CREATE TABLE IF NOT EXISTS exports_monthly (
     iso2 TEXT NOT NULL,
@@ -400,15 +384,9 @@ export function getSectorYoy(iso2) {
   return { year: last.year, month: last.month, rows }
 }
 
-/** Ülkenin aylık ilişkili sektör ihracatı toplamı (dizilerle ilişkilendirilebilen sektörler). */
-export function getRelatedSeries(iso2) {
-  const marks = RELATED_SECTORS.map(() => '?').join(',')
-  return db
-    .prepare(
-      `SELECT year, month, SUM(usd) usd FROM exports_monthly WHERE iso2 = ? AND sector IN (${marks})
-       GROUP BY year, month ORDER BY year, month`
-    )
-    .all(String(iso2).toUpperCase(), ...RELATED_SECTORS)
+/** Ülkenin aylık toplam ihracatı (dolar), tarih sırasıyla. */
+export function getTotalSeries(iso2) {
+  return getExportSeries(iso2, SECTOR_TOTAL)
 }
 
 export function getExportIso2s() {

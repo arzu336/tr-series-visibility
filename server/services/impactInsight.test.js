@@ -48,17 +48,13 @@ describe('impactInsight — olgular', () => {
     expect(f[1]).toContain('%10,5 arttı')
   })
 
-  it('ihracat: son ay, sektörler (en çok 4), korelasyon ve kıyas', () => {
+  it('ihracat: son ay, korelasyon ve kıyas', () => {
     const f = exportFacts('Kazakistan', {
       latest: {
         year: 2026,
         month: 9,
         totalChangePct: 6.8,
         turkeyTotalChangePct: 15.1,
-        relatedChangePct: 10.4,
-        turkeyRelatedChangePct: 19.8,
-        relatedShare: 56.2,
-        sectors: [1, 2, 3, 4, 5].map((i) => ({ sector: `S${i}`, changePct: i, turkeyChangePct: -i })),
       },
       correlation: ok(0.28, { lagMonths: 5, sampleSize: 77, significant: false }),
       didEstimate: { status: 'hesaplanamaz' },
@@ -66,7 +62,7 @@ describe('impactInsight — olgular', () => {
     expect(f[0]).toMatch(
       /^Eyl 2026 ayında Türkiye'nin Kazakistan'a ihracatı .*%6,8 arttı; Türkiye'nin toplam ihracatı %15,1 arttı$/
     )
-    expect(f.filter((x) => /^S\d:/.test(x))).toHaveLength(4)
+    expect(f).toHaveLength(2)
     expect(f.at(-1)).toContain('rastlantı olabilir')
   })
 
@@ -74,8 +70,8 @@ describe('impactInsight — olgular', () => {
     const d = {
       year: 2026,
       month: 9,
-      avgRelatedChangePct: -1.2,
-      turkeyRelatedChangePct: 19.8,
+      avgChangePct: -1.2,
+      turkeyChangePct: 19.8,
       countries: Array.from({ length: 8 }, (_, i) => ({
         iso2: `C${i}`,
         name: `Ülke${i}`,
@@ -85,7 +81,7 @@ describe('impactInsight — olgular', () => {
     }
     const f = seriesExportFacts('Siyah Kalp', d)
     expect(f).toHaveLength(7)
-    expect(f[0]).toContain('8 ülkede')
+    expect(f[0]).toContain('8 ülkeye')
     expect(seriesExportFacts('X', { countries: [] })).toEqual([])
   })
 })

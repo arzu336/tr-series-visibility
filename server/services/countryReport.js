@@ -108,9 +108,8 @@ export const SECTION_NOTES = {
     'Dağıtımcı duyuruları, sektör basını ve yayın tablolarından derlenen satış ve televizyon yayını kayıtları; ' +
     'tarih ilk kaydın tarihidir, kanal/platform duyuruda geçiyorsa yazılır.',
   exportSignal:
-    'Türkiye’nin bu ülkeye aylık ihracatı (kayıt bazlı geçici rakam) ve dizilerle ilişkilendirilebilen tüketim ' +
-    'sektörleri (hazır giyim, tekstil, deri, halı, mobilya, mücevher, gıda). Korelasyon nedensellik değildir; ' +
-    'benzer ülke farkı tek bir 12 aylık pencereye dayanır.',
+    'Türkiye’nin bu ülkeye aylık toplam ihracatı (kayıt bazlı geçici rakam), Türkiye geneliyle kıyaslı. ' +
+    'Korelasyon nedensellik değildir; benzer ülke farkı tek bir 12 aylık pencereye dayanır.',
 }
 
 const OK = (data, extra = {}) => ({ status: 'hesaplandi', data, ...extra })
@@ -710,7 +709,7 @@ function readWikiRows(langs, seriesIds) {
 
 export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} } = {}) {
   const iso2 = String(iso2Raw).toUpperCase()
-  const cacheKey = `report:country:v5:${iso2}`
+  const cacheKey = `report:country:v6:${iso2}`
   const cache = deps.cache || { get: getCached, set: setCached }
   if (useCache) {
     const cached = cache.get(cacheKey)
@@ -826,7 +825,7 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
       : yetersiz('bu ülke için satış ya da yayın kaydı yok')
   })
 
-  // İhracat etkisi (2026-10-16): son ay, ilişkili sektörler, okunma korelasyonu, benzer ülke farkı.
+  // İhracat etkisi (2026-10-16): son ay, okunma korelasyonu, benzer ülke farkı.
   const exportSignal = await guarded('exportSignal', () => (deps.buildExportSignal || buildExportSignal)(iso2))
 
   const sections = {

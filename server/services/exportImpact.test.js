@@ -25,21 +25,11 @@ const months = (n, f) =>
   Array.from({ length: n }, (_, i) => ({ year: 2023 + Math.floor((9 + i) / 12), month: ((9 + i) % 12) + 1, usd: f(i) }))
 
 describe('exportImpact — son ay', () => {
-  it('toplam ve ilişkili sektör değişimi, pay, Türkiye geneli kıyası, sektör tablosu', () => {
+  it('toplam değişimi ve Türkiye geneli kıyası; toplam satırı yoksa null', () => {
     const l = buildLatestExports(yoy('DE'), yoy('ALL', 100))
-    expect(l).toMatchObject({
-      year: 2026,
-      month: 9,
-      totalUsd: 1000,
-      totalChangePct: 25,
-      relatedUsd: 300,
-      relatedShare: 30,
-    })
-    expect(l.relatedChangePct).toBe(20) // 300/250
-    expect(l.turkeyTotalChangePct).toBe(25)
-    expect(l.sectors.map((s) => s.sector)).toEqual(['Hazırgiyim ve Konfeksiyon', 'Halı']) // tutara göre, ilişkili olanlar
-    expect(l.sectors[1]).toMatchObject({ usd: 100, changePct: 100, turkeyChangePct: 100 })
+    expect(l).toEqual({ year: 2026, month: 9, totalUsd: 1000, totalChangePct: 25, turkeyTotalChangePct: 25 })
     expect(buildLatestExports(null, null)).toBeNull()
+    expect(buildLatestExports({ year: 2026, month: 9, rows: [{ sector: 'Halı', cur: 1, prev: 1 }] }, null)).toBeNull()
   })
 })
 
@@ -106,7 +96,7 @@ describe('exportImpact — bölümler', () => {
   it('ülke: ihracat kaydı yoksa hesaplanamaz; varsa latest + correlation + didEstimate', async () => {
     const deps = {
       getSectorYoy: (iso2) => (iso2 === 'ALL' ? yoy('ALL', 100) : iso2 === 'DE' ? yoy('DE') : null),
-      getRelatedSeries: () => [],
+      getTotalSeries: () => [],
       readingSeriesFor: () => ({ langs: [], series: new Map() }),
       rankControlCountries: async () => [],
     }
@@ -120,15 +110,15 @@ describe('exportImpact — bölümler', () => {
     expect(JSON.stringify(s)).not.toMatch(marka)
   })
 
-  it('dizi: pazarlarındaki ilişkili sektör değişimi, ortalama ve Türkiye geneli', () => {
+  it('dizi: pazarlarındaki ihracat değişimi, ortalama ve Türkiye geneli', () => {
     const deps = {
       getSectorYoy: (iso2) => (iso2 === 'ALL' ? yoy('ALL', 100) : yoy(iso2, iso2 === 'DE' ? 1 : 2)),
       getExportIso2s: () => new Set(['DE', 'FR']),
     }
     const r = buildSeriesExports(['DE', 'FR', 'TR', 'ZZ'], deps)
-    expect(r.countries.map((c) => c.iso2)).toEqual(['FR', 'DE']) // tutara göre
-    expect(r.avgRelatedChangePct).toBe(20)
-    expect(r.turkeyRelatedChangePct).toBe(20)
+    expect(r.countries.map((c) => c.iso2).sort()).toEqual(['DE', 'FR'])
+    expect(r.avgChangePct).toBe(25)
+    expect(r.turkeyChangePct).toBe(25)
     expect(r).toMatchObject({ year: 2026, month: 9 })
     expect(buildSeriesExports(['ZZ'], deps)).toBeNull()
   })
