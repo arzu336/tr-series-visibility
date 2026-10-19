@@ -13,6 +13,9 @@ import { asciiVariant, foldTitle } from './localTitles.js'
 // alınırsa TV_GUIDE_ENABLED=false ile toplama durdurulur. Yalnızca program adı ve yayın sayısı saklanır;
 // açıklama, görsel ya da başka içerik alınmaz.
 
+// Askıda kalan istek zincirdeki diğer işleri bloklamasın (2026-10-16): her istek için süre sınırı.
+const FETCH_TIMEOUT_MS = 30000
+
 const DSTV_API = 'https://www.dstv.com/umbraco/api/TvGuide/GetProgrammes'
 const USER_AGENT = 'gorunurluk-platformu/1.0 (T.C. Iletisim Baskanligi; izinli rehber toplama)'
 const REQUEST_GAP_MS = 1500
@@ -307,7 +310,10 @@ export async function runTvGuideIfNeeded({
     for (const [i, code] of countries.entries()) {
       if (i > 0 && gapMs) await sleep(gapMs)
       try {
-        const res = await fetchFn(`${DSTV_API}?d=${date}&country=${code}`, { headers: { 'User-Agent': USER_AGENT } })
+        const res = await fetchFn(`${DSTV_API}?d=${date}&country=${code}`, {
+          headers: { 'User-Agent': USER_AGENT },
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+        })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         responses.push({ iso2: DSTV_COUNTRIES[code], body: await res.json() })
       } catch (err) {

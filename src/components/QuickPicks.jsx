@@ -6,7 +6,7 @@ import { groupByContinent } from '../lib/continents.js'
 // Arama yapılmadan önce boş kalan ekranlar (Raporlar, Arama İlgisi) için hızlı seçim kartları. Veri haritanın
 // zaten yüklediği ülke listesinden gelir; ek istek yapılmaz.
 
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w185'
+const POSTER_BASE = '/api/img/w185'
 
 /** İzlenme endeksi en yüksek ülkeler (endeksi olmayanlar yayındaki dizi sayısına göre sona). */
 export function topCountries(countries, n = 12) {

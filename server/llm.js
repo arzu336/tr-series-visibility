@@ -241,6 +241,39 @@ Sadece şu formatta JSON döndür, başka metin yazma:
   return { notes: parsed.notes.map((n) => (typeof n === 'string' ? n : null)), summary: parsed.summary ?? null }
 }
 
+/**
+ * Etki yorumu (turizm / ihracat): yalnızca verilen olgu satırlarıyla, 2–3 cümle, nedensellik iddiası yok,
+ * öneri/direktif yok, kurum adı yok. `kind`: 'tourism' | 'export' | 'seriesExport'; `subject`: ülke ya da dizi adı.
+ */
+export async function generateImpactInsight({ kind, subject, facts }) {
+  const konu =
+    kind === 'tourism'
+      ? `${subject} ile ilgili turizm göstergeleri (Türkiye'ye gelen ziyaretçi, dizilere okunma ilgisi, benzer ülke kıyası)`
+      : kind === 'seriesExport'
+        ? `${subject} dizisinin izlendiği ülkelerde Türkiye'nin ihracatı`
+        : `Türkiye'nin ${subject}'a ihracatı ve dizilerle ilişkilendirilebilen tüketim sektörleri`
+  const prompt = `Aşağıda ${konu} hakkında hesaplanmış olgular var. Bunlara dayanarak EN FAZLA ÜÇ CÜMLELİK, sade bir
+Türkçe değerlendirme yaz: ne oldu, benzerlerine ya da Türkiye geneline göre nerede duruyor, dikkat edilmesi gereken tek
+uyarı.
+
+KURALLAR:
+- SADECE verilen sayılarla konuş; yeni sayı, yüzde ya da olay UYDURMA.
+- Nedensellik kurma: "diziler ihracatı/turizmi artırdı" DEME; "birlikte hareket", "aynı dönemde" gibi ifadeler kullan.
+- Öneri, tavsiye, yapılması gereken yazma; emir kipi kullanma.
+- Kurum, şirket, platform ya da veri kaynağı adı yazma.
+- Kesin/iddialı ifadelerden kaçın (gözlem, kesin bulgu değil).
+- Sadece değerlendirme metnini yaz.
+
+Olgular:
+${facts.map((f) => `- ${f}`).join('\n')}
+
+Sadece şu formatta JSON döndür, başka hiçbir açıklama yazma:
+{"insight": "..."}`
+  const parsed = await callLLMForJson(prompt, 500)
+  if (!parsed.insight || typeof parsed.insight !== 'string') throw new Error('LLM geçerli bir yorum döndürmedi')
+  return parsed.insight.trim()
+}
+
 export async function analyzeMediaSentiment(articles, seriesName) {
   const list = articles
     .slice(0, 15)

@@ -5312,3 +5312,193 @@ button.map-popup-card__pill--link:hover {
   font-size: 0.74rem;
   color: #8792a8;
 }
+
+/* Etki grafikleri (2026-10-16): iki eksenli çizgi, pandemi bandı, benzer ülke çubukları, yapay zekâ notu */
+.impact-chart {
+  margin: 0 0 0.9rem;
+}
+
+.impact-chart__svg {
+  width: 100%;
+  height: auto;
+  display: block;
+}
+
+.impact-chart__pandemic {
+  fill: rgba(255, 255, 255, 0.06);
+}
+
+.impact-chart__axis {
+  stroke: rgba(255, 255, 255, 0.25);
+  stroke-width: 1;
+}
+
+.impact-chart__tick {
+  font-size: 10px;
+  fill: #9aa3b5;
+}
+
+.impact-chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem 1.1rem;
+  font-size: 0.78rem;
+  color: #9aa3b5;
+  margin-top: 0.3rem;
+}
+
+.impact-chart__swatch {
+  display: inline-block;
+  width: 14px;
+  height: 3px;
+  vertical-align: middle;
+  margin-right: 0.3rem;
+  border-radius: 2px;
+}
+
+.impact-chart__swatch--dashed {
+  background: none;
+  height: 0;
+  border-top: 2px dashed;
+}
+
+.impact-chart__note {
+  margin-left: auto;
+}
+
+.control-bars {
+  margin: 0.8rem 0;
+  display: grid;
+  gap: 0.25rem;
+}
+
+.control-bars__row {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) 3fr 64px;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.82rem;
+  color: #9aa3b5;
+}
+
+.control-bars__row--main {
+  color: #e6e9f0;
+  font-weight: 600;
+}
+
+.control-bars__name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.control-bars__track {
+  position: relative;
+  height: 10px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 5px;
+}
+
+.control-bars__zero {
+  position: absolute;
+  left: 50%;
+  top: -2px;
+  bottom: -2px;
+  width: 1px;
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.control-bars__bar {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  background: #6fc29a;
+  border-radius: 5px;
+}
+
+.control-bars__bar--neg {
+  background: #ee3135;
+}
+
+.control-bars__value {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.impact-note {
+  margin-top: 0.8rem;
+}
+
+.report--printing .impact-chart__pandemic {
+  fill: rgba(0, 0, 0, 0.06);
+}
+
+.report--printing .impact-chart__axis {
+  stroke: rgba(0, 0, 0, 0.35);
+}
+
+.report--printing .impact-chart__tick,
+.report--printing .impact-chart__legend,
+.report--printing .control-bars__row {
+  color: #333a45;
+  fill: #333a45;
+}
+
+.report--printing .control-bars__row--main {
+  color: #111418;
+}
+
+.report--printing .control-bars__track {
+  background: #e6e9f0;
+}
+
+/* Kıta ilgi payı çubuğu (dizi raporu) */
+.share-bar {
+  position: relative;
+  display: block;
+  min-width: 120px;
+  height: 16px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.share-bar__fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: #ee3135;
+  border-radius: 8px;
+}
+
+.share-bar__value {
+  position: absolute;
+  right: 6px;
+  top: 0;
+  font-size: 0.72rem;
+  line-height: 16px;
+  color: #e6e9f0;
+  font-variant-numeric: tabular-nums;
+}
+
+.report--printing .share-bar {
+  background: #e6e9f0;
+}
+
+.report--printing .share-bar__value {
+  color: #111418;
+}
+
+/* API anahtarları (yönetim) */
+.api-keys__form {
+  display: flex;
+  gap: 0.6rem;
+  align-items: center;
+  margin: 0.6rem 0 0.8rem;
+  flex-wrap: wrap;
+}
+
+.api-keys__form .search-input {
+  flex: 1 1 280px;
+}

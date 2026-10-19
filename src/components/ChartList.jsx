@@ -1,6 +1,6 @@
 import { EMPTY } from '../lib/emptyStates.js'
 
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
+const POSTER_BASE = '/api/img/w92'
 
 // Tek liste bileşeni: hangi sağlayıcıdan gelirse gelsin aynı görünüm — sıra, ad, kaç haftadır/gündür
 // listede, ↑↓/yeni. Altında dönem ve son güncelleme (ChartSource; kaynak adı yazılmaz). Uydurma yok: boş liste boş yazar.

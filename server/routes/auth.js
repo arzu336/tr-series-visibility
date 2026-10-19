@@ -20,6 +20,7 @@ import {
   publicUser,
 } from '../users.js'
 import { runWithUserContext, getUserLiveCallUsage } from '../services/liveCallQuota.js'
+import { apiKeyFromHeaders, resolveApiKey, apiKeyUser, hashApiKey } from '../apiKeys.js'
 
 const SESSION_MAX_AGE_S = 7 * 24 * 60 * 60
 
@@ -55,6 +56,8 @@ const generalApiLimiter = rateLimit({
   standardHeaders: true,
   legacyHeaders: false,
   keyGenerator: (req) => {
+    const apiKey = apiKeyFromHeaders(req.headers)
+    if (apiKey) return `apikey:${hashApiKey(apiKey).slice(0, 16)}`
     const token = req.cookies?.[COOKIE_NAME]
     return token ? sessionRateLimitKey(token) : ipKeyGenerator(req.ip)
   },
@@ -172,6 +175,19 @@ authRouter.post('/api/auth/change-password', (req, res) => {
 // Oturum duvarı: /api/auth/* dışındaki her /api isteği onaylı bir kullanıcı ister.
 authRouter.use('/api', (req, res, next) => {
   if (req.path.startsWith('/auth/')) return next()
+
+  // API anahtarı (X-API-Key ya da Bearer gp_…): yalnızca okuma, analist düzeyi, yönetici uçları kapalı.
+  const rawKey = apiKeyFromHeaders(req.headers)
+  if (rawKey) {
+    const entry = resolveApiKey(rawKey)
+    if (!entry) return res.status(401).json({ error: 'API anahtarı geçersiz ya da iptal edilmiş' })
+    if (req.method !== 'GET' && req.method !== 'HEAD')
+      return res.status(403).json({ error: 'API anahtarı yalnızca okuma isteklerine izin verir' })
+    if (req.path.startsWith('/admin')) return res.status(403).json({ error: 'Yönetici uçları API anahtarına kapalı' })
+    req.currentUser = apiKeyUser(entry)
+    return runWithUserContext(req.currentUser.id, next)
+  }
+
   const userId = getSessionUserId(req.cookies[COOKIE_NAME])
   if (!userId) return res.status(401).json({ error: 'Giriş gerekli' })
 

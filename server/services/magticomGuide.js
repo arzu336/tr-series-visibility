@@ -9,6 +9,9 @@ import { cleanEpgTitle, strictMatcher } from './epgPwGuide.js'
 // eşleme Türkçe ad, IMDb yerel adları ve ansiklopedi maddesinin Gürcüce adıyla birebir (tvGuide); tek kelimelik ad
 // yalnızca kesin Türk dizisi görülen kanalda. MAGTICOM_ENABLED=0 kapatır.
 
+// Askıda kalan istek zincirdeki diğer işleri bloklamasın (2026-10-16): her istek için süre sınırı.
+const FETCH_TIMEOUT_MS = 30000
+
 const BASE = 'https://www.magticom.ge'
 const USER_AGENT = 'gorunurluk-platformu/1.0 (izinli rehber toplama)'
 const PROVIDER = 'magticom'
@@ -70,7 +73,10 @@ export async function runMagticomGuideIfNeeded({
   running = true
   const result = { countries: 0, airings: 0, series: new Set(), channels: 0, errors: [] }
   try {
-    const page = await fetchFn(`${BASE}/en/tv/tv-services/tv-guide`, { headers: { 'User-Agent': USER_AGENT } })
+    const page = await fetchFn(`${BASE}/en/tv/tv-services/tv-guide`, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (!page.ok) throw new Error(`HTTP ${page.status}`)
     const channels = parseMagticomChannels(await page.text())
     // Tiflis günü (UTC+4).
@@ -87,6 +93,7 @@ export async function runMagticomGuideIfNeeded({
             Referer: `${BASE}/en/tv/tv-services/tv-guide`,
           },
           body: new URLSearchParams({ channelId: ch.id, start: String(start), end: String(start + 86400) }),
+          signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         })
         if (!res.ok) throw new Error(`HTTP ${res.status}`)
         Channels.push(toGuideChannel(ch.name, await res.json()))

@@ -318,6 +318,28 @@ export async function resetUserPassword(id) {
   return handle(await fetch(`/api/admin/users/${id}/reset-password`, { method: 'POST' }))
 }
 
+export async function fetchApiKeys() {
+  return handle(await fetch('/api/admin/api-keys'))
+}
+
+export async function createApiKey(name) {
+  return handle(
+    await fetch('/api/admin/api-keys', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    })
+  )
+}
+
+export async function revokeApiKey(id) {
+  return handle(await fetch(`/api/admin/api-keys/${id}/revoke`, { method: 'POST' }))
+}
+
+export async function deleteApiKey(id) {
+  return handle(await fetch(`/api/admin/api-keys/${id}/delete`, { method: 'POST' }))
+}
+
 export async function deleteUser(id) {
   return handle(await fetch(`/api/admin/users/${id}/delete`, { method: 'POST' }))
 }

@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>API Dokümantasyonu — Türk Dizileri Küresel Görünürlük Platformu</title>
+<link rel="icon" type="image/png" href="/favicon-ib.png" />
+<style>
+  :root { color-scheme: light; }
+  body { margin: 0; font-family: "Segoe UI", system-ui, sans-serif; color: #1c2230; background: #f6f7f9; line-height: 1.55; }
+  header { background: #0f1420; color: #fff; padding: 1.1rem 1.5rem; display: flex; align-items: center; gap: 0.9rem; }
+  header img { height: 40px; }
+  header small { opacity: 0.75; display: block; }
+  main { max-width: 980px; margin: 0 auto; padding: 1.5rem 1.2rem 3rem; }
+  h1 { font-size: 1.55rem; margin: 0.4rem 0 1rem; }
+  h2 { font-size: 1.2rem; margin: 2rem 0 0.6rem; border-bottom: 2px solid #ee3135; padding-bottom: 0.25rem; }
+  h3 { font-size: 1.02rem; margin: 1.4rem 0 0.4rem; }
+  table { border-collapse: collapse; width: 100%; margin: 0.6rem 0 1rem; font-size: 0.92rem; background: #fff; }
+  th, td { border: 1px solid #d9dde5; padding: 0.45rem 0.6rem; text-align: left; vertical-align: top; }
+  th { background: #eef0f4; }
+  code { background: #eceef3; padding: 0.1rem 0.35rem; border-radius: 4px; font-size: 0.88em; }
+  pre { background: #0f1420; color: #e8ecf5; padding: 0.9rem 1rem; border-radius: 8px; overflow: auto; font-size: 0.86rem; }
+  pre code { background: none; padding: 0; color: inherit; }
+  ul { padding-left: 1.3rem; }
+  footer { text-align: center; color: #6b7280; font-size: 0.82rem; padding: 1rem; }
+</style>
+</head>
+<body>
+<header><img src="/ib-logo.png" alt="" /><div><strong>Türk Dizileri Küresel Görünürlük Platformu</strong><small>API Dokümantasyonu</small></div></header>
+<main>
+<h1>Türk Dizileri Küresel Görünürlük Platformu — API Dokümantasyonu</h1>
+<p>Platformun ürettiği raporlar ve veriler, arayüz dışından bir API anahtarıyla okunabilir. Bu belge anahtarı alan sistem ya da kişi içindir.</p>
+<h2>1. Temel bilgiler</h2>
+<table><thead><tr><th>Bilgi</th><th>Değer</th></tr></thead><tbody><tr><td>Temel adres</td><td><code>http://&lt;sunucu-adresi&gt;:3001</code> (kurum içi ağda ör. <code>http://172.18.212.145:3001</code>)</td></tr><tr><td>Kimlik doğrulama</td><td>Her isteğe <code>X-API-Key: gp_…</code> başlığı; alternatif <code>Authorization: Bearer gp_…</code></td></tr><tr><td>Yetki</td><td>Yalnızca okuma (GET). Yazma istekleri ve yönetim uçları reddedilir</td></tr><tr><td>Biçim</td><td>JSON, UTF-8; tarihler ISO 8601 (<code>2026-10-19</code>, <code>2026-10-19T08:45:49Z</code>)</td></tr><tr><td>Hız sınırı</td><td>Anahtar başına 15 dakikada 1500 istek (<code>RateLimit-*</code> başlıkları yanıtta gelir)</td></tr><tr><td>Ülke kodu</td><td>ISO 3166-1 alpha-2, büyük harf (<code>DE</code>, <code>SA</code>, <code>KZ</code>)</td></tr><tr><td>Dizi kimliği</td><td>Platformun dizi kimliği (<code>tmdbId</code>); listesi <code>/api/trends/series</code></td></tr><tr><td>Kıta kimliği</td><td><code>europe</code>, <code>middle_east</code>, <code>latin_america</code>, <code>asia_pacific</code>, <code>africa</code>, <code>north_america</code></td></tr></tbody></table>
+<h2>2. Hata yanıtları</h2>
+<table><thead><tr><th>Kod</th><th>Anlamı</th><th>Yanıt</th></tr></thead><tbody><tr><td>401</td><td>Anahtar yok, yanlış ya da iptal edilmiş</td><td><code>{"error":"API anahtarı geçersiz ya da iptal edilmiş"}</code></td></tr><tr><td>403</td><td>Yazma isteği ya da yönetim ucu</td><td><code>{"error":"API anahtarı yalnızca okuma isteklerine izin verir"}</code></td></tr><tr><td>400</td><td>Geçersiz parametre (ör. bilinmeyen ülke kodu)</td><td><code>{"error":"…"}</code></td></tr><tr><td>404</td><td>Kayıt yok (ör. katalogda olmayan dizi)</td><td><code>{"error":"…"}</code></td></tr><tr><td>429</td><td>Hız sınırı aşıldı</td><td><code>{"error":"Çok fazla istek yapıldı…"}</code></td></tr><tr><td>503</td><td>Dış veri kaynağı geçici olarak ulaşılamaz</td><td><code>{"error":"…"}</code></td></tr></tbody></table>
+<h2>3. Uçlar</h2>
+<h3>Raporlar</h3>
+<table><thead><tr><th>Uç</th><th>Açıklama</th><th>Parametreler</th></tr></thead><tbody><tr><td><code>GET /api/report/global</code></td><td>Küresel görünüm raporu</td><td><code>fresh=1</code> önbelleği atlar</td></tr><tr><td><code>GET /api/report/country/{iso2}</code></td><td>Ülke brifingi</td><td><code>fresh=1</code></td></tr><tr><td><code>GET /api/report/series/{tmdbId}</code></td><td>Dizi raporu</td><td><code>fresh=1</code></td></tr><tr><td><code>GET /api/report/continent/{id}</code></td><td>Kıta raporu (son 12 ay)</td><td><code>fresh=1</code></td></tr><tr><td><code>GET /api/compare?ids=66017,271014</code></td><td>Dizi kıyaslaması (2–5 dizi)</td><td><code>ids</code> virgülle ayrılmış kimlikler</td></tr></tbody></table>
+<p>Rapor yanıtı ortak yapıdadır:</p>
+<pre data-lang="json"><code>{
+  "title": "Ülke brifingi",
+  "generatedAt": "2026-10-19T08:45:49Z",
+  "summary": { "kpis": [ { "key": "level", "label": "İzlenme düzeyi", "value": "Yüksek", "detail": "55. / 147 ülke", "trend": null } ],
+               "sentences": [ { "text": "…", "basis": "ranking" } ],
+               "caveat": "…" },
+  "chapters": [
+    { "key": "izleniyor", "title": "Ne izleniyor",
+      "sections": [ { "key": "platformLists", "title": "Türk dizileri sıralaması", "data": { … }, "caveat": null } ] }
+  ],
+  "contract": "ulke-brifingi-v1"
+}</code></pre>
+<ul><li><code>summary.kpis</code>: başlık göstergeleri. <code>summary.sentences</code>: özet cümleler ve dayandığı veri (<code>basis</code>).</li><li><code>chapters[].sections[]</code>: her bölümün <code>key</code>, <code>title</code>, <code>data</code> alanı vardır; hesaplanamayan bölümler listede yer almaz.</li><li><code>contract</code>: yanıt şeması sürümü. Şema değişirse bu değer değişir; entegrasyonlar bu alanı kontrol etmelidir.</li></ul>
+<p>Ülke brifingi bölüm anahtarları: <code>platformLists</code>, <code>topSeries</code>, <code>wikiInterest</code>, <code>searchTrend</code>, <code>pressTone</code>, <code>sales</code>, <code>trend</code>, <code>themes</code>, <code>tourismSignal</code>, <code>exportSignal</code>, <code>foreignStudents</code>. Dizi raporu bölüm anahtarları: <code>seriesContent</code>, <code>seriesContinents</code>, <code>seriesMarkets</code>, <code>seriesPlatformPoints</code>, <code>seriesOpportunity</code>, <code>seriesAvailability</code>, <code>seriesSales</code>, <code>wikiInterest</code>, <code>seriesImdb</code>, <code>seriesPress</code>, <code>seriesExports</code>.</p>
+<h3>Katalog ve dizi verileri</h3>
+<table><thead><tr><th>Uç</th><th>Açıklama</th></tr></thead><tbody><tr><td><code>GET /api/trends/series</code></td><td>Katalogdaki diziler: <code>{ items: [ { id, name } ] }</code></td></tr><tr><td><code>GET /api/series/{tmdbId}</code></td><td>Dizi özeti (ad, afiş, yayın tarihi, tema, destinasyonlar)</td></tr><tr><td><code>GET /api/series/{tmdbId}/cast</code></td><td>Kadro: <code>{ cast: [ { id, name, character, profilePath, episodes } ] }</code></td></tr><tr><td><code>GET /api/series/{tmdbId}/tv</code></td><td>TV yayınları, satış kayıtları, çevrimiçi izlenme: <code>{ airings, sales, online }</code></td></tr><tr><td><code>GET /api/imdb/{tmdbId}</code></td><td>İzleyici puanı ve oy sayısı</td></tr><tr><td><code>GET /api/series-enrichment/{tmdbId}</code></td><td>Sezonlar, ekip, uluslararası adlar</td></tr><tr><td><code>GET /api/charts/series/{tmdbId}</code></td><td>Dizinin platform listelerindeki geçmişi</td></tr></tbody></table>
+<h3>Ülke ve küresel veriler</h3>
+<table><thead><tr><th>Uç</th><th>Açıklama</th></tr></thead><tbody><tr><td><code>GET /api/visibility</code></td><td>Bütün ülkeler için izlenme düzeyi ve yayın varlığı: <code>{ countries: [ … ], updatedAt }</code></td></tr><tr><td><code>GET /api/watch/countries</code></td><td>Ülke başına izlenme sinyali</td></tr><tr><td><code>GET /api/watch/country/{iso2}/series</code></td><td>Ülkede izlenen diziler</td></tr><tr><td><code>GET /api/country/{iso2}/tv</code></td><td>Ülkedeki TV yayınları, satışlar, çevrimiçi izlenme</td></tr><tr><td><code>GET /api/country/{iso2}/context</code></td><td>Ülke bağlamı (nüfus, dil, gelir grubu)</td></tr><tr><td><code>GET /api/charts/country/{iso2}</code></td><td>Ülkenin platform listeleri</td></tr><tr><td><code>GET /api/charts/global</code>, <code>/api/charts/continents</code>, <code>/api/charts/turkey-tv</code></td><td>Küresel, kıta ve Türkiye TV listeleri</td></tr><tr><td><code>GET /api/history/{iso2}/periods?range=monthly|yearly</code></td><td>Ülkenin aylık/yıllık görünürlük geçmişi</td></tr><tr><td><code>GET /api/history/global-periods</code></td><td>Küresel geçmiş</td></tr><tr><td><code>GET /api/tourism-summary</code></td><td>Turizm özeti (ülke başına ziyaretçi değişimi)</td></tr><tr><td><code>GET /api/turkish-learning-index</code></td><td>Türkçe öğrenme ilgisi</td></tr><tr><td><code>GET /api/themes</code>, <code>/api/destinations</code></td><td>Tema dağılımı, dizi destinasyonları</td></tr><tr><td><code>GET /api/img/{boyut}/{dosya}</code></td><td>Afiş/oyuncu görseli (<code>w92</code>, <code>w185</code>, <code>w342</code>); anahtar gerekmez</td></tr></tbody></table>
+<p>Görsel adresi: yanıtlardaki <code>posterPath</code> ya da <code>profilePath</code> değeri (ör. <code>/abc.jpg</code>) <code>/api/img/w342/abc.jpg</code> olarak kullanılır.</p>
+<h2>4. Örnekler</h2>
+<p>PowerShell (Windows):</p>
+<pre data-lang="powershell"><code>curl.exe -H "X-API-Key: gp_SIZIN_ANAHTARINIZ" http://172.18.212.145:3001/api/report/country/DE</code></pre>
+<pre data-lang="powershell"><code>Invoke-RestMethod -Headers @{ 'X-API-Key' = 'gp_SIZIN_ANAHTARINIZ' } `
+  -Uri 'http://172.18.212.145:3001/api/report/country/DE' | ConvertTo-Json -Depth 8</code></pre>
+<p>Python:</p>
+<pre data-lang="python"><code>import requests
+
+BASE = "http://172.18.212.145:3001"
+HEADERS = {"X-API-Key": "gp_SIZIN_ANAHTARINIZ"}
+
+r = requests.get(f"{BASE}/api/report/country/DE", headers=HEADERS, timeout=60)
+r.raise_for_status()
+rapor = r.json()
+for kpi in rapor["summary"]["kpis"]:
+    print(kpi["label"], "→", kpi["value"])</code></pre>
+<p>JavaScript (Node 18+ / tarayıcı):</p>
+<pre data-lang="js"><code>const res = await fetch('http://172.18.212.145:3001/api/compare?ids=66017,271014', {
+  headers: { 'X-API-Key': 'gp_SIZIN_ANAHTARINIZ' },
+})
+const data = await res.json()
+console.log(data.items.map((s) =&gt; `${s.name}: ${s.lists.countries} ülke`))</code></pre>
+<h2>5. Kullanım kuralları</h2>
+<ul><li>Anahtarı kod deposuna, e-postaya ya da sohbete yazmayın; ortam değişkeni veya gizli ayar olarak saklayın.</li><li>Rapor uçları önbellekten döner (yaklaşık 1 saat); <code>fresh=1</code> yalnızca gerektiğinde kullanılmalıdır.</li><li>Toplu çekimlerde istekler arasında kısa bekleme bırakın (saniyede 1–2 istek yeterlidir).</li><li>Anahtar iptal edilince anında geçersiz olur; 401 alınırsa platform yöneticisine başvurun.</li><li>Rapor metinlerindeki "korelasyon nedensellik değildir" uyarıları veriyle birlikte taşınmalıdır.</li></ul>
+</main>
+<footer>Bu sayfa anahtar gerektirmez; veri uçları için anahtar gerekir.</footer>
+</body>
+</html>

@@ -16,6 +16,7 @@ import { watchRouter } from './routes/watch.js'
 import { chartsRouter } from './routes/charts.js'
 import { youtubeRouter } from './routes/youtube.js'
 import { tvRouter } from './routes/tv.js'
+import { imagesRouter } from './routes/images.js'
 
 // Uygulama kurulumu index.js'ten ayrıldı ki route testleri (supertest) sunucuyu dinlemeye almadan
 // ve zamanlayıcıyı başlatmadan aynı app'i kullanabilsin. index.js: app + scheduler + listen.
@@ -85,6 +86,9 @@ app.use(compression())
 app.use(express.json())
 
 ensureBootstrapAdmin()
+
+// Görseller (afiş, oyuncu fotoğrafı) oturumsuz; disk önbelleğinden sunulur.
+app.use(imagesRouter)
 
 // Sıra: auth (çerez, hız sınırı, oturum duvarı) her şeyden önce; gerisi bağımsız.
 app.use(authRouter)

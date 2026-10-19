@@ -10,6 +10,9 @@ import { resolveIso2FromEnglish } from './countryLookup.js'
 // televizyon bölümleri bunları kendiliğinden gösterir. Ülke = kanalın elcinema'daki ülkesi (MBC 4 → Suudi
 // Arabistan; uydu yayını bölgeye yayılır). ELCINEMA_ENABLED=0 kapatır.
 
+// Askıda kalan istek zincirdeki diğer işleri bloklamasın (2026-10-16): her istek için süre sınırı.
+const FETCH_TIMEOUT_MS = 30000
+
 const BASE = 'https://elcinema.com'
 const USER_AGENT = 'Mozilla/5.0 (gorunurluk-platformu; izinli tarama)'
 const GAP_MS = 1500
@@ -233,7 +236,10 @@ export async function runElcinemaGuideIfNeeded({
   if (!force && metaGet.get('elcinemaLastDate')?.value === today) return null
   running = true
   const get = async (path) => {
-    const res = await fetchFn(`${BASE}${path}`, { headers: { 'User-Agent': USER_AGENT } })
+    const res = await fetchFn(`${BASE}${path}`, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return res.text()
   }

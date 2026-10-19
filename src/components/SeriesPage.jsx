@@ -23,7 +23,7 @@ import CountryReportDocument from './report/CountryReportDocument.jsx'
 // televizyon yayınları, basın ve magazin, tanıtım ve YouTube, kadro. Adresi ?dizi=<tmdbId>; haritada diziye
 // tıklamak açar.
 
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w342'
+const POSTER_BASE = '/api/img/w342'
 
 /** Sayfa içi yönlendirme: üstteki özet çipleri ilgili bölüme kaydırır. */
 function scrollToSection(id) {

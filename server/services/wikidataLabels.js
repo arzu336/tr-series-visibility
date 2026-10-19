@@ -4,6 +4,9 @@ import db from '../db.js'
 // (Gürcüce, Özbekçe, Kazakça, Farsça…); ansiklopedi maddesi olmayan dillerde de Wikidata'da ad (etiket) ve diğer adlar
 // kayıtlı olabiliyor. Kimlikler series_wiki_articles'tan (TMDB → Wikidata bağlantısı); tahmin yok. Ayda bir yenilenir.
 
+// Askıda kalan istek zincirdeki diğer işleri bloklamasın (2026-10-16): her istek için süre sınırı.
+const FETCH_TIMEOUT_MS = 30000
+
 const API = 'https://www.wikidata.org/w/api.php'
 const USER_AGENT = 'gorunurluk-platformu/1.0 (T.C. Iletisim Baskanligi; dizi ad eslemesi)'
 const LANGS = [
@@ -113,7 +116,10 @@ export async function refreshWikidataLabelsIfNeeded({ fetchFn = fetch, now = new
       languages: LANGS.join('|'),
       format: 'json',
     })
-    const res = await fetchFn(`${API}?${q}`, { headers: { 'User-Agent': USER_AGENT } })
+    const res = await fetchFn(`${API}?${q}`, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (!res.ok) throw new Error(`Wikidata HTTP ${res.status}`)
     const body = await res.json()
     Object.assign(broadcasters, parseBroadcasterClaims(body))
@@ -135,7 +141,10 @@ export async function refreshWikidataLabelsIfNeeded({ fetchFn = fetch, now = new
       languages: 'tr|en',
       format: 'json',
     })
-    const res = await fetchFn(`${API}?${q}`, { headers: { 'User-Agent': USER_AGENT } })
+    const res = await fetchFn(`${API}?${q}`, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (!res.ok) throw new Error(`Wikidata HTTP ${res.status}`)
     for (const [id, e] of Object.entries((await res.json()).entities || {}))
       bName.set(id, e.labels?.tr?.value || e.labels?.en?.value || id)

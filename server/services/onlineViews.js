@@ -11,6 +11,9 @@ import { stripWikiQualifier } from './tvGuide.js'
 // (izlenme birikimli olduğundan değişim haftalar arası farktan okunur). Ülke yayıncılarının YouTube kanalları da aynı
 // tabloya yazar (youtubePublic.writeCountryViews). APARAT_ENABLED=0 / MOVER_ENABLED=0 kapatır.
 
+// Askıda kalan istek zincirdeki diğer işleri bloklamasın (2026-10-16): her istek için süre sınırı.
+const FETCH_TIMEOUT_MS = 30000
+
 const USER_AGENT = 'Mozilla/5.0 (gorunurluk-platformu; izinli tarama)'
 const PAGES = 3
 const GAP_MS = 1200
@@ -197,7 +200,10 @@ export async function runOnlineViewsIfNeeded({
           for (let p = 1; p <= PAGES && url; p++) {
             await sleep(gapMs)
             try {
-              const res = await fetchFn(url, { headers: { 'User-Agent': USER_AGENT } })
+              const res = await fetchFn(url, {
+                headers: { 'User-Agent': USER_AGENT },
+                signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+              })
               if (!res.ok) throw new Error(`HTTP ${res.status}`)
               const page = await src.parse(res, { query: name, page: p })
               videos.push(...page.videos)

@@ -15,6 +15,9 @@ import { languageDistribution } from './commentLanguage.js'
 // Kota: YouTube Data API günlük 10.000 birim; burada kullanılan her istek 1 birim. Günlük sınır
 // YOUTUBE_DAILY_QUOTA (varsayılan 8000) ile korunur; dolunca iş ertesi güne kalır.
 
+// Askıda kalan istek zincirdeki diğer işleri bloklamasın (2026-10-16): her istek için süre sınırı.
+const FETCH_TIMEOUT_MS = 30000
+
 const DATA_API = 'https://www.googleapis.com/youtube/v3'
 
 // Resmî yayıncı kanalları (YouTube kullanıcı adı). İlk çalıştırmada çözülür; bulunamayan ad yönetim ekranında
@@ -195,7 +198,7 @@ function makeClient({ cfg, fetchFn, now }) {
       url.searchParams.set('key', cfg.apiKey)
       used++
       metaSet.run(quotaKey(now), String(used))
-      const res = await fetchFn(url.toString())
+      const res = await fetchFn(url.toString(), { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) })
       const body = await res.json().catch(() => ({}))
       if (!res.ok) {
         const reason = body?.error?.errors?.[0]?.reason

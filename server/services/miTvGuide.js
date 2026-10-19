@@ -9,6 +9,9 @@ import { buildMatcherFor, ingestGuideResponses } from './tvGuide.js'
 // 825) olduğundan: Türk dizisi görülmüş kanallar her gün, kalanlar 7 güne bölünüp dönüşümlü (her kanal haftada bir).
 // Yalnızca dizi/telenovela kayıtları dikkate alınır (haber, reality, spor atlanır). MITV_ENABLED=0 kapatır.
 
+// Askıda kalan istek zincirdeki diğer işleri bloklamasın (2026-10-16): her istek için süre sınırı.
+const FETCH_TIMEOUT_MS = 30000
+
 const BASE = 'https://mi.tv'
 const USER_AGENT = 'Mozilla/5.0 (gorunurluk-platformu; izinli tarama)'
 const PROVIDER = 'mitv'
@@ -99,7 +102,10 @@ export async function runMiTvGuideIfNeeded({
   if (!force && metaGet.get('mitvLastDate')?.value === date) return null
   running = true
   const get = async (path) => {
-    const res = await fetchFn(`${BASE}${path}`, { headers: { 'User-Agent': USER_AGENT } })
+    const res = await fetchFn(`${BASE}${path}`, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return res.text()
   }

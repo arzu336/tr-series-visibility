@@ -9,6 +9,9 @@ import { cleanEpgTitle, strictMatcher } from './epgPwGuide.js'
 // Türk dizisi görülen kanalda sayılır. Eşleşmeyen başlıklar Türk dizisi yayınlayan kanallarda tv_titles'a düşer.
 // ITVUZ_ENABLED=0 kapatır.
 
+// Askıda kalan istek zincirdeki diğer işleri bloklamasın (2026-10-16): her istek için süre sınırı.
+const FETCH_TIMEOUT_MS = 30000
+
 const API = 'https://gw.itv.uz/api/v1'
 const USER_AGENT = 'gorunurluk-platformu/1.0 (izinli rehber toplama)'
 const PROVIDER = 'itvuz'
@@ -59,7 +62,10 @@ export async function runItvUzGuideIfNeeded({
   if (!force && metaGet.get('itvuzLastDate')?.value === date) return null
   running = true
   const get = async (path) => {
-    const res = await fetchFn(`${API}${path}`, { headers: { 'User-Agent': USER_AGENT } })
+    const res = await fetchFn(`${API}${path}`, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     return res.json()
   }

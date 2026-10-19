@@ -24,6 +24,7 @@ vi.mock('./data-pipeline.js', () => ({ getEnrichedVisibility: kaydet('gunluk:vis
 vi.mock('./period-history.js', () => ({ rollupMonthlyIfNeeded: kaydet('gunluk:rollup') }))
 vi.mock('./series-period-history.js', () => ({ rollupSeriesMonthlyIfNeeded: kaydet('gunluk:seriesRollup') }))
 vi.mock('./services/tourismData.js', () => ({ syncTourismDataIfNeeded: kaydet('zincir:tourismSync') }))
+vi.mock('./services/exportsData.js', () => ({ syncExportsIfNeeded: kaydet('zincir:exports') }))
 vi.mock('./services/autoNewsScheduler.js', () => ({ runAutoNewsScanIfNeeded: kaydet('zincir:news') }))
 vi.mock('./services/tourismTrendsCollector.js', () => ({
   runTourismTrendsCollectionIfNeeded: kaydet('zincir:tourismTrends'),
@@ -50,6 +51,8 @@ vi.mock('./services/itvUzGuide.js', () => ({ runItvUzGuideIfNeeded: kaydet('zinc
 vi.mock('./services/magticomGuide.js', () => ({ runMagticomGuideIfNeeded: kaydet('zincir:magticom') }))
 vi.mock('./services/wikidataLabels.js', () => ({ refreshWikidataLabelsIfNeeded: kaydet('zincir:wikidata') }))
 vi.mock('./services/onlineViews.js', () => ({ runOnlineViewsIfNeeded: kaydet('zincir:online') }))
+vi.mock('./services/salesNews.js', () => ({ runSalesNewsIfNeeded: kaydet('zincir:sales') }))
+vi.mock('./services/imageCache.js', () => ({ warmImageCacheIfNeeded: kaydet('zincir:images') }))
 vi.mock('./services/elcinemaGuide.js', () => ({ runElcinemaGuideIfNeeded: kaydet('zincir:elcinema') }))
 vi.mock('./services/nightlyPrefill.js', () => ({ runNightlyPrefillIfNeeded: kaydet('zincir:nightly') }))
 

@@ -12,8 +12,8 @@ import { useAsync } from '../lib/useAsync.js'
 import { onEnterOrSpace } from '../lib/useDialog.js'
 import { EMPTY } from '../lib/emptyStates.js'
 
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
-const PROFILE_BASE = 'https://image.tmdb.org/t/p/w92'
+const POSTER_BASE = '/api/img/w92'
+const PROFILE_BASE = '/api/img/w92'
 const MIN_QUERY_LENGTH = 2
 const MAX_RESULTS_PER_GROUP = 6
 

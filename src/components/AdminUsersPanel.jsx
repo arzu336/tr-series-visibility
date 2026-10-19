@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import AnalystDashboard from './AnalystDashboard.jsx'
+import ApiKeysSection from './ApiKeysSection.jsx'
 import { fetchAdminUsers, approveUser, rejectUser, setAccessLevel, resetUserPassword, deleteUser } from '../lib/api.js'
 
 function formatDate(iso) {
@@ -115,6 +116,8 @@ export default function AdminUsersPanel({ currentUserId, onShowSeriesOnMap }) {
           </button>
         </div>
       )}
+
+      <ApiKeysSection />
 
       <section className="dashboard__section">
         <h3 className="dashboard__section-title">Onay Bekleyenler</h3>

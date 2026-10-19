@@ -2,7 +2,7 @@ import { fetchCountryLeaderboard } from '../lib/api.js'
 import { useAsync } from '../lib/useAsync.js'
 import { EMPTY } from '../lib/emptyStates.js'
 
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
+const POSTER_BASE = '/api/img/w92'
 
 const BADGE_LEVEL_CLASS = {
   verified: 'leaderboard__badge--verified',

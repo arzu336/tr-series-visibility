@@ -2,11 +2,14 @@ import countryNames from '../../data/country-centroids.json'
 import Flag from '../Flag.jsx'
 import EpisodeHeatmap from '../EpisodeHeatmap.jsx'
 import { TrendBadge } from '../ChartList.jsx'
-import { fmtNum } from './format.js'
+import { fmtDate, fmtNum, fmtPeriod } from './format.js'
+import { AiNote } from './ImpactChart.jsx'
 
 // Dizi raporu bölümleri (sözleşme dizi-raporu-v1). Yalnızca sunucudan gelen `data`yı basar.
 
 const nameOf = (iso2) => countryNames[iso2]?.name || iso2
+/** Satış tarihi: yalnızca yıl ("2021") ya da tam tarih; yoksa tire. */
+export const fmtSaleDate = (d) => (!d ? '—' : d.length === 4 ? d : fmtDate(d))
 
 function Country({ iso2 }) {
   return (
@@ -17,6 +20,49 @@ function Country({ iso2 }) {
 }
 
 const TONE = { olumlu: 'Olumlu', olumsuz: 'Olumsuz', nötr: 'Nötr', karisik: 'Karışık', karışık: 'Karışık' }
+
+/** Kıtalara göre ilgi: pay çubuğu ve kanıt sütunları. */
+export function SeriesContinentsSection({ data }) {
+  const top = data.rows[0]
+  return (
+    <>
+      <p className="report__lead">
+        En çok ilgi <strong>{data.leader}</strong> kıtasında (ilgi payı %{fmtNum(top.sharePct, 0)}).
+      </p>
+      <table className="dashboard__table dashboard__table--compact report__table">
+        <thead>
+          <tr>
+            <th scope="col">Kıta</th>
+            <th scope="col">İlgi payı</th>
+            <th scope="col">Listede</th>
+            <th scope="col">Satış / TV</th>
+            <th scope="col">Platformda</th>
+            <th scope="col">Çevrimiçi izlenme</th>
+            <th scope="col">Basın</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.rows.map((r) => (
+            <tr key={r.id}>
+              <td>{r.name}</td>
+              <td>
+                <span className="share-bar" aria-label={`%${fmtNum(r.sharePct, 0)}`}>
+                  <span className="share-bar__fill" style={{ width: `${Math.max(2, r.sharePct)}%` }} />
+                  <span className="share-bar__value">%{fmtNum(r.sharePct, 0)}</span>
+                </span>
+              </td>
+              <td>{r.listed ? `${r.listed} ülke · ${r.weeks} hafta` : '—'}</td>
+              <td>{r.sold ? `${r.sold} ülke` : '—'}</td>
+              <td>{r.streaming ? `${r.streaming} ülke` : '—'}</td>
+              <td>{r.onlineViews ? fmtNum(r.onlineViews, 0) : '—'}</td>
+              <td>{r.press ? `${r.press} ülke` : '—'}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  )
+}
 
 export function SeriesMarketsSection({ data }) {
   return (
@@ -270,7 +316,92 @@ export function SeriesContentSection({ data }) {
   )
 }
 
+const fmtUsd = (n) =>
+  n >= 1e9
+    ? `${fmtNum(n / 1e9, 2)} milyar $`
+    : n >= 1e6
+      ? `${fmtNum(n / 1e6, 1)} milyon $`
+      : `${fmtNum(n / 1e3, 0)} bin $`
+const signed = (n) => (n == null ? '—' : `${n < 0 ? '−' : '+'}%${fmtNum(Math.abs(n), 1)}`)
+
+/** Dizinin pazarlarında ilişkili sektör ihracatı: ülke, aylık tutar, yıllık değişim; ortalama vs Türkiye geneli. */
+export function SeriesExportsSection({ data }) {
+  const ay = fmtPeriod(`${data.year}-${String(data.month).padStart(2, '0')}`)
+  const fark = data.turkeyRelatedChangePct == null ? null : data.avgRelatedChangePct - data.turkeyRelatedChangePct
+  return (
+    <>
+      <p className="report__lead">
+        {ay} ayında dizinin izlendiği {data.countries.length} ülkede dizilerle ilişkilendirilebilen sektörlerin (hazır
+        giyim, tekstil, deri, halı, mobilya, mücevher, gıda) ihracatı geçen yıla göre ortalama{' '}
+        {signed(data.avgRelatedChangePct)} değişti
+        {data.turkeyRelatedChangePct != null && (
+          <>
+            ; Türkiye geneli {signed(data.turkeyRelatedChangePct)}. Yani bu pazarlar genelden{' '}
+            {fmtNum(Math.abs(fark), 1)} puan {fark >= 0 ? 'daha iyi' : 'daha kötü'} seyretti
+          </>
+        )}
+        .
+      </p>
+      <table className="dashboard__table dashboard__table--compact report__table">
+        <thead>
+          <tr>
+            <th scope="col">Ülke</th>
+            <th scope="col">İlişkili sektörler (aylık)</th>
+            <th scope="col">Geçen yıla göre</th>
+            <th scope="col">Toplam ihracat</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.countries.map((c) => (
+            <tr key={c.iso2}>
+              <td>
+                <Flag iso2={c.iso2} /> {c.name}
+              </td>
+              <td>{fmtUsd(c.relatedUsd)}</td>
+              <td>{signed(c.relatedChangePct)}</td>
+              <td>{signed(c.totalChangePct)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <AiNote text={data.insight} />
+    </>
+  )
+}
+
+/** Satıldığı/yayınlandığı ülkeler: bayrak, ülke, alıcı kanal/platform, ilk tarih. */
+export function SeriesSalesSection({ data }) {
+  return (
+    <>
+      <p className="report__lead">{data.countryCount} ülkeye satıldı ya da televizyonda yayınlandı.</p>
+      <table className="dashboard__table dashboard__table--compact report__table">
+        <thead>
+          <tr>
+            <th scope="col">Ülke</th>
+            <th scope="col">Kanal / platform</th>
+            <th scope="col">Tarih</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.entries.map((e) => (
+            <tr key={e.iso2}>
+              <td>
+                <Flag iso2={e.iso2} /> {e.name}
+              </td>
+              <td>{e.buyers?.length ? e.buyers.join(', ') : '—'}</td>
+              <td>{fmtSaleDate(e.firstDate)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  )
+}
+
 export const SERIES_SECTION_COMPONENTS = {
+  seriesSales: SeriesSalesSection,
+  seriesExports: SeriesExportsSection,
+  seriesContinents: SeriesContinentsSection,
   seriesMarkets: SeriesMarketsSection,
   seriesPlatformPoints: SeriesPlatformPointsSection,
   seriesOpportunity: SeriesOpportunitySection,

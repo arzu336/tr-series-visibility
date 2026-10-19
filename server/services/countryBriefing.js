@@ -15,8 +15,8 @@ export const BRIEFING_CHAPTERS = [
   { key: 'izleniyor', title: 'Ne izleniyor', sections: ['platformLists', 'topSeries'] },
   { key: 'ilgi', title: 'Ne kadar ilgi var', sections: ['wikiInterest', 'searchTrend'] },
   { key: 'gundem', title: 'Nasıl konuşuluyor', sections: ['pressTone'] },
-  { key: 'erisim', title: 'Nerede erişilebilir', sections: ['trend', 'themes'] },
-  { key: 'etki', title: 'Etkisi', sections: ['tourismSignal', 'foreignStudents'] },
+  { key: 'erisim', title: 'Nerede erişilebilir', sections: ['sales', 'trend', 'themes'] },
+  { key: 'etki', title: 'Etkisi', sections: ['tourismSignal', 'exportSignal', 'foreignStudents'] },
 ]
 
 export const BRIEFING_SECTION_TITLES = {
@@ -26,10 +26,12 @@ export const BRIEFING_SECTION_TITLES = {
   wikiInterest: 'Okunma ilgisi',
   searchTrend: 'Arama ilgisi (son 12 ay)',
   pressTone: 'Basın tonu',
+  sales: 'Ülkeye satılan ve televizyonda yayınlanan diziler',
+  exportSignal: 'İhracat etkisi',
   trend: 'Yayın varlığındaki değişim',
   themes: 'Tema dağılımı',
   gapAnalysis: 'Benzer ülkelerde olup burada olmayan diziler',
-  tourismSignal: 'Turizm ilgisi',
+  tourismSignal: 'Turizm etkisi',
   foreignStudents: 'Türkiye’de okuyan öğrenciler',
 }
 

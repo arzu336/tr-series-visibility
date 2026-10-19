@@ -750,7 +750,7 @@ describe('WatchLists — tüm platformlar, afişler, Türkiye TV', () => {
     const html = renderToString(<WatchLists charts={charts} />)
     expect(html).not.toContain('Shahid')
     expect(html).not.toContain('Netflix')
-    expect(html).toContain('https://image.tmdb.org/t/p/w92/uzak.jpg')
+    expect(html).toContain('/api/img/w92/uzak.jpg')
     expect(html).toContain('chart-list__poster--empty')
   })
 
@@ -758,7 +758,7 @@ describe('WatchLists — tüm platformlar, afişler, Türkiye TV', () => {
     const html = renderToString(<WatchLists charts={charts} />)
     expect(html).toMatch(/Türkiye TV — (<!-- -->)?23 Ağu 2026/)
     expect(html).toContain('Kızılcık Şerbeti')
-    expect(html).toContain('https://image.tmdb.org/t/p/w92/kizilcik.jpg')
+    expect(html).toContain('/api/img/w92/kizilcik.jpg')
   })
 
   it('TV zaten "şu an" listesindeyse ayrı Türkiye TV bloğu tekrar edilmez', () => {

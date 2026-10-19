@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react'
 import Avatar from './Avatar.jsx'
 
-const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185'
+const PROFILE_BASE = '/api/img/w185'
 
 /**
  * `scroll`: dizi sayfasındaki uzun kadro şeridi — hayalet kaydırma çubuğu; fare tekerleği şeridi yatay

@@ -5,6 +5,10 @@ import { getSeriesPressCountries } from './newsScanTargets.js'
 import { scanSeriesAcrossCountries } from './autoNewsScheduler.js'
 import { getCountryRegionalInterest, regionalCandidates, readCountryRegionalInterest } from '../regional-interest.js'
 import { getSerpApiUsageThisMonth, refreshSerpApiAccountUsage } from './serpApiCache.js'
+import { buildTourismDimension } from './countrySummary.js'
+import { buildExportSignal, buildSeriesExports } from './exportImpact.js'
+import { getSeriesSales } from './salesNews.js'
+import { ensureImpactInsight, tourismFacts, exportFacts, seriesExportFacts, nameOf } from './impactInsight.js'
 
 // Gece ön doldurma (2026-10-09, kullanıcı kararı: "kullanıcı tıklayınca ücretli sorgu yapılmasın, gece arka planda
 // önceden yapılsın"). Türkiye saatiyle 01:00–10:00 arasında günde bir kez:
@@ -20,6 +24,7 @@ export const NIGHT_START_HOUR = 0
 export const NIGHT_END_HOUR = 24
 export const PRESS_MAX_QUERIES = 40
 export const REGIONAL_MAX_QUERIES = 40
+export const INSIGHT_MAX_CALLS = 60 // gece başına en fazla yapay zekâ yorumu
 const PRESS_COUNTRIES = 6
 const PRESS_MIN_FRESH = 3
 const USAGE_STOP_SHARE = 0.8
@@ -148,6 +153,52 @@ async function prefillRegional({ data, raw, rankings, deadline, fetchRegional = 
   return { countries, queries }
 }
 
+/**
+ * Etki yorumları (turizm, ihracat; dizi ihracatı): sayıları değişmiş ya da hiç yorumu olmayan kayıtlar için model
+ * çağrısı; gece başına INSIGHT_MAX_CALLS. Model tanımlı değilse ilk hatada durur.
+ */
+async function prefillInsights({
+  data,
+  raw,
+  rankings,
+  deadline,
+  ensure = ensureImpactInsight,
+  maxCalls = INSIGHT_MAX_CALLS,
+}) {
+  let calls = 0
+  let errors = 0
+  const dene = async (kind, id, subject, facts) => {
+    if (!facts.length || calls >= maxCalls || Date.now() >= deadline) return
+    const once = Date.now()
+    const r = await ensure(kind, id, subject, facts)
+    if (Date.now() - once > 50) calls++ // önbellekten dönenler sayılmaz
+    if (r == null && Date.now() - once > 50) errors++
+  }
+  const countries = [...data.countries].filter((c) => c.iso2 !== 'TR').sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+  for (const c of countries) {
+    if (calls >= maxCalls || errors >= 3 || Date.now() >= deadline) break
+    const ad = nameOf(c.iso2)
+    const t = await buildTourismDimension(c.iso2, c).catch(() => null)
+    if (t && ['arrivals', 'correlation', 'didEstimate'].some((k) => t[k]?.status === 'hesaplandi'))
+      await dene('tourism', c.iso2, ad, tourismFacts(ad, t))
+    const e = await buildExportSignal(c.iso2).catch(() => null)
+    if (e?.status === 'hesaplandi') await dene('export', c.iso2, ad, exportFacts(ad, e.data))
+  }
+  // Dizi: satışı ya da liste kaydı olan diziler, popülerliğe göre
+  const listed = new Map()
+  for (const [iso2, own] of rankings)
+    for (const e of own.all || []) listed.set(e.seriesId, [...(listed.get(e.seriesId) || []), iso2])
+  const series = [...raw.series].sort((a, b) => (b.popularity ?? 0) - (a.popularity ?? 0))
+  for (const s of series) {
+    if (calls >= maxCalls || errors >= 3 || Date.now() >= deadline) break
+    const iso2s = [...new Set([...getSeriesSales(s.id).map((r) => r.iso2), ...(listed.get(s.id) || [])])]
+    if (!iso2s.length) continue
+    const d = buildSeriesExports(iso2s)
+    if (d) await dene('seriesExport', s.id, s.name, seriesExportFacts(s.name, d))
+  }
+  return { calls, errors }
+}
+
 export async function runNightlyPrefillIfNeeded({ now = new Date(), deps = {} } = {}) {
   const { day, hour } = istanbulClock(now)
   if (hour < NIGHT_START_HOUR || hour >= NIGHT_END_HOUR) return { skipped: 'gündüz' }
@@ -162,9 +213,13 @@ export async function runNightlyPrefillIfNeeded({ now = new Date(), deps = {} } 
   const [{ data, raw }, rankings] = await Promise.all([getEnrichedVisibility(), getAllOwnRankings()])
   const press = await prefillPress({ raw, rankings, deadline, ...deps })
   const regional = await prefillRegional({ data, raw, rankings, deadline, ...deps })
+  const insights = await prefillInsights({ data, raw, rankings, deadline, ...deps }).catch((err) => {
+    console.error('[nightlyPrefill] etki yorumları üretilemedi:', err.message)
+    return { calls: 0, errors: 1 }
+  })
   setMeta.run(META_DAY, day)
   console.log(
-    `[nightlyPrefill] basın: ${press.series} dizi / ${press.queries} sorgu · bölgesel: ${regional.countries} ülke / ${regional.queries} sorgu`
+    `[nightlyPrefill] basın: ${press.series} dizi / ${press.queries} sorgu · bölgesel: ${regional.countries} ülke / ${regional.queries} sorgu · yorum: ${insights.calls} çağrı`
   )
-  return { press, regional }
+  return { press, regional, insights }
 }

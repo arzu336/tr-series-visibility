@@ -5,6 +5,7 @@ import { getEnrichedVisibility } from './data-pipeline.js'
 import { rollupMonthlyIfNeeded } from './period-history.js'
 import { rollupSeriesMonthlyIfNeeded } from './series-period-history.js'
 import { syncTourismDataIfNeeded } from './services/tourismData.js'
+import { syncExportsIfNeeded } from './services/exportsData.js'
 import { runAutoNewsScanIfNeeded } from './services/autoNewsScheduler.js'
 import { runTourismTrendsCollectionIfNeeded } from './services/tourismTrendsCollector.js'
 import { runSocialEnrichmentIfNeeded } from './services/socialEnricher.js'
@@ -22,6 +23,8 @@ import { runItvUzGuideIfNeeded } from './services/itvUzGuide.js'
 import { runMagticomGuideIfNeeded } from './services/magticomGuide.js'
 import { refreshWikidataLabelsIfNeeded } from './services/wikidataLabels.js'
 import { runOnlineViewsIfNeeded } from './services/onlineViews.js'
+import { runSalesNewsIfNeeded } from './services/salesNews.js'
+import { warmImageCacheIfNeeded } from './services/imageCache.js'
 import { runImdbSyncIfNeeded } from './services/imdbRunner.js'
 import { runWikiMonthlyRefreshIfNeeded } from './services/wikiMonthlyRefresh.js'
 import { syncForeignStudentsIfNeeded } from './services/foreignStudents.js'
@@ -106,163 +109,95 @@ async function runGunlukTazeleme() {
   }
 }
 
-async function runZenginlestirmeZinciri() {
+/**
+ * Zincir adımı (2026-10-16): hata yalnızca loga değil meta'ya da yazılır (jobAttempt:<ad>, jobError:<ad>) — sunucu logu
+ * elde olmadan hangi adımın ne zaman, neden takıldığı görülebilsin. Bir adımın hatası zinciri durdurmaz.
+ */
+async function adim(ad, fn) {
+  setMetaStmt.run(`jobAttempt:${ad}`, String(Date.now()))
   try {
-    await syncTourismDataIfNeeded()
+    await fn()
+    setMetaStmt.run(`jobError:${ad}`, '')
   } catch (err) {
-    console.error('[scheduler] turizm verisi senkronizasyonu başarısız:', err.message)
+    setMetaStmt.run(`jobError:${ad}`, `${new Date().toISOString()} ${err.message}`.slice(0, 300))
+    console.error(`[scheduler] ${ad}:`, err.message)
   }
+}
 
-  try {
-    await runAutoNewsScanIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] otomatik basın taraması başarısız:', err.message)
-  }
-  try {
-    await runTourismTrendsCollectionIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] öncü turizm sinyali taraması başarısız:', err.message)
-  }
+async function runZenginlestirmeZinciri() {
+  await adim('turizm verisi senkronizasyonu başarısız', syncTourismDataIfNeeded)
+
+  // Ülke × sektör × ay ihracat (aylık yeni dosya; geçmiş dosyalar çalıştırma başına sınırlı).
+  await adim('ihracat verisi senkronizasyonu başarısız', syncExportsIfNeeded)
+
+  await adim('otomatik basın taraması başarısız', runAutoNewsScanIfNeeded)
+  await adim('öncü turizm sinyali taraması başarısız', runTourismTrendsCollectionIfNeeded)
   if (process.env.ENABLE_SOCIAL_ENRICHMENT === 'true') {
-    try {
-      await runSocialEnrichmentIfNeeded()
-    } catch (err) {
-      console.error('[scheduler] sosyal zenginleştirme başarısız:', err.message)
-    }
+    await adim('sosyal zenginleştirme başarısız', runSocialEnrichmentIfNeeded)
   }
   if (process.env.ENABLE_ACTOR_TRENDS === 'true') {
-    try {
-      await runActorTrendsCollectionIfNeeded()
-    } catch (err) {
-      console.error('[scheduler] oyuncu trend taraması başarısız:', err.message)
-    }
+    await adim('oyuncu trend taraması başarısız', runActorTrendsCollectionIfNeeded)
   }
 
-  try {
-    await syncForeignStudentsIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] öğrenci verisi eşitlemesi başarısız:', err.message)
-  }
+  await adim('öğrenci verisi eşitlemesi başarısız', syncForeignStudentsIfNeeded)
 
-  try {
-    await runWikiMonthlyRefreshIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] aylık okunma tazelemesi başarısız:', err.message)
-  }
+  await adim('aylık okunma tazelemesi başarısız', runWikiMonthlyRefreshIfNeeded)
 
   // Bağlı YouTube kanalları (yapılandırma yoksa hiçbir şey yapmaz).
-  try {
-    await runYoutubeSyncIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] YouTube eşitlemesi başarısız:', err.message)
-  }
+  await adim('YouTube eşitlemesi başarısız', runYoutubeSyncIfNeeded)
 
   // Afrika televizyon rehberi (izinli; TV_GUIDE_ENABLED=false ile kapanır), günde bir kez.
-  try {
-    await runTvGuideIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] televizyon rehberi toplaması başarısız:', err.message)
-  }
+  await adim('televizyon rehberi toplaması başarısız', runTvGuideIfNeeded)
 
   // Aylık arama verisi doldurma (SerpApi; brifinglerin arama ilgisi ve arama payı, Türkçe öğrenme ilgisi).
-  try {
-    await runSearchFillIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] aylık arama verisi doldurma başarısız:', err.message)
-  }
+  await adim('aylık arama verisi doldurma başarısız', runSearchFillIfNeeded)
 
   // tabii kataloğu ve ülkeleri (haftalık) — TRT dizilerinin tabii'deki yayın kaydı.
-  try {
-    await runTabiiCatalogIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] tabii kataloğu alınamadı:', err.message)
-  }
+  await adim('tabii kataloğu alınamadı', runTabiiCatalogIfNeeded)
 
   // elcinema Arap kanalları yayın akışı (günlük, ~5–15 dk).
-  try {
-    await runElcinemaGuideIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] elcinema yayın akışı alınamadı:', err.message)
-  }
+  await adim('elcinema yayın akışı alınamadı', runElcinemaGuideIfNeeded)
 
   // mi.tv Latin Amerika yayın akışı (günlük; bilinen kanallar + dönüşümlü dilim).
-  try {
-    await runMiTvGuideIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] mi.tv yayın akışı alınamadı:', err.message)
-  }
+  await adim('mi.tv yayın akışı alınamadı', runMiTvGuideIfNeeded)
 
   // Rusya ve Orta Asya yayın akışı (günlük; tek XMLTV dosyası, ~10 MB).
-  try {
-    await runEpgPwGuideIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] Rusya/Orta Asya yayın akışı alınamadı:', err.message)
-  }
+  await adim('Rusya/Orta Asya yayın akışı alınamadı', runEpgPwGuideIfNeeded)
 
   // Özbekistan yayın akışı (günlük; ~30 kanal).
-  try {
-    await runItvUzGuideIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] Özbekistan yayın akışı alınamadı:', err.message)
-  }
+  await adim('Özbekistan yayın akışı alınamadı', runItvUzGuideIfNeeded)
 
   // Gürcistan yayın akışı (günlük; ~60 Gürcüce kanal).
-  try {
-    await runMagticomGuideIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] Gürcistan yayın akışı alınamadı:', err.message)
-  }
+  await adim('Gürcistan yayın akışı alınamadı', runMagticomGuideIfNeeded)
 
   // Dizilerin Wikidata'daki yerel adları (ayda bir; yayın akışı eşlemesi için).
-  try {
-    await refreshWikidataLabelsIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] dizi yerel adları alınamadı:', err.message)
-  }
+  await adim('dizi yerel adları alınamadı', refreshWikidataLabelsIfNeeded)
 
   // İran'da çevrimiçi izlenme (haftalık; Farsça adı bilinen ~180 dizi).
-  try {
-    await runOnlineViewsIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] çevrimiçi izlenme alınamadı:', err.message)
-  }
+  await adim('çevrimiçi izlenme alınamadı', runOnlineViewsIfNeeded)
+
+  // Dizi satış/yayın kayıtları (haftalık; dağıtımcı duyuruları, sektör basını, yayın tabloları; çalıştırma başına sınırlı).
+  await adim('satış kayıtları alınamadı', runSalesNewsIfNeeded)
+
+  // Afiş ve kadro fotoğrafları diske (haftalık; görseller dış sunucuya bağımlı kalmasın).
+  await adim('görsel önbelleği doldurulamadı', warmImageCacheIfNeeded)
 
   // Ön doldurma (günde bir kez, sunucu açıkken ilk fırsatta): dizi raporu basın tonu ve ülke paneli bölgesel ilgisi tıklamada
   // ücretli sorgu yapmasın diye önceden hazırlanır.
-  try {
-    await runNightlyPrefillIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] gece ön doldurma başarısız:', err.message)
-  }
+  await adim('gece ön doldurma başarısız', runNightlyPrefillIfNeeded)
 
   // YouTube herkese açık veri (YOUTUBE_API_KEY yoksa hiçbir şey yapmaz).
-  try {
-    await runYoutubePublicIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] YouTube herkese açık veri toplaması başarısız:', err.message)
-  }
+  await adim('YouTube herkese açık veri toplaması başarısız', runYoutubePublicIfNeeded)
 
-  try {
-    await runNetflixSyncIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] Netflix senkronizasyonu başarısız:', err.message)
-  }
+  await adim('Netflix senkronizasyonu başarısız', runNetflixSyncIfNeeded)
 
   // Türkiye TV günlük listesi bağımsız çalışır. Önceden Netflix'in catch bloğunun içindeydi, yani
   // yalnızca Netflix hata verdiğinde çalışıyordu (zamanlanmış hiçbir reytingtv koşusu kaydı yoktu).
-  try {
-    await runReytingtvSyncIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] Türkiye TV listesi çekimi başarısız:', err.message)
-  }
+  await adim('Türkiye TV listesi çekimi başarısız', runReytingtvSyncIfNeeded)
 
   // IMDb puan/oy senkronu günlük ve kısa (~1 dk); oy artışı ölçüsü gün atlamamalı, bu yüzden 2,5 saate
   // kadar sürebilen FlixPatrol'dan ÖNCE çalışır.
-  try {
-    await runImdbSyncIfNeeded()
-  } catch (err) {
-    console.error('[scheduler] IMDb senkronizasyonu başarısız:', err.message)
-  }
+  await adim('IMDb senkronizasyonu başarısız', runImdbSyncIfNeeded)
 
   // FlixPatrol bağımsız çalışır (Netflix/reyting sonucundan etkilenmez); haftalık kapı
   // runFlixpatrolSyncIfNeeded içinde. Cloudflare/tarayıcı gerektirdiğinden yalnızca yerelde.

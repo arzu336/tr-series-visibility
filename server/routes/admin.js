@@ -4,6 +4,7 @@ import { listUsers, setUserStatus, setUserAccessLevel, resetUserPassword, delete
 import { requireAdmin } from './auth.js'
 import { badRequest } from './shared.js'
 import { getJobsStatus } from '../services/jobsStatus.js'
+import { createApiKey, listApiKeys, revokeApiKey, deleteApiKey } from '../apiKeys.js'
 
 export const adminRouter = express.Router()
 
@@ -59,3 +60,26 @@ adminRouter.post(
     res.json({ ok: true })
   })
 )
+
+// API anahtarları (Yönetim → API anahtarları): düz metin yalnızca oluşturma yanıtında.
+adminRouter.get('/api/admin/api-keys', (req, res) => {
+  res.json({ items: listApiKeys() })
+})
+
+adminRouter.post(
+  '/api/admin/api-keys',
+  badRequest((req, res) => {
+    const created = createApiKey({ name: req.body?.name, createdBy: req.currentUser?.id ?? null })
+    res.status(201).json(created)
+  })
+)
+
+adminRouter.post('/api/admin/api-keys/:id/revoke', (req, res) => {
+  if (!revokeApiKey(req.params.id)) return res.status(404).json({ error: 'Anahtar bulunamadı ya da zaten iptal' })
+  res.json({ ok: true })
+})
+
+adminRouter.post('/api/admin/api-keys/:id/delete', (req, res) => {
+  if (!deleteApiKey(req.params.id)) return res.status(404).json({ error: 'Anahtar bulunamadı' })
+  res.json({ ok: true })
+})

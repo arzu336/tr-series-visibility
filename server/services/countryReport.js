@@ -13,6 +13,11 @@ import { getCountryCharts, getAllOwnRankings } from './charts.js'
 import { getImdbDataForTmdbSeries } from '../imdb.js'
 import { languagesOfCountry } from '../../src/lib/langCountries.js'
 import { getForeignStudentSummary } from './foreignStudents.js'
+import { getCountrySales } from './salesNews.js'
+import { buildExportSignal } from './exportImpact.js'
+import { buildImpactChart, readImpactInsight, tourismFacts, nameOf as countryNameFromIso2 } from './impactInsight.js'
+import { getVisitorSeries } from './tourismData.js'
+import { readingSeriesFor } from './readingTourism.js'
 import { generateFindings } from './reportFindings.js'
 import { buildYearTv } from './yearReport.js'
 import * as notes from '../../src/lib/methodologyNotes.js'
@@ -50,6 +55,8 @@ export const SECTION_KEYS = [
   'gapAnalysis',
   'tourismSignal',
   'foreignStudents',
+  'sales',
+  'exportSignal',
 ]
 
 export const SECTION_TITLES = {
@@ -68,8 +75,10 @@ export const SECTION_TITLES = {
   availability: 'Yayın varlığı (dizi × platform)',
   netflixHistory: 'Netflix Top 10 geçmişi',
   gapAnalysis: 'Boşluk analizi',
-  tourismSignal: 'Turizm / etki sinyali',
+  tourismSignal: 'Turizm etkisi',
   foreignStudents: "Türkiye'de okuyan öğrenciler",
+  sales: 'Ülkeye satılan ve televizyonda yayınlanan diziler',
+  exportSignal: 'İhracat etkisi',
 }
 
 export const SECTION_NOTES = {
@@ -95,6 +104,13 @@ export const SECTION_NOTES = {
     'Dizilerin etkisini tek başına ölçmez; Türkiye’ye ilginin bir göstergesidir.',
   tourismSignal:
     'Korelasyon nedensellik değildir; DiD tek bir önce/sonra çiftine dayanır, paralel-trend kontrolü yoktur.',
+  sales:
+    'Dağıtımcı duyuruları, sektör basını ve yayın tablolarından derlenen satış ve televizyon yayını kayıtları; ' +
+    'tarih ilk kaydın tarihidir, kanal/platform duyuruda geçiyorsa yazılır.',
+  exportSignal:
+    'Türkiye’nin bu ülkeye aylık ihracatı (kayıt bazlı geçici rakam) ve dizilerle ilişkilendirilebilen tüketim ' +
+    'sektörleri (hazır giyim, tekstil, deri, halı, mobilya, mücevher, gıda). Korelasyon nedensellik değildir; ' +
+    'benzer ülke farkı tek bir 12 aylık pencereye dayanır.',
 }
 
 const OK = (data, extra = {}) => ({ status: 'hesaplandi', data, ...extra })
@@ -694,7 +710,7 @@ function readWikiRows(langs, seriesIds) {
 
 export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} } = {}) {
   const iso2 = String(iso2Raw).toUpperCase()
-  const cacheKey = `report:country:v4:${iso2}`
+  const cacheKey = `report:country:v5:${iso2}`
   const cache = deps.cache || { get: getCached, set: setCached }
   if (useCache) {
     const cached = cache.get(cacheKey)
@@ -749,6 +765,21 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
     buildGapAnalysis(iso2, raw, countries, ownRankings, similarFn, deps.similarOpts)
   )
   const tourismSignal = section('tourismSignal', buildTourismSignal(convergence))
+  // Grafik (son 36 ay ziyaretçi × okunma) ve kayıtlı yapay zekâ yorumu (gece üretilir; tıklamada model çağrısı yok).
+  if (tourismSignal.status === 'hesaplandi') {
+    const visitors = (deps.getVisitorSeries || getVisitorSeries)(iso2).map((r) => ({
+      year: r.year,
+      month: r.month,
+      value: r.visitorCount,
+    }))
+    const reading = (deps.readingSeriesFor || readingSeriesFor)(iso2).series
+    tourismSignal.data.chart = buildImpactChart(visitors, reading)
+    tourismSignal.data.insight = readImpactInsight(
+      'tourism',
+      iso2,
+      tourismFacts(countryNameFromIso2(iso2), tourismSignal.data)
+    )
+  }
   const wikiInterest = await guarded('wikiInterest', () => {
     const langs = languagesOfCountry(iso2)
     const names = new Map((raw?.series || []).map((sr) => [sr.id, sr.name]))
@@ -778,10 +809,32 @@ export async function buildCountryReport(iso2Raw, { useCache = true, deps = {} }
     return r.status === 'hesaplandi' ? OK(r.data) : yetersiz('bu ülke için yayın akışı kaydı yok')
   })
 
+  // Satış/yayın kayıtları (2026-10-16): dağıtımcı duyuruları, sektör basını ve yayın tabloları.
+  const sales = await guarded('sales', () => {
+    const names = new Map((raw?.series || []).map((sr) => [sr.id, sr.name]))
+    const rows = (deps.getCountrySales || getCountrySales)(iso2).filter((r) => names.has(r.seriesId))
+    return rows.length
+      ? OK({
+          seriesCount: rows.length,
+          entries: rows.map((r) => ({
+            seriesId: r.seriesId,
+            name: names.get(r.seriesId),
+            buyers: r.buyers,
+            firstDate: r.firstDate,
+          })),
+        })
+      : yetersiz('bu ülke için satış ya da yayın kaydı yok')
+  })
+
+  // İhracat etkisi (2026-10-16): son ay, ilişkili sektörler, okunma korelasyonu, benzer ülke farkı.
+  const exportSignal = await guarded('exportSignal', () => (deps.buildExportSignal || buildExportSignal)(iso2))
+
   const sections = {
     scores,
     platformLists,
     tvAirings,
+    sales,
+    exportSignal,
     wikiInterest,
     foreignStudents,
     ranking,

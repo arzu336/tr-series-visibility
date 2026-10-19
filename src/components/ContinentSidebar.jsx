@@ -92,7 +92,7 @@ function LevelBar({ levels, total }) {
   )
 }
 
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w185'
+const POSTER_BASE = '/api/img/w185'
 
 /**
  * Haritada bir dizi vurgulanınca (etiketlerden ya da dizi raporundan "Haritada gör") kıta istatistikleri yerine dizi

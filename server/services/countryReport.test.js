@@ -170,6 +170,10 @@ function deps(over = {}) {
       { period: '2026-09', avgScore: 500 },
     ],
     readCachedSerpApi: () => null,
+    getCountrySales: () => [],
+    buildExportSignal: async () => ({ status: 'hesaplanamaz', reason: 'test' }),
+    getVisitorSeries: () => [],
+    readingSeriesFor: () => ({ langs: [], series: new Map() }),
     findSimilarCountries: async () => ({
       candidates: [{ iso2: 'FR', similarity: 0.9, reasons: ['aynı bölge'] }],
       pool: 'bolge-veya-gelir',

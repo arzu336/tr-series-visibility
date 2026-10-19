@@ -10,6 +10,9 @@ import { buildMatcherFor, ingestGuideResponses, manualTitleSet } from './tvGuide
 // eşleyiciyle (Türkçe ad + IMDb'deki yerel adlar, birebir) bağlanır; tahminle eşleme yok. Eşleşmeyen başlıklar Türk
 // dizisi yayınlayan kanallarda tv_titles'a düşer (elle bağlanabilir). EPGPW_ENABLED=0 kapatır.
 
+// Askıda kalan istek zincirdeki diğer işleri bloklamasın (2026-10-16): her istek için süre sınırı.
+const FETCH_TIMEOUT_MS = 180000
+
 const URL = 'https://epg.pw/xmltv/epg_RU.xml.gz'
 const USER_AGENT = 'gorunurluk-platformu/1.0 (izinli rehber toplama)'
 const PROVIDER = 'epgpw'
@@ -226,7 +229,10 @@ export async function runEpgPwGuideIfNeeded({
   running = true
   const result = { countries: 0, airings: 0, series: new Set(), channels: 0, errors: [] }
   try {
-    const res = await fetchFn(URL, { headers: { 'User-Agent': USER_AGENT } })
+    const res = await fetchFn(URL, {
+      headers: { 'User-Agent': USER_AGENT },
+      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+    })
     if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
     const collector = createXmltvCollector(date.replaceAll('-', ''))
     const gunzip = Readable.fromWeb(res.body).pipe(zlib.createGunzip())

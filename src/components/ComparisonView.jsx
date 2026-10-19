@@ -15,7 +15,7 @@ import CompareTable from './CompareTable.jsx'
 import countryNames from '../data/country-centroids.json'
 
 const MAX_COMPARE = 5
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w342'
+const POSTER_BASE = '/api/img/w342'
 const CHIP_COLORS = ['#3b82f6', '#EE3135', '#22c55e', '#f59e0b', '#a855f7']
 
 function CompareEmptyState() {

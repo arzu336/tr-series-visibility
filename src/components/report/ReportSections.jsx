@@ -3,6 +3,8 @@ import { fmtDate, fmtNum, fmtPct, fmtPeriod, fmtSignedPct, fmtWeek } from './for
 import { EMPTY } from '../../lib/emptyStates.js'
 import { TrendBadge } from '../ChartList.jsx'
 import SeriesTrendChart from '../SeriesTrendChart.jsx'
+import { fmtSaleDate } from './SeriesSections.jsx'
+import { DualLineChart, ControlBars, AiNote } from './ImpactChart.jsx'
 
 // Bölüm görünümleri: yalnızca sunucudan gelen `data`yı basar, hiçbir sayı burada türetilmez
 // (rapor sözleşmesi ulke-raporu-v1). Grafikler saf SVG — SSR ve baskıda aynı çıktı.
@@ -615,17 +617,148 @@ export function tourismSentences(data) {
 
 function TourismSignalSection({ data }) {
   const items = tourismSentences(data)
-  if (!items.length) return <p className="report__lead">Bu ülke için turizm verisi yok.</p>
+  if (!items.length && !data.chart) return <p className="report__lead">Bu ülke için turizm verisi yok.</p>
   return (
-    <ul className="brief__sentences">
-      {items.map((t) => (
-        <li key={t}>{t}</li>
-      ))}
-    </ul>
+    <>
+      <DualLineChart months={data.chart} labels={{ primary: 'Ziyaretçi', secondary: 'Okunma ilgisi' }} />
+      <ul className="brief__sentences">
+        {items.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
+      <ControlBars did={data.didEstimate} nameOf={countryName} label="Bu ülke" />
+      <AiNote text={data.insight} />
+    </>
+  )
+}
+
+/** Ülkeye satılan/yayınlanan diziler: dizi, alıcı kanal/platform, ilk tarih. */
+function SalesSection({ data }) {
+  return (
+    <>
+      <p className="report__lead">{data.seriesCount} dizi bu ülkeye satıldı ya da televizyonda yayınlandı.</p>
+      <table className="dashboard__table dashboard__table--compact report__table">
+        <thead>
+          <tr>
+            <th scope="col">Dizi</th>
+            <th scope="col">Kanal / platform</th>
+            <th scope="col">Tarih</th>
+          </tr>
+        </thead>
+        <tbody>
+          {data.entries.map((e) => (
+            <tr key={e.seriesId}>
+              <td>{e.name}</td>
+              <td>{e.buyers?.length ? e.buyers.join(', ') : '—'}</td>
+              <td>{fmtSaleDate(e.firstDate)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </>
+  )
+}
+
+/** İhracat etkisi: sade cümleler + ilişkili sektör tablosu; yalnızca hesaplanan maddeler. */
+export function exportSentences(data) {
+  const out = []
+  const l = data.latest
+  const ayAdi = l ? fmtPeriod(`${l.year}-${String(l.month).padStart(2, '0')}`) : null
+  if (l?.totalChangePct != null) {
+    out.push(
+      `${ayAdi} ayında Türkiye'nin bu ülkeye ihracatı geçen yılın aynı ayına göre ${yuzde(l.totalChangePct)} ${artti(l.totalChangePct)}` +
+        (l.turkeyTotalChangePct != null
+          ? `; Türkiye'nin toplam ihracatı ${yuzde(l.turkeyTotalChangePct)} ${artti(l.turkeyTotalChangePct)}.`
+          : '.')
+    )
+  }
+  if (l?.relatedChangePct != null) {
+    out.push(
+      `Dizilerle ilişkilendirilebilen sektörlerde (hazır giyim, tekstil, deri, halı, mobilya, mücevher, gıda) ihracat ${yuzde(l.relatedChangePct)} ${artti(l.relatedChangePct)}` +
+        (l.turkeyRelatedChangePct != null
+          ? `; bu sektörlerde Türkiye geneli ${yuzde(l.turkeyRelatedChangePct)} ${artti(l.turkeyRelatedChangePct)}.`
+          : '.') +
+        (l.relatedShare != null ? ` Bu sektörlerin ülkeye ihracattaki payı ${yuzde(l.relatedShare)}.` : '')
+    )
+  }
+  const c = data.correlation
+  if (ok(c)) {
+    const guc = Math.abs(c.value) >= 0.5 ? 'güçlü' : Math.abs(c.value) >= 0.3 ? 'orta' : 'zayıf'
+    out.push(
+      `Dizilere okunma ilgisi ile ilişkili sektör ihracatı ${c.lagMonths} ay arayla ${c.value >= 0 ? 'aynı' : 'ters'} yönde, ${guc} düzeyde birlikte değişiyor` +
+        ` (${c.sampleSize} aylık veri${c.significant ? ', istatistiksel olarak anlamlı' : ', rastlantı olabilir'}).`
+    )
+  }
+  const d = data.didEstimate
+  if (ok(d)) {
+    const fark = d.value
+    const adlar = (d.controls || []).map((k) => countryName(k.iso2))
+    const grup =
+      adlar.length > 1 ? `benzer ülkelerde (${adlar.join(', ')}) ortalama` : `benzer bir ülke olan ${adlar[0]} için`
+    out.push(
+      `${periodRange(d.window)} döneminde bu ülkeye ilişkili sektör ihracatı önceki 12 aya göre ${yuzde(d.treatmentChangePct)} ${artti(d.treatmentChangePct)}; ` +
+        `${grup} değişim ${yuzde(d.controlChangePct)} ${d.controlChangePct >= 0 ? 'artış' : 'azalış'}. ` +
+        `Yani bu ülke, benzerlerinden ${fmtNum(Math.abs(fark), 1)} puan ${fark >= 0 ? 'daha iyi' : 'daha kötü'} seyretti.`
+    )
+  }
+  return out
+}
+
+const fmtUsd = (n) =>
+  n >= 1e9
+    ? `${fmtNum(n / 1e9, 2)} milyar $`
+    : n >= 1e6
+      ? `${fmtNum(n / 1e6, 1)} milyon $`
+      : `${fmtNum(n / 1e3, 0)} bin $`
+
+const signedPct = (n) => (n == null ? '—' : `${n < 0 ? '−' : '+'}%${fmtNum(Math.abs(n), 1)}`)
+
+function ExportSignalSection({ data }) {
+  const items = exportSentences(data)
+  const sectors = data.latest?.sectors || []
+  if (!items.length && !sectors.length) return <p className="report__lead">Bu ülke için ihracat verisi yok.</p>
+  return (
+    <>
+      <DualLineChart
+        months={data.chart}
+        labels={{ primary: 'İlişkili sektör ihracatı ($)', secondary: 'Okunma ilgisi' }}
+      />
+      <ul className="brief__sentences">
+        {items.map((t) => (
+          <li key={t}>{t}</li>
+        ))}
+      </ul>
+      <ControlBars did={data.didEstimate} nameOf={countryName} label="Bu ülke" />
+      <AiNote text={data.insight} />
+      {sectors.length > 0 && (
+        <table className="dashboard__table dashboard__table--compact report__table">
+          <thead>
+            <tr>
+              <th scope="col">Sektör</th>
+              <th scope="col">Aylık ihracat</th>
+              <th scope="col">Geçen yıla göre</th>
+              <th scope="col">Türkiye geneli</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sectors.map((s) => (
+              <tr key={s.sector}>
+                <td>{s.sector}</td>
+                <td>{fmtUsd(s.usd)}</td>
+                <td>{signedPct(s.changePct)}</td>
+                <td>{signedPct(s.turkeyChangePct)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </>
   )
 }
 
 export const SECTION_COMPONENTS = {
+  exportSignal: ExportSignalSection,
+  sales: SalesSection,
   scores: ScoresSection,
   platformLists: PlatformListsSection,
   wikiInterest: WikiInterestSection,

@@ -4,8 +4,8 @@ import { useAsync } from '../lib/useAsync.js'
 import Avatar from './Avatar.jsx'
 import { IconMap, IconStar } from './Icons.jsx'
 
-const PROFILE_BASE = 'https://image.tmdb.org/t/p/w185'
-const POSTER_BASE = 'https://image.tmdb.org/t/p/w92'
+const PROFILE_BASE = '/api/img/w185'
+const POSTER_BASE = '/api/img/w92'
 
 export default function ActorPanel({ personId, onShowNetwork, onSelectSeriesGlobal }) {
   const [imdbBySeriesId, setImdbBySeriesId] = useState({})

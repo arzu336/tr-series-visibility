@@ -108,6 +108,23 @@ npm test           # vitest
 
 Python hattı testleri: `cd data-pipeline-python && python -m pytest`.
 
+### API erişimi (anahtarla)
+
+Arayüz dışından (kurum içi başka sistemler, rapor otomasyonu) veriye erişim için Yönetim → API anahtarları'ndan
+anahtar oluşturulur; düz metin yalnızca oluşturulduğu anda gösterilir, veritabanında özeti durur. Anahtar yalnızca
+okuma (GET) yapar, analist düzeyindedir, yönetici uçlarına giremez; iptal edilince anında geçersizdir.
+
+```bash
+curl -H "X-API-Key: gp_…" http://localhost:3001/api/report/country/DE
+curl -H "Authorization: Bearer gp_…" "http://localhost:3001/api/compare?ids=66017,271014"
+```
+
+Tam uç listesi, yanıt yapısı ve örnekler: `docs/api-dokumantasyonu.md` (çalışan sunucuda `/api-dokumantasyonu.html`).
+
+Başlıca uçlar: `/api/report/global`, `/api/report/country/{iso2}`, `/api/report/series/{tmdbId}`,
+`/api/report/continent/{id}`, `/api/compare?ids=…`, `/api/visibility`, `/api/series/{tmdbId}/cast`,
+`/api/tv/series/{tmdbId}`. Hız sınırı anahtar başına 15 dakikada 1500 istek.
+
 ### Dağıtım
 
 - Ters proxy arkasındaysanız `TRUST_PROXY=true` verin; aksi halde kapalı bırakın (hız sınırları gerçek IP ile çalışır).

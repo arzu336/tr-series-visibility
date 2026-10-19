@@ -5,6 +5,7 @@ import {
   buildSeriesOpportunity,
   buildSeriesPress,
   buildSeriesContent,
+  buildSeriesContinents,
   buildSeriesSummary,
   buildSeriesReport,
   SERIES_CHAPTERS,
@@ -151,6 +152,9 @@ describe('buildSeriesReport — bütünlük', () => {
     getSeriesEnrichment: () => null,
     readPressRows: () => [],
     readClassification: () => ({ theme: null, destinations: [] }),
+    getSeriesSales: () => [],
+    getSeriesOnlineViews: () => [],
+    buildSeriesExports: () => null,
     now: () => new Date('2026-10-06T10:00:00Z'),
   }
 
@@ -212,5 +216,31 @@ describe('buildSeriesPlatformPoints — platform başına Top 10 performansı', 
       year: { points: 12500, days: 280, worldRank: 2 },
       month: { points: 241 },
     })
+  })
+})
+
+describe('buildSeriesContinents — kıtalara göre ilgi', () => {
+  it('sinyaller kıtaya toplanır; pay en güçlü kıtaya göre; hiç sinyal yoksa hesaplanamaz', () => {
+    const s = buildSeriesContinents({
+      marketRows: [
+        { iso2: 'AR', weeks: 10 },
+        { iso2: 'CL', weeks: 4 },
+        { iso2: 'DE', weeks: 2 },
+      ],
+      available: ['AR', 'ES', 'TR'],
+      salesIso2s: ['AR', 'MX'],
+      online: [{ iso2: 'KZ', views: 1000 }],
+      press: [
+        { iso2: 'DE', newsCount: 3 },
+        { iso2: 'FR', newsCount: 0 },
+      ],
+    })
+    expect(s.status).toBe('hesaplandi')
+    expect(s.data.leader).toBe('Latin Amerika')
+    const la = s.data.rows.find((r) => r.id === 'latin_america')
+    expect(la).toMatchObject({ listed: 2, weeks: 14, sold: 2, streaming: 1, press: 0 })
+    expect(s.data.rows.map((r) => r.id)).toEqual(['latin_america', 'europe', 'asia_pacific'])
+    expect(s.data.rows.reduce((t, r) => t + r.sharePct, 0)).toBeCloseTo(100, 0)
+    expect(buildSeriesContinents({}).status).toBe('hesaplanamaz')
   })
 })

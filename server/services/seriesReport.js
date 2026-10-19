@@ -9,6 +9,10 @@ import { getPipelineDb } from './pipelineDb.js'
 import { buildWikiInterest } from './countryReport.js'
 import { getSeriesEnrichment } from './pipelineData.js'
 import countryNames from '../../src/data/country-centroids.json' with { type: 'json' }
+import { getSeriesSales } from './salesNews.js'
+import { buildSeriesExports } from './exportImpact.js'
+import { getSeriesOnlineViews } from './onlineViews.js'
+import continentByIso2 from '../../src/data/continents.json' with { type: 'json' }
 
 // Dizi raporu (sözleşme dizi-raporu-v1) — öncelikli okur dağıtımcılar ve yurt dışı temsilcilikler: dizi nerede
 // izleniyor, ilgi olup yayında olmadığı pazarlar nerede, nerede yayında, ne kadar ilgi var, nasıl konuşuluyor.
@@ -24,18 +28,26 @@ const LANGUAGES_SHOWN = 6
 export const SERIES_CHAPTERS = [
   // Dizinin kendisi önce (2026-10-14, kullanıcı isteği): hakkında → kadro → magazin (istemci ekler), sonra izlenme.
   { key: 'icerik', title: 'Dizi hakkında', sections: ['seriesContent'] },
-  { key: 'izleniyor', title: 'Nerede izleniyor', sections: ['seriesMarkets', 'seriesPlatformPoints'] },
+  {
+    key: 'izleniyor',
+    title: 'Nerede izleniyor',
+    sections: ['seriesContinents', 'seriesMarkets', 'seriesPlatformPoints'],
+  },
   { key: 'firsat', title: 'Fırsat pazarları', sections: ['seriesOpportunity'] },
-  { key: 'erisim', title: 'Nerede yayında', sections: ['seriesAvailability'] },
+  { key: 'erisim', title: 'Nerede yayında', sections: ['seriesAvailability', 'seriesSales'] },
   { key: 'ilgi', title: 'Ne kadar ilgi var', sections: ['wikiInterest', 'seriesImdb'] },
   { key: 'gundem', title: 'Nasıl konuşuluyor', sections: ['seriesPress'] },
+  { key: 'etki', title: 'Etkisi', sections: ['seriesExports'] },
 ]
 
 export const SERIES_SECTION_TITLES = {
+  seriesContinents: 'Kıtalara göre ilgi',
   seriesMarkets: 'Ülkelere göre sıralama',
   seriesPlatformPoints: 'Platformlarda Top 10 performansı',
   seriesOpportunity: 'İlgi olup yayında olmadığı ülkeler',
   seriesAvailability: 'Yayında olduğu ülkeler ve platformlar',
+  seriesSales: 'Satıldığı ve televizyonda yayınlandığı ülkeler',
+  seriesExports: 'Pazarlarında Türkiye’nin ihracatı',
   wikiInterest: 'Dillere göre okunma ilgisi',
   seriesImdb: 'İzleyici puanı ve bölümler',
   seriesPress: 'Ülkelere göre basın tonu',
@@ -50,6 +62,62 @@ const nameOf = (iso2) => countryNames[iso2]?.name || iso2
 const isStreamable = (e) => STREAM_KEYS.some((k) => e?.[k]?.length)
 
 // ---- bölümler (saf; testler veriyi doğrudan verir) ----------------------------------------------------------
+
+const CONTINENT_NAMES = {
+  europe: 'Avrupa',
+  middle_east: 'Orta Doğu',
+  latin_america: 'Latin Amerika',
+  asia_pacific: 'Asya-Pasifik',
+  africa: 'Afrika',
+  north_america: 'Kuzey Amerika',
+}
+// Kıta ilgi puanı ağırlıkları: listeye giren ülke sayısı ve ülke-hafta en güçlü kanıt; satış/yayın ve platform varlığı
+// erişim; çevrimiçi izlenme ve basın destekleyici.
+const CONTINENT_WEIGHTS = { listed: 0.3, weeks: 0.15, sold: 0.2, streaming: 0.15, onlineViews: 0.1, press: 0.1 }
+
+/**
+ * Kıtalara göre ilgi (2026-10-16, kullanıcı isteği): dizinin elimizdeki bütün ülke sinyalleri kıtaya toplanır ve
+ * ağırlıklı, en yüksek kıtaya göre normalleştirilmiş bir "ilgi payı" çıkar. Saf.
+ * `marketRows`: [{ iso2, weeks }], `available`: iso2[], `salesIso2s`: iso2[], `online`: [{ iso2, views }],
+ * `press`: [{ iso2, newsCount }].
+ */
+export function buildSeriesContinents({ marketRows = [], available = [], salesIso2s = [], online = [], press = [] }) {
+  const agg = new Map(
+    Object.keys(CONTINENT_NAMES).map((id) => [
+      id,
+      { id, name: CONTINENT_NAMES[id], listed: 0, weeks: 0, sold: 0, streaming: 0, onlineViews: 0, press: 0 },
+    ])
+  )
+  const of = (iso2) => (iso2 && iso2 !== 'TR' ? agg.get(continentByIso2[iso2]) : null)
+  for (const r of marketRows) {
+    const c = of(r.iso2)
+    if (!c) continue
+    c.listed++
+    c.weeks += r.weeks || 0
+  }
+  for (const iso2 of new Set(available)) if (of(iso2)) of(iso2).streaming++
+  for (const iso2 of new Set(salesIso2s)) if (of(iso2)) of(iso2).sold++
+  for (const o of online) if (of(o.iso2)) of(o.iso2).onlineViews += o.views || 0
+  for (const p of press) if (of(p.iso2) && (p.newsCount || 0) > 0) of(p.iso2).press++
+  const rows = [...agg.values()]
+  const max = {}
+  for (const k of Object.keys(CONTINENT_WEIGHTS)) max[k] = Math.max(...rows.map((r) => r[k]))
+  for (const r of rows)
+    r.score = Object.entries(CONTINENT_WEIGHTS).reduce((t, [k, w]) => t + (max[k] > 0 ? (r[k] / max[k]) * w : 0), 0)
+  const total = rows.reduce((t, r) => t + r.score, 0)
+  if (total <= 0) return NONE
+  const out = rows
+    .filter((r) => r.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .map(({ score, ...r }) => ({ ...r, sharePct: Math.round((score / total) * 1000) / 10 }))
+  return OK({ leader: out[0].name, rows: out })
+}
+
+/** Satıldığı/yayınlandığı ülkeler: en yeni tarih önce; ülke adı ve alıcılar. */
+export function buildSeriesSales(rows) {
+  const entries = rows.map((r) => ({ iso2: r.iso2, name: nameOf(r.iso2), buyers: r.buyers, firstDate: r.firstDate }))
+  return { countryCount: entries.length, entries }
+}
 
 /** Ülke ülke kendi sıralamamızdaki yeri: bu hafta (varsa), 52 haftada kaç hafta, en iyi sıra. */
 export function buildSeriesMarkets(seriesId, rankings) {
@@ -340,7 +408,7 @@ function readClassification(seriesId) {
 
 export async function buildSeriesReport(seriesId, { useCache = true, deps = {} } = {}) {
   const id = Number(seriesId)
-  const cacheKey = `report:series:v7:${id}`
+  const cacheKey = `report:series:v11:${id}`
   if (useCache) {
     const cached = getCached(cacheKey)
     if (cached) return cached
@@ -405,8 +473,29 @@ export async function buildSeriesReport(seriesId, { useCache = true, deps = {} }
     name: series.name,
   })
 
+  // Satış/yayın kayıtları (2026-10-16): dağıtımcı duyuruları, sektör basını ve yayın tabloları.
+  const salesRows = (deps.getSeriesSales || getSeriesSales)(id)
+  const seriesSales = salesRows.length ? OK(buildSeriesSales(salesRows)) : NONE
+  // İhracat etkisi (2026-10-16): dizinin pazarlarında (satış + listeler) ilişkili sektör ihracatının yıllık değişimi.
+  const marketIso2s = [...new Set([...salesRows.map((r) => r.iso2), ...listedIso2s])]
+  const exportsData = marketIso2s.length
+    ? (deps.buildSeriesExports || buildSeriesExports)(marketIso2s, { seriesId: id, seriesName: series.name })
+    : null
+  const seriesExports = exportsData ? OK(exportsData) : NONE
+
+  const seriesContinents = buildSeriesContinents({
+    marketRows: ok(seriesMarkets) ? seriesMarkets.data.rows : [],
+    available: ok(seriesAvailability) ? seriesAvailability.data.available : [],
+    salesIso2s: salesRows.map((r) => r.iso2),
+    online: (deps.getSeriesOnlineViews || getSeriesOnlineViews)(id),
+    press: pressRows.map((r) => ({ iso2: r.country_iso2, newsCount: r.total_news_count })),
+  })
+
   const sections = {
+    seriesContinents,
     seriesMarkets,
+    seriesSales,
+    seriesExports,
     seriesOpportunity,
     seriesPlatformPoints,
     seriesAvailability,
