@@ -127,8 +127,19 @@ export default function ComparisonView({ seriesList }) {
   const [regionalRows, setRegionalRows] = useState([])
   const [comparison, setComparison] = useState([])
 
+  // Birebir ad yoksa büyük/küçük harf duyarsız tek eşleşme de kabul edilir ("kuruluş" → "Kuruluş: Osman").
+  function resolveSeries(name) {
+    const q = String(name || '').trim()
+    if (!q) return null
+    const exact = seriesList.find((s) => s.name === q)
+    if (exact) return exact
+    const low = q.toLocaleLowerCase('tr')
+    const hits = seriesList.filter((s) => s.name.toLocaleLowerCase('tr').includes(low))
+    return hits.length === 1 ? hits[0] : hits.find((s) => s.name.toLocaleLowerCase('tr').startsWith(low)) || null
+  }
+
   function addSeries(name) {
-    const s = seriesList.find((s) => s.name === name)
+    const s = resolveSeries(name)
     if (!s || picked.length >= MAX_COMPARE || picked.some((p) => p.id === s.id)) return
     setPicked((prev) => [...prev, s])
     setQuery('')
@@ -214,7 +225,7 @@ export default function ComparisonView({ seriesList }) {
               onChange={(e) => setQuery(e.target.value)}
               onFocus={(e) => e.target.select()}
               onKeyDown={(e) => {
-                if (e.key === 'Enter' && seriesList.some((s) => s.name === query)) addSeries(query)
+                if (e.key === 'Enter' && resolveSeries(query)) addSeries(query)
               }}
             />
             <datalist id="compare-series-list">
@@ -224,9 +235,12 @@ export default function ComparisonView({ seriesList }) {
                   <option key={s.id} value={s.name} />
                 ))}
             </datalist>
-            <button onClick={() => addSeries(query)} disabled={!seriesList.some((s) => s.name === query)}>
+            <button onClick={() => addSeries(query)} disabled={!resolveSeries(query)}>
               Ekle
             </button>
+            {query.trim() && !resolveSeries(query) && (
+              <span className="dashboard__hint">Katalogda bu adla dizi yok; listeden seçin.</span>
+            )}
           </div>
         )}
         {picked.length >= MAX_COMPARE && (

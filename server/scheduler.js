@@ -11,6 +11,7 @@ import { runTourismTrendsCollectionIfNeeded } from './services/tourismTrendsColl
 import { runSocialEnrichmentIfNeeded } from './services/socialEnricher.js'
 import { runActorTrendsCollectionIfNeeded } from './services/actorTrendsCollector.js'
 import { runNetflixSyncIfNeeded } from './services/netflixPipelineRunner.js'
+import { fetchNetflixReleaseIfNeeded } from './services/netflixRelease.js'
 import { runReytingtvSyncIfNeeded } from './services/reytingtvRunner.js'
 import { runFlixpatrolSyncIfNeeded } from './services/flixpatrolRunner.js'
 import { runNightlyPrefillIfNeeded } from './services/nightlyPrefill.js'
@@ -116,8 +117,13 @@ async function runGunlukTazeleme() {
 async function adim(ad, fn) {
   setMetaStmt.run(`jobAttempt:${ad}`, String(Date.now()))
   try {
-    await fn()
-    setMetaStmt.run(`jobError:${ad}`, '')
+    const sonuc = await fn()
+    // İşin kendisi hata yutup `errors` listesiyle dönüyorsa (yayın akışı, çevrimiçi izlenme…) o da görünür olsun.
+    const hatalar = Array.isArray(sonuc?.errors) ? sonuc.errors.filter(Boolean) : []
+    setMetaStmt.run(
+      `jobError:${ad}`,
+      hatalar.length ? `${new Date().toISOString()} ${hatalar.slice(0, 3).join(' | ')}`.slice(0, 300) : ''
+    )
   } catch (err) {
     setMetaStmt.run(`jobError:${ad}`, `${new Date().toISOString()} ${err.message}`.slice(0, 300))
     console.error(`[scheduler] ${ad}:`, err.message)
@@ -188,6 +194,9 @@ async function runZenginlestirmeZinciri() {
 
   // YouTube herkese açık veri (YOUTUBE_API_KEY yoksa hiçbir şey yapmaz).
   await adim('YouTube herkese açık veri toplaması başarısız', runYoutubePublicIfNeeded)
+
+  // Netflix kaynak dosyası yayımlanan sürümden (kurum ağında doğrudan inmiyor); yeni hafta varsa hattı çevrimdışı koşar.
+  await adim('Netflix kaynak sürümü alınamadı', fetchNetflixReleaseIfNeeded)
 
   await adim('Netflix senkronizasyonu başarısız', runNetflixSyncIfNeeded)
 

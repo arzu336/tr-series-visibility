@@ -32,6 +32,7 @@ vi.mock('./services/tourismTrendsCollector.js', () => ({
 vi.mock('./services/socialEnricher.js', () => ({ runSocialEnrichmentIfNeeded: kaydet('zincir:social') }))
 vi.mock('./services/actorTrendsCollector.js', () => ({ runActorTrendsCollectionIfNeeded: kaydet('zincir:actor') }))
 vi.mock('./services/netflixPipelineRunner.js', () => ({ runNetflixSyncIfNeeded: kaydet('zincir:netflix') }))
+vi.mock('./services/netflixRelease.js', () => ({ fetchNetflixReleaseIfNeeded: kaydet('zincir:netflixRelease') }))
 vi.mock('./services/reytingtvRunner.js', () => ({ runReytingtvSyncIfNeeded: kaydet('zincir:reytingtv') }))
 vi.mock('./services/flixpatrolRunner.js', () => ({ runFlixpatrolSyncIfNeeded: kaydet('zincir:flixpatrol') }))
 vi.mock('./services/imdbRunner.js', () => ({ runImdbSyncIfNeeded: kaydet('zincir:imdb') }))

@@ -174,7 +174,7 @@ if __name__ == "__main__":
     # boyunca "başarılı" görünerek fark edilmedi). Zamanlayıcı hata olarak kaydeder, yönetim ekranında görünür.
     # Kaynak son haftalarda hiç makale yayımlamamış olabilir (sessizlik); yapı değişikliği ancak site haritasındaki
     # en yeni reyting makalesi de QUIET_MAX_DAYS'den eskiyse (ya da hiç bulunamıyorsa) varsayılır.
-    QUIET_MAX_DAYS = 45
+    QUIET_MAX_DAYS = 120 # 2026-10-22: kaynak yazın aylarca seyrek yayımladı; durum zaten 'gecikti' olarak görünüyor
     if args.days and args.days >= 3 and not sonuc.get("days"):
         latest = sonuc.get("latest_article_date")
         if latest and (datetime.date.today() - datetime.date.fromisoformat(latest)).days <= QUIET_MAX_DAYS:

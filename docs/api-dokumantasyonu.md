@@ -33,7 +33,7 @@ sistem ya da kişi içindir.
 
 | Uç | Açıklama | Parametreler |
 |---|---|---|
-| `GET /api/report/global` | Küresel görünüm raporu | `fresh=1` önbelleği atlar |
+| `GET /api/report/global` | Küresel görünüm raporu (yalnızca yönetici oturumu; API anahtarıyla erişilemez) | `fresh=1` önbelleği atlar |
 | `GET /api/report/country/{iso2}` | Ülke brifingi | `fresh=1` |
 | `GET /api/report/series/{tmdbId}` | Dizi raporu | `fresh=1` |
 | `GET /api/report/continent/{id}` | Kıta raporu (son 12 ay) | `fresh=1` |

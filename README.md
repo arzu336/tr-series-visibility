@@ -133,6 +133,13 @@ Başlıca uçlar: `/api/report/global`, `/api/report/country/{iso2}`, `/api/repo
 - Süreç, yakalanmamış bir istisnada günlüğe yazıp çıkar; üretimde bir denetleyici (systemd, pm2, Windows servisi) altında çalıştırın ki otomatik yeniden başlasın.
 - LLM sunucusu özel bir CA ile imzalıysa zinciri depoya değil `LLM_CA_PATH` ile gösterilen dosyaya koyun.
 
+### Netflix kaynak dosyası
+
+Netflix'in 32 MB'lık `all-weeks-countries.tsv` dosyası kurum ağından tam inmez. GitHub'daki `netflix-sync` iş akışı
+dosyayı her çarşamba indirir ve `netflix-data` sürümüne ek olarak yayımlar; sunucu günde dört kez bu sürümdeki özete
+bakar, yeni hafta varsa dosyayı alır, doğrular ve hattı çevrimdışı çalıştırır (`server/services/netflixRelease.js`).
+Elle: GitHub → Actions → "Netflix Top 10 kaynak dosyası" → Run workflow; birkaç dakika sonra sunucu kendisi alır.
+
 ## Zamanlanmış işler
 
 `server/scheduler.js` 30 dakikada bir tetiklenir:

@@ -11,12 +11,15 @@ name: Netflix Top 10 kaynak dosyası
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - '.github/workflows/netflix-sync.yml'
   schedule:
     # Netflix haftalık listeyi salı günleri yayımlar; çarşamba 05:00 UTC en güncel haftayı alır.
     - cron: '0 5 * * 3'
 
 permissions:
-  contents: read
+  contents: write # netflix-data sürümüne dosya eklemek için
 
 concurrency:
   group: netflix-sync
@@ -81,6 +84,16 @@ jobs:
           if-no-files-found: error
           retention-days: 14
           compression-level: 6
+
+      # Tam dosya herkese açık sürüm eki olarak da yayımlanır: platform yerelde bunu indirir
+      # (server/services/netflixRelease.js). Tek sabit etiket, her hafta üzerine yazılır.
+      - name: Sürüm eki olarak yayımla (netflix-data)
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view netflix-data --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||             gh release create netflix-data --repo "$GITHUB_REPOSITORY" --title "Netflix Top 10 kaynak dosyası"               --notes "Haftalık iş akışının yayımladığı all-weeks-countries.tsv ve özeti; platform yerelde buradan alır." --latest=false
+          gh release upload netflix-data data/all-weeks-countries.tsv data/netflix-source-summary.json             --repo "$GITHUB_REPOSITORY" --clobber
 
       # Başarısızlıkta teşhis: en uzun kısmi dosya + meta + özet. Bu artifact içe ALINMAZ
       # (netflix_import_artifact.py kesik dosyayı reddeder).
